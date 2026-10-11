@@ -3,7 +3,7 @@
 local M = {}
 
 ---Arguments for the status call this parser understands.
-M.args = { "status", "--porcelain=v2", "-z", "--branch", "--show-stash", "--untracked-files=all", "--ignore-submodules=none" }
+M.args = { "status", "--porcelain=v2", "-z", "--branch", "--show-stash" }
 
 ---@class fugitive.StatusEntry
 ---@field status string one-letter status shown in its section
