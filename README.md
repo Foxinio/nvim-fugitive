@@ -45,7 +45,7 @@ With lazy.nvim:
 | `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
 | `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
 | `:GBrowse` | upstream-identical handler dict (rhubarb, fugitive-gitlab keep working), built-in GitHub/GitLab/Bitbucket/Gitea/Forgejo/Codeberg/sourcehut providers, custom hosts |
-| Pickers | `:Telescope fugitive log|refs|stash`, picker input for bare `:Git checkout|switch|merge|rebase` |
+| Pickers | `:Telescope fugitive log` / `refs` / `stash`; picker input for a bare `:Git checkout`, `switch`, `merge` or `rebase` |
 | `:FugitiveOutput` | full output of recent commands; notifications are truncated and point here |
 
 Not implemented yet: `:Git blame` side window, `:Gedit`/`:Gread`/`:Gwrite`
