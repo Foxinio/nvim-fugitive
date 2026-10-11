@@ -151,10 +151,20 @@ end
 
 ---Close every window but one and wipe all buffers.
 function H.reset_ui()
-  pcall(vim.cmd, "silent! only!")
+  -- floats first: :only refuses to run from a floating window
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_config(w).relative ~= "" then
+      pcall(vim.api.nvim_win_close, w, true)
+    end
+  end
   pcall(vim.cmd, "silent! tabonly!")
+  pcall(vim.cmd, "silent! only!")
+  pcall(vim.cmd, "silent! enew!")
+  local keep = vim.api.nvim_get_current_buf()
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
-    pcall(vim.api.nvim_buf_delete, b, { force = true })
+    if b ~= keep then
+      pcall(vim.api.nvim_buf_delete, b, { force = true })
+    end
   end
 end
 

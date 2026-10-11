@@ -308,6 +308,12 @@ function M.stage(buf, visual)
 end
 
 function M.unstage(buf, visual)
+  local st = summary().state(buf)
+  local i = st and not visual and st.info[vim.fn.line(".")]
+  if i and i.kind == "discarded" then
+    -- `u` on the "Discarded:" hint line restores it (§4.2)
+    return require("fugitive.discard").restore_latest(st.repo)
+  end
   do_cmds(buf, unstage_cmds, "Unstaged", visual)
 end
 
