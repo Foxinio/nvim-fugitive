@@ -77,6 +77,7 @@ M.defaults = {
       ["ds"] = "diff_horizontal",
       ["dh"] = "diff_horizontal",
       ["dq"] = "diff_close",
+      ["dp"] = "diff_patch",
       -- commit
       ["cc"] = "commit",
       ["ca"] = "commit_amend",
@@ -159,11 +160,10 @@ M.defaults = {
       ["cb"] = "choose_both",
       ["c0"] = "choose_none",
     },
-    -- work-tree hunk maps, delegated to gitsigns.nvim
-    worktree = {
-      ["]c"] = "next_hunk",
-      ["[c"] = "prev_hunk",
-    },
+    -- work-tree hunk maps, delegated to gitsigns.nvim. Empty by default so we
+    -- never clobber the user's own gitsigns maps; actions: next_hunk,
+    -- prev_hunk, stage_hunk, reset_hunk.
+    worktree = {},
     -- pager-style output (float or split) and editor buffers
     pager = {
       ["q"] = "close",

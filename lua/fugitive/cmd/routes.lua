@@ -441,23 +441,23 @@ end
 ---Picker input (§5.3.2): which picker, if any, should supply the ref.
 ---Only the exact bare forms and an explicit allow-list trigger it.
 ---@param args string[]
----@return {picker: "refs"|"log", sub: string}?
+---@return {picker: "refs"|"log", sub: string, args: string[]}?
 function M.picker_trigger(args)
   local n = #args
   local sub = args[1]
   if n == 1 and (sub == "checkout" or sub == "switch" or sub == "merge" or sub == "rebase") then
-    return { picker = "refs", sub = sub }
+    return { picker = "refs", sub = sub, args = args }
   end
   -- allow-list of flag-only forms
   if n == 2 and sub == "rebase" and (args[2] == "-i" or args[2] == "--interactive") then
-    return { picker = "log", sub = sub }
+    return { picker = "log", sub = sub, args = args }
   end
   if
     n == 3
     and ((sub == "switch" and (args[2] == "-c" or args[2] == "--create")) or (sub == "checkout" and args[2] == "-b"))
     and args[3]:sub(1, 1) ~= "-"
   then
-    return { picker = "refs", sub = sub }
+    return { picker = "refs", sub = sub, args = args }
   end
   return nil
 end
