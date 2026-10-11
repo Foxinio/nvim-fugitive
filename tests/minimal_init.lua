@@ -9,7 +9,7 @@ vim.opt.packpath = {}
 vim.opt.swapfile = false
 vim.opt.shadafile = "NONE"
 vim.opt.more = false
-package.path = root .. "/tests/?.lua;" .. package.path
+package.path = root .. "/tests/?.lua;" .. root .. "/tests/?/init.lua;" .. package.path
 
 -- Tests run without a live editor client: make sure we never inherit one.
 vim.env.GIT_EDITOR = nil

@@ -15,9 +15,10 @@ integration: deps
 	$(call BUSTED,tests/integration)
 
 # Upstream parity harness (M0/M1 only): needs a checkout of tpope/vim-fugitive.
+# UPDATE_FIXTURES=1 rewrites tests/fixtures/browse_upstream.json.
 UPSTREAM ?= ../vim-fugitive
 parity: deps
-	UPSTREAM=$(abspath $(UPSTREAM)) $(call BUSTED,tests/parity)
+	UPSTREAM=$(abspath $(UPSTREAM)) FIXTURES=$(abspath tests/fixtures) $(call BUSTED,tests/parity)
 
 lint:
 	stylua --check lua plugin tests
