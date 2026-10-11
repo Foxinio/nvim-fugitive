@@ -12,19 +12,20 @@ function M.get()
   if not require("fugitive.config").get().integrations.gitsigns then
     return nil
   end
+  -- a failed require can leave a non-table sentinel in package.loaded
   local loaded = package.loaded["gitsigns"]
-  if loaded then
+  if type(loaded) == "table" then
     return loaded
   end
   -- only use gitsigns if the user has it; never force-load at startup
   local ok, gs = pcall(require, "gitsigns")
-  return ok and gs or nil
+  return ok and type(gs) == "table" and gs or nil
 end
 
 ---Refresh gitsigns after a mutation (no-op without gitsigns).
 function M.refresh()
   local gs = package.loaded["gitsigns"]
-  if not gs or not require("fugitive.config").get().integrations.gitsigns then
+  if type(gs) ~= "table" or not require("fugitive.config").get().integrations.gitsigns then
     return
   end
   if gs.refresh then

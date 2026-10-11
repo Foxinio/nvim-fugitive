@@ -1,6 +1,8 @@
 DEPS    ?= .deps
 NVIM    ?= nvim
 PLENARY := $(DEPS)/plenary.nvim
+# optional: telescope tests are pending without it
+TELESCOPE := $(DEPS)/telescope.nvim
 INIT    := tests/minimal_init.lua
 BUSTED   = $(NVIM) --headless --noplugin -u $(INIT) -c "PlenaryBustedDirectory $(1) {minimal_init = '$(INIT)', sequential = true, timeout = 60000}"
 
@@ -28,10 +30,13 @@ lint:
 format:
 	stylua lua plugin tests
 
-deps: $(PLENARY)
+deps: $(PLENARY) $(TELESCOPE)
 
 $(PLENARY):
 	git clone --depth 1 https://github.com/nvim-lua/plenary.nvim $(PLENARY)
+
+$(TELESCOPE):
+	git clone --depth 1 https://github.com/nvim-telescope/telescope.nvim $(TELESCOPE)
 
 clean:
 	rm -rf $(DEPS) .tests
