@@ -100,31 +100,4 @@ function M.upstream_summary(repo)
   return M.run_upstream(repo.root, { "Git", "let g:result = getline(1, '$')" })
 end
 
-return M.run_upstream(repo.root, { "Git", "let g:result = getline(1, '$')" })
-end
-
----Vimscript that registers a capturing GBrowse handler.
-M.capture_handler = {
-  "let g:captured = []",
-  "function! Capture(opts) abort",
-  "  call add(g:captured, a:opts)",
-  "  return ''",
-  "endfunction",
-  "let g:fugitive_browse_handlers = [function('Capture')]",
-}
-
----Normalise machine-specific values in a dict (the repo root).
-function M.normalize(value, root)
-  if type(value) == "string" then
-    return (value:gsub(vim.pesc(root), "<ROOT>"))
-  elseif type(value) == "table" then
-    local out = {}
-    for k, v in pairs(value) do
-      out[k] = M.normalize(v, root)
-    end
-    return out
-  end
-  return value
-end
-
 return M
