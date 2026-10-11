@@ -78,14 +78,23 @@ local function set_maps(buf, opts)
       if cancel then
         cancel()
       else
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-c>", true, false, true), "n", false)
+        vim.api.nvim_feedkeys(
+          vim.api.nvim_replace_termcodes("<C-c>", true, false, true),
+          "n",
+          false
+        )
       end
     end,
   }
   for lhs, action in pairs(maps) do
     local fn = type(action) == "function" and action or actions[action]
     if fn then
-      vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, silent = true, desc = "fugitive: " .. tostring(action) })
+      vim.keymap.set(
+        "n",
+        lhs,
+        fn,
+        { buffer = buf, nowait = true, silent = true, desc = "fugitive: " .. tostring(action) }
+      )
     end
   end
 end

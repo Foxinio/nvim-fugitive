@@ -7,7 +7,11 @@ local function wait_editor(pattern)
   local found
   H.wait(function()
     for _, b in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_loaded(b) and vim.api.nvim_buf_get_name(b):match(pattern) and vim.b[b].fugitive_editor then
+      if
+        vim.api.nvim_buf_is_loaded(b)
+        and vim.api.nvim_buf_get_name(b):match(pattern)
+        and vim.b[b].fugitive_editor
+      then
         found = b
         return true
       end
@@ -309,5 +313,20 @@ describe("editor service", function()
     H.wait(function()
       return vim.trim(repo:git("notes", "show", "HEAD", { allow_fail = true })) == "a note"
     end, "note", 5000)
+  end)
+end)
+
+describe("editor queue keys", function()
+  it("keeps one queue per repository", function()
+    local exec = require("fugitive.git.exec")
+    local a = H.repo({ files = { ["a"] = "a\n" } })
+    local b = H.repo({ files = { ["b"] = "b\n" } })
+    local ra = require("fugitive.git.repo").find(a.root)
+    local rb = require("fugitive.git.repo").find(b.root)
+    local _, _, ida = exec.build({ "commit" }, { repo = ra, editor = true })
+    local _, _, idb = exec.build({ "commit" }, { repo = rb, editor = true })
+    assert.equals(ra, editor._jobs[ida].repo)
+    assert.equals(rb, editor._jobs[idb].repo)
+    editor._jobs[ida], editor._jobs[idb] = nil, nil
   end)
 end)

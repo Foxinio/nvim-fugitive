@@ -19,6 +19,7 @@ local M = {}
 ---@field dirty boolean
 ---@field tick integer completed renders
 ---@field snap fugitive.Snapshot?
+---@field waiters fun()[]? callbacks waiting for the running refresh
 
 ---@type table<integer, fugitive.SummaryState>
 M._state = {}
@@ -64,7 +65,14 @@ local function find_identity(info, id)
   for lnum, i in ipairs(info) do
     local path = i.entry and i.entry.path
     if i.section == id.section and path == id.path then
-      if i.kind == id.kind and i.hunk_index == id.hunk_index and i.line_index == id.line_index and i.commit == id.commit and i.ref == id.ref and i.key == id.key then
+      if
+        i.kind == id.kind
+        and i.hunk_index == id.hunk_index
+        and i.line_index == id.line_index
+        and i.commit == id.commit
+        and i.ref == id.ref
+        and i.key == id.key
+      then
         return lnum
       end
       if i.kind == "file" and id.path then
@@ -99,7 +107,8 @@ local function apply(buf, st, snap)
   local cursors = {}
   for _, win in ipairs(wins) do
     local c = vim.api.nvim_win_get_cursor(win)
-    cursors[win] = { lnum = c[1], col = c[2], id = identity(st.info[c[1]]), topline = vim.fn.line("w0", win) }
+    cursors[win] =
+      { lnum = c[1], col = c[2], id = identity(st.info[c[1]]), topline = vim.fn.line("w0", win) }
   end
   vim.bo[buf].modifiable = true
   vim.bo[buf].readonly = false
@@ -116,7 +125,10 @@ local function apply(buf, st, snap)
   end
   st.tick = st.tick + 1
   vim.b[buf].fugitive_tick = st.tick
-  vim.api.nvim_exec_autocmds("User", { pattern = "FugitiveSummaryRendered", modeline = false, data = { buf = buf } })
+  vim.api.nvim_exec_autocmds(
+    "User",
+    { pattern = "FugitiveSummaryRendered", modeline = false, data = { buf = buf } }
+  )
 end
 
 ---Extmark highlights for sigils and diff lines (the syntax file covers the
@@ -135,7 +147,14 @@ function M.highlight(buf, info)
       group = "DiffFile"
     end
     if group then
-      pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, 0, { line_hl_group = group, priority = 100 })
+      pcall(
+        vim.api.nvim_buf_set_extmark,
+        buf,
+        ns,
+        lnum - 1,
+        0,
+        { line_hl_group = group, priority = 100 }
+      )
     end
   end
 end
@@ -146,7 +165,15 @@ end
 function M.load(buf, repo)
   local st = M._state[buf]
   if not st then
-    st = { repo = repo, info = {}, expanded = {}, generation = 0, running = false, dirty = false, tick = 0 }
+    st = {
+      repo = repo,
+      info = {},
+      expanded = {},
+      generation = 0,
+      running = false,
+      dirty = false,
+      tick = 0,
+    }
     M._state[buf] = st
     M.setup_buffer(buf, repo)
   end
@@ -257,7 +284,11 @@ function M.setup_buffer(buf, repo)
   vim.b[buf].git_dir = repo.git_dir
   vim.b[buf].fugitive_type = "index"
   vim.bo[buf].filetype = "fugitive"
-  require("fugitive.maps").apply(buf, "summary", require("fugitive.buffers.summary.actions").actions(buf))
+  require("fugitive.maps").apply(
+    buf,
+    "summary",
+    require("fugitive.buffers.summary.actions").actions(buf)
+  )
   local group = vim.api.nvim_create_augroup("fugitive_summary_" .. buf, { clear = true })
   vim.api.nvim_create_autocmd("User", {
     group = group,
@@ -333,7 +364,10 @@ function M.open(repo, opts)
   local style = require("fugitive.config").get().summary.window
   local cmd
   local cur = vim.api.nvim_get_current_buf()
-  local reuse = vim.api.nvim_buf_get_name(cur) == "" and vim.bo[cur].buftype == "" and not vim.bo[cur].modified and vim.api.nvim_buf_line_count(cur) <= 1
+  local reuse = vim.api.nvim_buf_get_name(cur) == ""
+    and vim.bo[cur].buftype == ""
+    and not vim.bo[cur].modified
+    and vim.api.nvim_buf_line_count(cur) <= 1
   if opts.mods and opts.mods:match("%S") then
     cmd = opts.mods .. " split"
   elseif reuse or style == "current" then
@@ -374,7 +408,8 @@ function M.show_help(buftype)
   local keys = require("fugitive.maps").keys_for(buftype)
   local names = vim.tbl_keys(keys)
   table.sort(names)
-  local lines = { "nvim-fugitive " .. buftype .. " maps (see :help fugitive-" .. buftype .. "-maps)", "" }
+  local lines =
+    { "nvim-fugitive " .. buftype .. " maps (see :help fugitive-" .. buftype .. "-maps)", "" }
   for _, n in ipairs(names) do
     table.insert(lines, string.format("  %-28s %s", table.concat(keys[n], " "), n:gsub("_", " ")))
   end

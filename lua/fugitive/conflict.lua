@@ -79,7 +79,14 @@ function M.highlight(buf)
   for _, c in ipairs(M.conflicts(buf)) do
     local function hl(from, to, group)
       for l = from, to do
-        pcall(vim.api.nvim_buf_set_extmark, buf, ns, l - 1, 0, { line_hl_group = group, priority = 90 })
+        pcall(
+          vim.api.nvim_buf_set_extmark,
+          buf,
+          ns,
+          l - 1,
+          0,
+          { line_hl_group = group, priority = 90 }
+        )
       end
     end
     hl(c.start, c.start, "FugitiveConflictMarker")
@@ -117,7 +124,11 @@ function M.choose(choice, buf)
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local repl = M.resolve_block(lines, c, choice)
   vim.api.nvim_buf_set_lines(buf, c.start - 1, c.finish, false, repl)
-  pcall(vim.api.nvim_win_set_cursor, 0, { math.max(1, math.min(c.start, vim.api.nvim_buf_line_count(buf))), 0 })
+  pcall(
+    vim.api.nvim_win_set_cursor,
+    0,
+    { math.max(1, math.min(c.start, vim.api.nvim_buf_line_count(buf))), 0 }
+  )
   M.highlight(buf)
 end
 

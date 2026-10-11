@@ -10,6 +10,7 @@ local M = {}
 ---@field new_count integer
 ---@field lines string[] body lines (" ", "+", "-", "\\" prefixed)
 ---@field combined boolean? a --cc hunk (read-only)
+---@field submodule boolean? a `--submodule=log` shortlog pseudo-hunk
 
 ---@class fugitive.FileDiff
 ---@field path string new path (old path for deletions)
@@ -28,7 +29,17 @@ function M.unquote(s)
     return s
   end
   s = s:sub(2, -2)
-  local map = { a = "\a", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t", v = "\v", ['"'] = '"', ["\\"] = "\\" }
+  local map = {
+    a = "\a",
+    b = "\b",
+    f = "\f",
+    n = "\n",
+    r = "\r",
+    t = "\t",
+    v = "\v",
+    ['"'] = '"',
+    ["\\"] = "\\",
+  }
   return (
     s:gsub("\\(%d%d%d)", function(oct)
       return string.char(tonumber(oct, 8))
@@ -59,7 +70,15 @@ function M.parse_hunk_header(line)
     }
   end
   if line:match("^@@@+ ") then
-    return { header = line, old_start = 0, old_count = 0, new_start = 0, new_count = 0, lines = {}, combined = true }
+    return {
+      header = line,
+      old_start = 0,
+      old_count = 0,
+      new_start = 0,
+      new_count = 0,
+      lines = {},
+      combined = true,
+    }
   end
 end
 
@@ -67,12 +86,18 @@ end
 ---@param text string|string[]
 ---@return fugitive.FileDiff[]
 function M.parse(text)
-  local lines = type(text) == "table" and text or vim.split((text:gsub("\n$", "")), "\n", { plain = true })
+  local lines
+  if type(text) == "table" then
+    lines = text
+  else
+    lines = vim.split((text:gsub("\n$", "")), "\n", { plain = true })
+  end
   local files = {}
   local file, hunk
   for _, line in ipairs(lines) do
     if line:match("^diff ") then
-      file = { header = { line }, hunks = {}, binary = false, new_file = false, deleted_file = false }
+      file =
+        { header = { line }, hunks = {}, binary = false, new_file = false, deleted_file = false }
       hunk = nil
       table.insert(files, file)
       -- "diff --git a/x b/x": recover the path when both sides are equal
@@ -255,7 +280,10 @@ function M.build_patch(file, selections, reverse)
       end
       if changed then
         any = true
-        table.insert(out, string.format("@@ -%d,%d +%d,%d @@", hunk.old_start, old_c, hunk.new_start, new_c))
+        table.insert(
+          out,
+          string.format("@@ -%d,%d +%d,%d @@", hunk.old_start, old_c, hunk.new_start, new_c)
+        )
         vim.list_extend(out, body)
       end
     end

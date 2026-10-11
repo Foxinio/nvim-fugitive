@@ -62,7 +62,13 @@ describe("telescope integration", function()
     repo:git("checkout", "-q", "-b", "newer")
     repo:write("b", "b\n")
     repo:git("add", "b")
-    repo:git("commit", "-q", "-m", "newer commit", { env = { GIT_COMMITTER_DATE = "2030-01-01T00:00:00Z" } })
+    repo:git(
+      "commit",
+      "-q",
+      "-m",
+      "newer commit",
+      { env = { GIT_COMMITTER_DATE = "2030-01-01T00:00:00Z" } }
+    )
     repo:git("checkout", "-q", "main")
     vim.cmd("cd " .. repo.root)
     require("fugitive.integrations.telescope.pickers").refs()

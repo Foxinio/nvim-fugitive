@@ -31,7 +31,11 @@ local function wait_editor(pattern)
   local found
   H.wait(function()
     for _, b in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_loaded(b) and vim.api.nvim_buf_get_name(b):match(pattern) and vim.b[b].fugitive_editor then
+      if
+        vim.api.nvim_buf_is_loaded(b)
+        and vim.api.nvim_buf_get_name(b):match(pattern)
+        and vim.b[b].fugitive_editor
+      then
         found = b
         return true
       end
@@ -123,7 +127,8 @@ describe("summary maps (M2 and extras)", function()
     vim.cmd("wq")
     H.wait(function()
       return vim.uv.fs_stat(clone.root .. "/.git/rebase-merge") ~= nil
-        and H.find_line("^Rebasing main", vim.fn.bufnr("fugitive://" .. clone.root .. "/.git//")) ~= nil
+        and H.find_line("^Rebasing main", vim.fn.bufnr("fugitive://" .. clone.root .. "/.git//"))
+          ~= nil
     end, "rebase stopped", 10000)
     vim.cmd("buffer fugitive://" .. clone.root .. "/.git//")
     run_and_wait("ra")
@@ -210,11 +215,14 @@ describe("summary maps (M2 and extras)", function()
     open(repo)
     goto_line("^M a")
     H.feed("dv")
-    local names = vim.tbl_map(function(w)
-      return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w))
-    end, vim.tbl_filter(function(w)
-      return vim.wo[w].diff
-    end, vim.api.nvim_tabpage_list_wins(0)))
+    local names = vim.tbl_map(
+      function(w)
+        return vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w))
+      end,
+      vim.tbl_filter(function(w)
+        return vim.wo[w].diff
+      end, vim.api.nvim_tabpage_list_wins(0))
+    )
     table.sort(names)
     assert.same({ repo:path("a"), "fugitive://" .. repo.root .. "/.git//0/a" }, names)
   end)

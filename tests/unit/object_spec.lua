@@ -6,13 +6,19 @@ describe("object URLs", function()
     local url = object.format("/r/.git", sha, "dir/file.lua")
     assert.equals("fugitive:///r/.git//" .. sha .. "/dir/file.lua", url)
     assert.same({ git_dir = "/r/.git", commit = sha, path = "dir/file.lua" }, object.parse(url))
-    assert.same({ git_dir = "/r/.git", commit = "0", path = "x" }, object.parse("fugitive:///r/.git//0/x"))
+    assert.same(
+      { git_dir = "/r/.git", commit = "0", path = "x" },
+      object.parse("fugitive:///r/.git//0/x")
+    )
     assert.same({ git_dir = "/r/.git", commit = sha }, object.parse("fugitive:///r/.git//" .. sha))
   end)
 
   it("treats a trailing slash as the root tree", function()
     local sha = string.rep("b", 40)
-    assert.same({ git_dir = "/r/.git", commit = sha, path = nil }, object.parse("fugitive:///r/.git//" .. sha))
+    assert.same(
+      { git_dir = "/r/.git", commit = sha, path = nil },
+      object.parse("fugitive:///r/.git//" .. sha)
+    )
     assert.equals("", object.parse("fugitive:///r/.git//" .. sha .. "/").path)
   end)
 
@@ -35,7 +41,10 @@ describe("object URLs", function()
   end)
 
   it("url_encode matches upstream s:UrlEncode", function()
-    assert.equals("a%20b%23c%3Fd%26e%3Bf%2Bg%3Dh%5Ci%3Cj%3Ek%25", object.url_encode("a b#c?d&e;f+g=h\\i<j>k%"))
+    assert.equals(
+      "a%20b%23c%3Fd%26e%3Bf%2Bg%3Dh%5Ci%3Cj%3Ek%25",
+      object.url_encode("a b#c?d&e;f+g=h\\i<j>k%")
+    )
   end)
 end)
 
@@ -47,7 +56,10 @@ describe("object.parse_rev", function()
     assert.same({ kind = "rev", rev = "main", path = "" }, object.parse_rev("main:"))
     assert.same({ kind = "commit", rev = "v1.0" }, object.parse_rev("v1.0"))
     assert.same({ kind = "rev", rev = "@{u}", path = "x" }, object.parse_rev("@{u}:x"))
-    assert.same({ kind = "rev", rev = "HEAD@{1.day.ago}", path = "x" }, object.parse_rev("HEAD@{1.day.ago}:x"))
+    assert.same(
+      { kind = "rev", rev = "HEAD@{1.day.ago}", path = "x" },
+      object.parse_rev("HEAD@{1.day.ago}:x")
+    )
   end)
 
   it("returns nil for backlog forms", function()

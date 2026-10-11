@@ -27,9 +27,11 @@ end
 ---@param s string
 ---@return string
 function M.url_encode(s)
-  return (s:gsub("[%%#?&;+=\\<> %c]", function(c)
-    return string.format("%%%02X", c:byte())
-  end))
+  return (
+    s:gsub("[%%#?&;+=\\<> %c]", function(c)
+      return string.format("%%%02X", c:byte())
+    end)
+  )
 end
 
 ---@param s string
@@ -80,7 +82,9 @@ function M.parse(url)
       if tail == "" then
         return { git_dir = M.url_decode(dir), commit = "", path = nil }
       end
-      local commit, path = tail:match("^(%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x*)(.*)$")
+      local commit, path = tail:match(
+        "^(%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x*)(.*)$"
+      )
       if not commit then
         commit, path = tail:match("^([0-3])(.*)$")
       end
@@ -168,7 +172,7 @@ function M.resolve(repo, spec, cwd_rel)
   if r.kind == "stage" then
     return M.format(repo.git_dir, tostring(r.stage), fix_path(r.path))
   end
-  local rev = r.rev == "" and "HEAD" or r.rev
+  local rev = (r.rev == nil or r.rev == "") and "HEAD" or r.rev --[[@as string]]
   if r.kind == "commit" then
     local sha = repo:rev_parse(rev .. "^{commit}") or repo:rev_parse(rev)
     if not sha then

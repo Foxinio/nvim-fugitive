@@ -218,7 +218,9 @@ function M.run_float(repo, args, opts)
       local text = vim.trim(res.stderr)
       local lines = vim.split(text, "\n", { plain = true })
       local max = require("fugitive.config").get().notify.max_lines
-      local empty = buf and vim.api.nvim_buf_is_valid(buf) and vim.trim(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "")) == ""
+      local empty = buf
+        and vim.api.nvim_buf_is_valid(buf)
+        and vim.trim(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "")) == ""
       if empty and #lines > max then
         -- long command errors go to the float
         float.set(buf, vim.list_extend({ "# exit code " .. res.code }, lines))
@@ -230,7 +232,11 @@ function M.run_float(repo, args, opts)
         end
         notify.result(res)
       end
-    elseif buf and vim.api.nvim_buf_is_valid(buf) and vim.trim(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "")) == "" then
+    elseif
+      buf
+      and vim.api.nvim_buf_is_valid(buf)
+      and vim.trim(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "")) == ""
+    then
       for _, win in ipairs(vim.fn.win_findbuf(buf)) do
         pcall(vim.api.nvim_win_close, win, true)
       end
@@ -294,7 +300,11 @@ function M.run(args, opts)
   if cls.route == "float" then
     return M.run_float(repo, args, { mods = opts.mods, sub = cls.sub })
   elseif cls.route == "task" then
-    return require("fugitive.integrations.overseer").run(repo, args, { mods = opts.mods, on_done = opts.on_done })
+    return require("fugitive.integrations.overseer").run(
+      repo,
+      args,
+      { mods = opts.mods, on_done = opts.on_done }
+    )
   elseif cls.route == "terminal" then
     return require("fugitive.ui.terminal").run(repo, args, {
       mods = opts.mods,

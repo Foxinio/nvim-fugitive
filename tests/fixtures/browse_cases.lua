@@ -112,7 +112,6 @@ function M.ours(root)
   return captured
 end
 
-
 ---Replace the machine-specific repo root in captured values.
 function M.normalize(value, root)
   if type(value) == "string" then

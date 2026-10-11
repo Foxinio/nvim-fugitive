@@ -81,7 +81,17 @@ local function blame_lines(repo, commit, path, line1, line2, buf)
   local fd = assert(io.open(list, "wb"))
   fd:write(commit .. "\n\n")
   fd:close()
-  local args = { "-c", "blame.coloring=none", "blame", "-L", line1 .. "," .. line2, "-S", list, "-s", "--show-number" }
+  local args = {
+    "-c",
+    "blame.coloring=none",
+    "blame",
+    "-L",
+    line1 .. "," .. line2,
+    "-S",
+    list,
+    "-s",
+    "--show-number",
+  }
   local contents
   if buf and vim.bo[buf].modified then
     contents = vim.fn.tempname()
@@ -115,7 +125,9 @@ end
 
 ---Build upstream's options dict.
 ---@param req fugitive.BrowseRequest
----@return fugitive.BrowseOpts|string|nil opts (a string is a direct URL), string? err
+---@return fugitive.BrowseOpts|string|nil opts a string is a direct URL
+---@return string? err
+---@return string? remote_url
 function M.build(req)
   local repo = require("fugitive.git.repo").for_buf(req.buf)
   if not repo then
@@ -131,8 +143,11 @@ function M.build(req)
   local rev
   if not remote then
     -- trailing @remote / !remote
-    local r = arg:match("[!@](%a[%w_-]*)$") or arg:match("[!@](%.git)$") or arg:match("[!@](%.)$")
-      or arg:match("[!@](%.?/.*)$") or arg:match("[!@](%a[%w_-]*://.-)$")
+    local r = arg:match("[!@](%a[%w_-]*)$")
+      or arg:match("[!@](%.git)$")
+      or arg:match("[!@](%.)$")
+      or arg:match("[!@](%.?/.*)$")
+      or arg:match("[!@](%a[%w_-]*://.-)$")
     if r and not arg:match("@{") then
       remote = r
       rev = arg:sub(1, #arg - #r - 1)
@@ -151,12 +166,17 @@ function M.build(req)
     return expanded
   end
   -- a bare remote name
-  if remote == "" and expanded:match("^[^-./:^~][^:^~]*$") and repo:config("remote." .. expanded .. ".url") then
+  if
+    remote == ""
+    and expanded:match("^[^-./:^~][^:^~]*$")
+    and repo:config("remote." .. expanded .. ".url")
+  then
     remote = expanded
     expanded = ""
   end
 
-  local bufname = vim.bo[req.buf].buftype:match("^nofile$") and "" or vim.api.nvim_buf_get_name(req.buf)
+  local bufname = vim.bo[req.buf].buftype:match("^nofile$") and ""
+    or vim.api.nvim_buf_get_name(req.buf)
   local full -- {kind = "object", obj} | {kind = "worktree", path} | {kind = "gitdir", rel}
   if expanded == "" then
     local obj = object.parse(bufname)
@@ -210,7 +230,7 @@ function M.build(req)
   local commit, ref, path, typ = "", "", "", ""
   local forbid_ref_as_commit = false
   if full.kind == "object" then
-    local obj = full.obj
+    local obj = full.obj --[[@as fugitive.Object]]
     commit = obj.commit
     path = obj.path
     if commit:match("^%d?$") then
@@ -232,12 +252,15 @@ function M.build(req)
         end
       end
       ref = m_ref or ""
-      forbid_ref_as_commit = ref == "" or ref == "@" or not (m_sep == ":" or m_sep == "" or m_sep == nil)
+      forbid_ref_as_commit = ref == ""
+        or ref == "@"
+        or not (m_sep == ":" or m_sep == "" or m_sep == nil)
       if (path == nil or path == "") and not forbid_ref_as_commit then
         typ = "ref"
       else
         local name = commit .. ((path and path ~= "") and (":" .. path) or "")
-        typ = chomp(repo, { "cat-file", "-t", name }) or ((path == nil or path == "") and "commit" or "blob")
+        typ = chomp(repo, { "cat-file", "-t", name })
+          or ((path == nil or path == "") and "commit" or "blob")
       end
     end
     path = path or ""
@@ -379,7 +402,10 @@ function M.call_vim_handlers(opts)
   local n = vim.fn.eval("len(get(g:, 'fugitive_browse_handlers', []))")
   for i = 0, n - 1 do
     vim.g._fugitive_browse_opts = opts
-    local ok, url = pcall(vim.fn.eval, string.format("call(g:fugitive_browse_handlers[%d], [copy(g:_fugitive_browse_opts)])", i))
+    local ok, url = pcall(
+      vim.fn.eval,
+      string.format("call(g:fugitive_browse_handlers[%d], [copy(g:_fugitive_browse_opts)])", i)
+    )
     vim.g._fugitive_browse_opts = nil
     if ok and type(url) == "string" and url:find("://", 1, true) then
       return url

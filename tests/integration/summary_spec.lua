@@ -39,7 +39,8 @@ describe("summary buffer", function()
   end)
 
   it("renders the upstream layout", function()
-    local repo = H.repo({ files = { ["a.txt"] = "a\nb\nc\n", ["b.txt"] = "b\n", ["old.txt"] = "o\n" } })
+    local repo =
+      H.repo({ files = { ["a.txt"] = "a\nb\nc\n", ["b.txt"] = "b\n", ["old.txt"] = "o\n" } })
     repo:write("a.txt", "a\nB\nc\n")
     repo:write("new.txt", "n\n")
     repo:write("b.txt", "bb\n")
@@ -118,7 +119,10 @@ describe("summary buffer", function()
       H.feed("=")
     end)
     local l = H.find_line("^M f")
-    assert.same({ "M f", "@@ -1,3 +1,3 @@", " 1", "-2", "+TWO", " 3" }, vim.list_slice(H.lines(buf), l, l + 5))
+    assert.same(
+      { "M f", "@@ -1,3 +1,3 @@", " 1", "-2", "+TWO", " 3" },
+      vim.list_slice(H.lines(buf), l, l + 5)
+    )
     assert.equals("expr", vim.wo.foldmethod)
     assert.equals(2, vim.fn.foldlevel(l + 2))
     assert.equals(1, vim.fn.foldlevel(H.find_line("^Unstaged")))
@@ -283,7 +287,10 @@ describe("summary buffer", function()
     assert.truthy(H.find_line("move submodule"))
     goto_line("^M sm$")
     H.feed("<CR>")
-    assert.equals("fugitive://" .. parent.root .. "/.git/modules/sm//", vim.api.nvim_buf_get_name(0))
+    assert.equals(
+      "fugitive://" .. parent.root .. "/.git/modules/sm//",
+      vim.api.nvim_buf_get_name(0)
+    )
     -- stage the new pointer from the parent
     vim.cmd("buffer " .. buf)
     goto_line("^M sm$")

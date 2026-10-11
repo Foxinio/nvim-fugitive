@@ -63,7 +63,8 @@ end
 
 -- short options that take a value (`-mmsg`, `-am msg`) across the common
 -- subcommands: anything after them in a cluster is the value
-local value_letters = { m = true, F = true, C = true, c = true, u = true, S = true, t = true, n = false }
+local value_letters =
+  { m = true, F = true, C = true, c = true, u = true, S = true, t = true, n = false }
 
 ---Does `rest` contain one of `flags`? Long flags match `--flag` and
 ---`--flag=value`; single-letter short flags (`-m`) also match inside short
@@ -245,11 +246,28 @@ M.subcommands = {
       if M.has_flag(rest, { "-d", "--delete", "-v", "--verify" }) then
         return "notify"
       end
-      local listing = { "-l", "--list", "-n", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format" }
+      local listing = {
+        "-l",
+        "--list",
+        "-n",
+        "--contains",
+        "--no-contains",
+        "--merged",
+        "--no-merged",
+        "--points-at",
+        "--sort",
+        "--format",
+      }
       if M.has_flag(rest, listing) then
         return "float"
       end
-      local pos = M.positionals(rest, { ["-m"] = true, ["-F"] = true, ["-u"] = true, ["--local-user"] = true, ["--cleanup"] = true })
+      local pos = M.positionals(rest, {
+        ["-m"] = true,
+        ["-F"] = true,
+        ["-u"] = true,
+        ["--local-user"] = true,
+        ["--cleanup"] = true,
+      })
       if #pos == 0 then
         return "float"
       end
@@ -278,7 +296,17 @@ M.subcommands = {
   commit = {
     -- -c/--reedit-message re-edits; --fixup=amend:/reword: open the editor
     edit_flags = { "-e", "--edit", "-c", "--reedit-message", "--fixup=amend:", "--fixup=reword:" },
-    no_edit_flags = { "-m", "--message", "-F", "--file", "-C", "--reuse-message", "--no-edit", "--fixup=", "--dry-run" },
+    no_edit_flags = {
+      "-m",
+      "--message",
+      "-F",
+      "--file",
+      "-C",
+      "--reuse-message",
+      "--no-edit",
+      "--fixup=",
+      "--dry-run",
+    },
     route = function(rest, spec)
       if M.has_flag(rest, { "-p", "--patch", "--interactive" }) then
         return "terminal"
@@ -295,7 +323,15 @@ M.subcommands = {
   },
   revert = {
     edit_flags = { "-e", "--edit" },
-    no_edit_flags = { "--no-edit", "-n", "--no-commit", "--abort", "--quit", "--skip", "--continue" },
+    no_edit_flags = {
+      "--no-edit",
+      "-n",
+      "--no-commit",
+      "--abort",
+      "--quit",
+      "--skip",
+      "--continue",
+    },
     route = function(rest, spec)
       return edit_route(rest, spec, true)
     end,

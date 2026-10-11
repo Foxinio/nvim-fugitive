@@ -25,7 +25,8 @@ parity: deps
 lint:
 	stylua --check lua plugin tests
 	selene lua plugin
-	lua-language-server --check . --checklevel=Warning
+	VIMRUNTIME=$$($(NVIM) --headless --clean -c 'lua io.stdout:write(vim.env.VIMRUNTIME)' -c 'qa!') \
+		lua-language-server --check lua --configpath=$(CURDIR)/.luarc.json --checklevel=Warning
 
 format:
 	stylua lua plugin tests

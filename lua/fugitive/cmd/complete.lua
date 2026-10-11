@@ -5,6 +5,7 @@
 
 local M = {}
 
+---@type {subcommands: string[]?, flags: table<string, string[]>}
 local cache = { subcommands = nil, flags = {} }
 
 local function repo()
@@ -32,7 +33,7 @@ function M.subcommands(r)
     table.sort(list)
     cache.subcommands = list
   end
-  local list = vim.deepcopy(cache.subcommands)
+  local list = vim.deepcopy(cache.subcommands or {})
   if r then
     for _, l in ipairs(r:lines({ "config", "--get-regexp", "^alias\\." }) or {}) do
       local name = l:match("^alias%.(%S+)")
@@ -70,9 +71,22 @@ end
 ---@param r fugitive.Repo
 ---@return string[]
 function M.refs(r)
-  local list = r:lines({ "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes", "refs/tags" }) or {}
+  local list = r:lines({
+    "for-each-ref",
+    "--format=%(refname:short)",
+    "refs/heads",
+    "refs/remotes",
+    "refs/tags",
+  }) or {}
   vim.list_extend(list, { "HEAD", "@{upstream}", "@{push}" })
-  for _, special in ipairs({ "ORIG_HEAD", "FETCH_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REBASE_HEAD", "stash" }) do
+  for _, special in ipairs({
+    "ORIG_HEAD",
+    "FETCH_HEAD",
+    "MERGE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "REBASE_HEAD",
+    "stash",
+  }) do
     if vim.uv.fs_stat(r:git_path(special == "stash" and "refs/stash" or special)) then
       table.insert(list, special)
     end
@@ -168,13 +182,16 @@ function M.git(lead, cmdline, pos)
   local parsed = require("fugitive.cmd.routes").parse(words)
   if not parsed.sub then
     if lead:sub(1, 1) == "-" then
-      return filter({ "-c", "-C", "-p", "--paginate", "-P", "--no-pager", "--git-dir=", "--work-tree=" }, lead)
+      return filter(
+        { "-c", "-C", "-p", "--paginate", "-P", "--no-pager", "--git-dir=", "--work-tree=" },
+        lead
+      )
     end
     return filter(M.subcommands(r), lead)
   end
   local sub = parsed.sub
   if lead:sub(1, 1) == "-" then
-    return filter(M.flags(sub), lead)
+    return filter(M.flags(sub --[[@as string]]), lead)
   end
   if not r then
     return {}
@@ -184,12 +201,19 @@ function M.git(lead, cmdline, pos)
     return M.paths(r, lead, sub == "add" or sub == "clean" or sub == "check-ignore")
   end
   if sub == "stash" and #parsed.rest == 0 then
-    return filter({ "push", "pop", "apply", "drop", "list", "show", "branch", "clear", "create", "store" }, lead)
+    return filter(
+      { "push", "pop", "apply", "drop", "list", "show", "branch", "clear", "create", "store" },
+      lead
+    )
   end
   if sub == "remote" or sub == "push" or sub == "fetch" or sub == "pull" then
     local remotes = r:lines({ "remote" }) or {}
     if #parsed.rest == 0 then
-      return filter(sub == "remote" and { "add", "remove", "rename", "set-url", "show", "prune", "-v" } or remotes, lead)
+      return filter(
+        sub == "remote" and { "add", "remove", "rename", "set-url", "show", "prune", "-v" }
+          or remotes,
+        lead
+      )
     end
     return filter(vim.list_extend(remotes, M.refs(r)), lead)
   end

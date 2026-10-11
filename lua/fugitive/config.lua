@@ -217,7 +217,13 @@ local function validate(opts)
     end
     for lhs, action in pairs(maps) do
       if action ~= false and type(action) ~= "string" and type(action) ~= "function" then
-        error(string.format("fugitive: maps.%s[%q] must be an action name, a function or false", buftype, lhs))
+        error(
+          string.format(
+            "fugitive: maps.%s[%q] must be an action name, a function or false",
+            buftype,
+            lhs
+          )
+        )
       end
     end
   end

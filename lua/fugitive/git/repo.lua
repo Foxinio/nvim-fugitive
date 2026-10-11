@@ -140,6 +140,7 @@ function M.find(path)
     return nil
   end
   path = vim.fn.fnamemodify(path, ":p")
+  ---@diagnostic disable-next-line: param-type-mismatch
   local st = uv.fs_lstat(path)
   local dir
   if st and st.type == "directory" then
@@ -153,10 +154,14 @@ function M.find(path)
     dir = realpath(dir)
   end
   while dir do
-    if basename(dir) == ".git" or looks_like_git_dir(dir) and basename(dirname(dir)) == "modules" then
+    if
+      basename(dir) == ".git" or looks_like_git_dir(dir) and basename(dirname(dir)) == "modules"
+    then
       -- inside a git dir itself: the repo is that git dir
       local gd = realpath(dir)
-      return M.new(gd)
+      if gd then
+        return M.new(gd)
+      end
     end
     local gd = resolve_dot_git(dir)
     if gd then
@@ -175,7 +180,7 @@ end
 ---@param buf? integer
 ---@return fugitive.Repo?
 function M.for_buf(buf)
-  buf = (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf
+  buf = (buf == nil or buf == 0) and vim.api.nvim_get_current_buf() or buf --[[@as integer]]
   local ok, gd = pcall(vim.api.nvim_buf_get_var, buf, "git_dir")
   if ok and type(gd) == "string" and gd ~= "" and M._cache[gd] then
     return M._cache[gd]

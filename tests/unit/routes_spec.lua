@@ -2,7 +2,10 @@ local routes = require("fugitive.cmd.routes")
 
 local function route(cmdline)
   local args = vim.split(cmdline, " ", { trimempty = true })
-  return routes.classify(args, { overrides = {}, long_running = { "pull", "fetch", "push", "clone", "submodule update", "lfs" } }).route
+  return routes.classify(args, {
+    overrides = {},
+    long_running = { "pull", "fetch", "push", "clone", "submodule update", "lfs" },
+  }).route
 end
 
 describe("routes.classify", function()

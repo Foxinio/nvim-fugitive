@@ -3,7 +3,15 @@ local exec = require("fugitive.git.exec")
 describe("exec.build", function()
   it("adds the common flags and a non-interactive env", function()
     local cmd, opts = exec.build({ "status" }, { cwd = "/tmp" })
-    assert.same({ "git", "--no-optional-locks", "-c", "core.quotepath=false", "-c", "color.ui=never", "status" }, cmd)
+    assert.same({
+      "git",
+      "--no-optional-locks",
+      "-c",
+      "core.quotepath=false",
+      "-c",
+      "color.ui=never",
+      "status",
+    }, cmd)
     assert.equals("0", opts.env.GIT_TERMINAL_PROMPT)
     assert.equals("/tmp", opts.cwd)
     assert.truthy(opts.env.GIT_EDITOR:match("editor%.sh"))

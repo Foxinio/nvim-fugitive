@@ -50,16 +50,23 @@ function M.render(snap, expanded)
     add(h.key .. ": " .. h.value, { kind = "header", key = h.key, value = h.value })
   end
   if snap.discarded then
-    local d = snap.discarded
+    local d = snap.discarded --[[@as fugitive.DiscardEntry]]
     add(
-      string.format("Discarded: %s (%s) — u or g- restores", d.path, (d.worktree_blob or d.kind or ""):sub(1, 7)),
+      string.format(
+        "Discarded: %s (%s) — u or g- restores",
+        d.path,
+        (d.worktree_blob or d.kind or ""):sub(1, 7)
+      ),
       { kind = "discarded", entry = nil, value = d.path }
     )
   end
 
   local function section(name, label, n, suffix)
     add("", { kind = "blank" })
-    add(string.format("%s (%d%s)", label, n, suffix or ""), { kind = "section", section = name, label = label })
+    add(
+      string.format("%s (%d%s)", label, n, suffix or ""),
+      { kind = "section", section = name, label = label }
+    )
   end
 
   local function add_diff(sec, entry)
@@ -70,7 +77,9 @@ function M.render(snap, expanded)
     -- meta lines (new file mode, binary, rename, mode change) but not the
     -- diff/index/---/+++ boilerplate, then the hunks
     for _, h in ipairs(f.header) do
-      if not (h:match("^diff ") or h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ ")) then
+      if
+        not (h:match("^diff ") or h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ "))
+      then
         add(h, { kind = "diffmeta", section = sec, entry = entry, file = f })
       end
     end
@@ -79,7 +88,14 @@ function M.render(snap, expanded)
         add(hunk.header, { kind = "hunk", section = sec, entry = entry, file = f, hunk_index = hi })
       end
       for li, l in ipairs(hunk.lines) do
-        add(l, { kind = "diffline", section = sec, entry = entry, file = f, hunk_index = hi, line_index = li })
+        add(l, {
+          kind = "diffline",
+          section = sec,
+          entry = entry,
+          file = f,
+          hunk_index = hi,
+          line_index = li,
+        })
       end
     end
   end
@@ -120,14 +136,23 @@ function M.render(snap, expanded)
   for _, log in ipairs(snap.logs) do
     section(log.key, log.label, #log.entries, log.overflow and "+" or "")
     for _, e in ipairs(log.entries) do
-      add(e.commit .. " " .. e.subject, { kind = "commit", section = log.key, commit = e.commit, subject = e.subject, label = log.label })
+      add(e.commit .. " " .. e.subject, {
+        kind = "commit",
+        section = log.key,
+        commit = e.commit,
+        subject = e.subject,
+        label = log.label,
+      })
     end
   end
 
   if #snap.stashes > 0 then
     section("Stash", "Stashes", #snap.stashes)
     for _, s in ipairs(snap.stashes) do
-      add(s.ref .. " " .. s.subject, { kind = "stash", section = "Stash", ref = s.ref, subject = s.subject })
+      add(
+        s.ref .. " " .. s.subject,
+        { kind = "stash", section = "Stash", ref = s.ref, subject = s.subject }
+      )
     end
   end
 

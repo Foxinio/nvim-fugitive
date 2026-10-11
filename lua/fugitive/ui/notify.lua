@@ -29,7 +29,8 @@ function M.error(msg, opts)
   M.notify(msg, vim.log.levels.ERROR, opts)
 end
 
-local error_pattern = { "^error:", "^fatal:", "^E%d+:", "^CONFLICT", "^hint:.*error", "^! %[", "[Ee]rror" }
+local error_pattern =
+  { "^error:", "^fatal:", "^E%d+:", "^CONFLICT", "^hint:.*error", "^! %[", "[Ee]rror" }
 
 ---Find the first line that looks like an error.
 ---@param lines string[]
@@ -82,7 +83,8 @@ function M.result(res, opts)
   opts = opts or {}
   local ok = res.code == 0
   -- on failure the error comes first so truncation never hides it
-  local parts = ok and { res.stdout or "", res.stderr or "" } or { res.stderr or "", res.stdout or "" }
+  local parts = ok and { res.stdout or "", res.stderr or "" }
+    or { res.stderr or "", res.stdout or "" }
   local text = vim.trim(table.concat(
     vim.tbl_filter(function(s)
       return s ~= ""
@@ -90,7 +92,8 @@ function M.result(res, opts)
     "\n"
   ))
   if text == "" then
-    text = ok and (opts.success or ((opts.label or "git") .. ": done")) or ((opts.label or "git") .. " failed")
+    text = ok and (opts.success or ((opts.label or "git") .. ": done"))
+      or ((opts.label or "git") .. " failed")
   end
   text = M.truncate(text, { code = res.code, is_error = not ok })
   if ok then

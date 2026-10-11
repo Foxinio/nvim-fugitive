@@ -61,7 +61,10 @@ describe(":GBrowse", function()
     vim.ui.open = orig_open
     assert.equals("https://github.com/user/repo/blob/main/dir/other.txt", opened)
     -- a range pins the URL to a commit
-    assert.equals("https://github.com/user/repo/blob/" .. repo:rev("HEAD") .. "/dir/other.txt#L1", vim.fn.getreg('"'))
+    assert.equals(
+      "https://github.com/user/repo/blob/" .. repo:rev("HEAD") .. "/dir/other.txt#L1",
+      vim.fn.getreg('"')
+    )
     local _ = log
   end)
 
@@ -99,7 +102,9 @@ describe(":GBrowse", function()
     local log, restore = H.capture_notify()
     vim.cmd("GBrowse")
     restore()
-    assert.truthy(log[#log].msg:match("no GBrowse handler installed for 'https://unknown.example/x.git'"))
+    assert.truthy(
+      log[#log].msg:match("no GBrowse handler installed for 'https://unknown.example/x.git'")
+    )
   end)
 end)
 
@@ -107,26 +112,71 @@ describe("browse providers", function()
   local providers = require("fugitive.integrations.browse")
 
   it("parses remote URLs", function()
-    assert.same({ host = "github.com", path = "u/r", scheme = "https" }, providers.parse_remote("https://github.com/u/r.git"))
-    assert.same({ host = "github.com", path = "u/r", scheme = "ssh" }, providers.parse_remote("git@github.com:u/r.git"))
-    assert.same({ host = "gitlab.example.com", path = "g/s/r", scheme = "ssh" }, providers.parse_remote("ssh://git@gitlab.example.com:2222/g/s/r.git"))
-    assert.same({ host = "git.sr.ht", path = "~u/r", scheme = "https" }, providers.parse_remote("https://git.sr.ht/~u/r"))
+    assert.same(
+      { host = "github.com", path = "u/r", scheme = "https" },
+      providers.parse_remote("https://github.com/u/r.git")
+    )
+    assert.same(
+      { host = "github.com", path = "u/r", scheme = "ssh" },
+      providers.parse_remote("git@github.com:u/r.git")
+    )
+    assert.same(
+      { host = "gitlab.example.com", path = "g/s/r", scheme = "ssh" },
+      providers.parse_remote("ssh://git@gitlab.example.com:2222/g/s/r.git")
+    )
+    assert.same(
+      { host = "git.sr.ht", path = "~u/r", scheme = "https" },
+      providers.parse_remote("https://git.sr.ht/~u/r")
+    )
   end)
 
   local function url(remote, o)
-    return providers.url(vim.tbl_extend("force", { remote = remote, commit = "abc", path = "f.txt", type = "blob", line1 = 0, line2 = 0 }, o or {}))
+    return providers.url(
+      vim.tbl_extend(
+        "force",
+        { remote = remote, commit = "abc", path = "f.txt", type = "blob", line1 = 0, line2 = 0 },
+        o or {}
+      )
+    )
   end
 
   it("builds provider URLs", function()
-    assert.equals("https://github.com/u/r/blob/abc/f.txt#L1-L2", url("git@github.com:u/r.git", { line1 = 1, line2 = 2 }))
-    assert.equals("https://github.com/u/r/commit/abc", url("git@github.com:u/r.git", { type = "commit", path = "" }))
-    assert.equals("https://github.com/u/r/tree/abc/d", url("git@github.com:u/r.git", { type = "tree", path = "d/" }))
-    assert.equals("https://github.com/u/r", url("git@github.com:u/r.git", { type = "", path = ".git/index" }))
-    assert.equals("https://github.com/u/r/releases/tag/v1", url("git@github.com:u/r.git", { type = "", path = ".git/refs/tags/v1" }))
-    assert.equals("https://gitlab.com/u/r/-/blob/abc/f.txt#L3", url("https://gitlab.com/u/r", { line1 = 3, line2 = 3 }))
-    assert.equals("https://bitbucket.org/u/r/src/abc/f.txt#lines-1:2", url("https://bitbucket.org/u/r", { line1 = 1, line2 = 2 }))
-    assert.equals("https://codeberg.org/u/r/src/branch/abc/f.txt", url("https://codeberg.org/u/r.git"))
-    assert.equals("https://git.sr.ht/~u/r/tree/abc/item/f.txt#L1-2", url("https://git.sr.ht/~u/r", { line1 = 1, line2 = 2 }))
+    assert.equals(
+      "https://github.com/u/r/blob/abc/f.txt#L1-L2",
+      url("git@github.com:u/r.git", { line1 = 1, line2 = 2 })
+    )
+    assert.equals(
+      "https://github.com/u/r/commit/abc",
+      url("git@github.com:u/r.git", { type = "commit", path = "" })
+    )
+    assert.equals(
+      "https://github.com/u/r/tree/abc/d",
+      url("git@github.com:u/r.git", { type = "tree", path = "d/" })
+    )
+    assert.equals(
+      "https://github.com/u/r",
+      url("git@github.com:u/r.git", { type = "", path = ".git/index" })
+    )
+    assert.equals(
+      "https://github.com/u/r/releases/tag/v1",
+      url("git@github.com:u/r.git", { type = "", path = ".git/refs/tags/v1" })
+    )
+    assert.equals(
+      "https://gitlab.com/u/r/-/blob/abc/f.txt#L3",
+      url("https://gitlab.com/u/r", { line1 = 3, line2 = 3 })
+    )
+    assert.equals(
+      "https://bitbucket.org/u/r/src/abc/f.txt#lines-1:2",
+      url("https://bitbucket.org/u/r", { line1 = 1, line2 = 2 })
+    )
+    assert.equals(
+      "https://codeberg.org/u/r/src/branch/abc/f.txt",
+      url("https://codeberg.org/u/r.git")
+    )
+    assert.equals(
+      "https://git.sr.ht/~u/r/tree/abc/item/f.txt#L1-2",
+      url("https://git.sr.ht/~u/r", { line1 = 1, line2 = 2 })
+    )
     assert.is_nil(url("https://unknown.example/u/r"))
   end)
 end)

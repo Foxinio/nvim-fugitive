@@ -38,8 +38,13 @@ function M.list_refs(repo)
   for _, l in ipairs(lines) do
     local ref, name, sha, date, subject = l:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
     if ref and not ref:match("^refs/remotes/[^/]+/HEAD$") then
-      local kind = ref:match("^refs/heads/") and "branch" or ref:match("^refs/remotes/") and "remote" or "tag"
-      table.insert(out, { ref = ref, name = name, kind = kind, sha = sha, date = date, subject = subject })
+      local kind = ref:match("^refs/heads/") and "branch"
+        or ref:match("^refs/remotes/") and "remote"
+        or "tag"
+      table.insert(
+        out,
+        { ref = ref, name = name, kind = kind, sha = sha, date = date, subject = subject }
+      )
     end
   end
   return out
@@ -54,9 +59,17 @@ function M.list_log(repo, args)
   vim.list_extend(cmd, args or {})
   local out = {}
   for _, l in ipairs(repo:lines(cmd) or {}) do
-    local sha, short, date, author, subject, refs = l:match("^(%x+)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t?(.*)$")
+    local sha, short, date, author, subject, refs =
+      l:match("^(%x+)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t?(.*)$")
     if sha then
-      table.insert(out, { sha = sha, short = short, date = date, author = author, subject = subject, refs = refs or "" })
+      table.insert(out, {
+        sha = sha,
+        short = short,
+        date = date,
+        author = author,
+        subject = subject,
+        refs = refs or "",
+      })
     end
   end
   return out
@@ -80,19 +93,27 @@ end
 
 ---Ask for a ref (or a base commit for `rebase -i`) and call `cb(ref)`.
 ---@param repo fugitive.Repo
----@param trigger {picker: "refs"|"log", sub: string}
+---@param trigger {picker: "refs"|"log", sub: string, args?: string[]}
 ---@param cb fun(ref: string)
 function M.input(repo, trigger, cb)
   local prompt = "git " .. trigger.sub
   if M.available() then
     if trigger.picker == "log" then
-      return require("fugitive.integrations.telescope.pickers").log({ repo = repo, prompt_title = prompt .. ": base", on_select = function(c)
-        cb(c.sha)
-      end })
+      return require("fugitive.integrations.telescope.pickers").log({
+        repo = repo,
+        prompt_title = prompt .. ": base",
+        on_select = function(c)
+          cb(c.sha)
+        end,
+      })
     end
-    return require("fugitive.integrations.telescope.pickers").refs({ repo = repo, prompt_title = prompt, on_select = function(r)
-      cb(M.ref_argument(trigger, r))
-    end })
+    return require("fugitive.integrations.telescope.pickers").refs({
+      repo = repo,
+      prompt_title = prompt,
+      on_select = function(r)
+        cb(M.ref_argument(trigger, r))
+      end,
+    })
   end
   if trigger.picker == "log" then
     local commits = M.list_log(repo, { "-n", "200" })
@@ -123,7 +144,7 @@ end
 ---The argument to append for a chosen ref: checkout/switch of a remote
 ---branch use the local name so git's DWIM creates a tracking branch; the
 ---start point of `switch -c`/`checkout -b` and merge/rebase keep it as is.
----@param trigger {picker: string, sub: string}
+---@param trigger {picker: string, sub: string, args?: string[]}
 ---@param r {name: string, kind: string}
 ---@return string
 function M.ref_argument(trigger, r)

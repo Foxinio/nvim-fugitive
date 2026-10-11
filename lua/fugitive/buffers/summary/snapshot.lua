@@ -34,7 +34,7 @@ local M = {}
 ---@field logs fugitive.LogSection[]
 ---@field stashes {ref: string, subject: string}[]
 ---@field diffs table<string, table<string, fugitive.FileDiff>> section -> path -> diff
----@field discarded table? latest discard journal entry of this session
+---@field discarded fugitive.DiscardEntry? latest discard journal entry of this session
 
 local function lines_of(res)
   if not res or res.code ~= 0 then
@@ -135,7 +135,10 @@ local function rebase_state(repo, short_len)
   if not dir then
     return nil
   end
-  local head_name = (file_lines(dir .. "/head-name") or { "detached HEAD" })[1]:gsub("^refs/heads/", "")
+  local head_name = (file_lines(dir .. "/head-name") or { "detached HEAD" })[1]:gsub(
+    "^refs/heads/",
+    ""
+  )
   local lines = file_lines(dir .. "/git-rebase-todo") or {}
   local done = file_lines(dir .. "/done")
   if done and #done > 0 and done[1] ~= "" then
@@ -186,11 +189,21 @@ end
 local function tracking_refs(repo, branch)
   branch = branch or ""
   local fetch_remote = repo:config("branch." .. branch .. ".remote") or "origin"
-  local push_remote = repo:config("branch." .. branch .. ".pushRemote") or repo:config("remote.pushDefault") or fetch_remote
+  local push_remote = repo:config("branch." .. branch .. ".pushRemote")
+    or repo:config("remote.pushDefault")
+    or fetch_remote
   if fetch_remote ~= "." and (repo:config("remote." .. fetch_remote .. ".fetch") or "") == "" then
     fetch_remote = ""
   end
-  if push_remote ~= "." and (repo:config("remote." .. push_remote .. ".push") or repo:config("remote." .. push_remote .. ".fetch") or "") == "" then
+  if
+    push_remote ~= "."
+    and (
+        repo:config("remote." .. push_remote .. ".push")
+        or repo:config("remote." .. push_remote .. ".fetch")
+        or ""
+      )
+      == ""
+  then
     push_remote = ""
   end
   local merge = ""
@@ -210,7 +223,15 @@ local function tracking_refs(repo, branch)
   if merge ~= "" then
     local rebase = repo:config("branch." .. branch .. ".rebase") or repo:config("pull.rebase") or ""
     local r = rebase:lower()
-    if r == "true" or r == "yes" or r == "on" or r == "1" or r == "interactive" or r == "merges" or r == "preserve" then
+    if
+      r == "true"
+      or r == "yes"
+      or r == "on"
+      or r == "1"
+      or r == "interactive"
+      or r == "merges"
+      or r == "preserve"
+    then
       pull_type = "Rebase"
     elseif r == "false" or r == "no|off" or r == "0" or r == "" then
       pull_type = "Merge"
@@ -228,7 +249,7 @@ local function tracking_refs(repo, branch)
 end
 
 ---Diffs of the expanded files, per section.
-local function inline_diffs(repo, run, st, expanded)
+local function inline_diffs(run, st, expanded)
   local diffs = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} }
   local want = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} }
   local any = false
@@ -320,7 +341,9 @@ end
 ---@return fugitive.Snapshot
 function M.gather(repo, run, expanded)
   ---@type fugitive.Snapshot
-  local snap = { headers = {}, logs = {}, stashes = {}, diffs = {} }
+  ---@type fugitive.Snapshot
+  local snap =
+    { headers = {}, logs = {}, stashes = {}, diffs = {}, status = status_mod.parse(""), head = "" }
   local res = run(status_mod.args)
   if res.code ~= 0 then
     snap.error = require("fugitive.git.exec").error_text(res)
@@ -356,7 +379,7 @@ function M.gather(repo, run, expanded)
 
   snap.rebasing = rebase_state(repo, short_head and #short_head or nil)
   snap.sequencing = sequencer_state(repo, run)
-  snap.diffs = inline_diffs(repo, run, st, expanded or {})
+  snap.diffs = inline_diffs(run, st, expanded or {})
 
   -- Unpushed / Unpulled, following upstream's rules
   local limit = require("fugitive.config").get().summary.log_limit
@@ -368,7 +391,10 @@ function M.gather(repo, run, expanded)
   end
   local function add(key, label, log)
     if log and #log.entries > 0 then
-      table.insert(snap.logs, { key = key, label = label, entries = log.entries, overflow = log.overflow })
+      table.insert(
+        snap.logs,
+        { key = key, label = label, entries = log.entries, overflow = log.overflow }
+      )
     end
   end
   local head_rev = st.oid and head or ""
@@ -386,7 +412,13 @@ function M.gather(repo, run, expanded)
   end
   add("Unpushed", "Unpushed to " .. push_short, unpushed_push)
   add("Unpushed", "Unpushed to " .. pull_short, unpushed_pull)
-  if unpushed_push.error and unpushed_pull.error and not snap.rebasing and (push_remote .. fetch_remote) ~= "" and head_rev ~= "" then
+  if
+    unpushed_push.error
+    and unpushed_pull.error
+    and not snap.rebasing
+    and (push_remote .. fetch_remote) ~= ""
+    and head_rev ~= ""
+  then
     add("Unpushed", "Unpushed to *", query_log(run, { head_rev, "--not", "--remotes" }, limit))
   end
   add("Unpulled", "Unpulled from " .. push_short, range_log(head_rev, unique_push))

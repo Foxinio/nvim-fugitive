@@ -37,20 +37,26 @@ function M.run_upstream(cwd, lines)
     "qa!",
   })
   vim.fn.writefile(body, script)
-  local res = vim.system({
-    vim.v.progpath,
-    "--headless",
-    "--clean",
-    "-n",
-    "-i",
-    "NONE",
-    "--cmd",
-    "set rtp^=" .. M.upstream(),
-    "--cmd",
-    "runtime plugin/fugitive.vim",
-    "-S",
-    script,
-  }, { cwd = cwd, text = true, env = { GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1" } }):wait(30000)
+  local res = vim
+    .system({
+      vim.v.progpath,
+      "--headless",
+      "--clean",
+      "-n",
+      "-i",
+      "NONE",
+      "--cmd",
+      "set rtp^=" .. M.upstream(),
+      "--cmd",
+      "runtime plugin/fugitive.vim",
+      "-S",
+      script,
+    }, {
+      cwd = cwd,
+      text = true,
+      env = { GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1" },
+    })
+    :wait(30000)
   local f = io.open(out)
   if not f then
     error("upstream run produced no output: " .. (res.stderr or ""))

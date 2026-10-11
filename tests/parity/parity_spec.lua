@@ -77,7 +77,15 @@ describe("parity with upstream vim-fugitive", function()
         local repo = P.repo({ ["a"] = "a\n" })
         P.commit(repo, "second", { ["b"] = "b\n" })
         P.commit(repo, "third", { ["c"] = "c\n" })
-        repo:git("-c", "sequence.editor=sed -i 1s/^pick/edit/", "rebase", "-q", "-i", "HEAD~2", { env = P.env })
+        repo:git(
+          "-c",
+          "sequence.editor=sed -i 1s/^pick/edit/",
+          "rebase",
+          "-q",
+          "-i",
+          "HEAD~2",
+          { env = P.env }
+        )
         return repo
       end,
     },

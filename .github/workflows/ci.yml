@@ -68,8 +68,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: lua plugin
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
       - name: lua-language-server
         run: |
-          curl -sL https://github.com/LuaLS/lua-language-server/releases/download/3.13.5/lua-language-server-3.13.5-linux-x64.tar.gz | tar xz -C /tmp
+          mkdir -p /tmp/luals
+          curl -sL https://github.com/LuaLS/lua-language-server/releases/download/3.13.5/lua-language-server-3.13.5-linux-x64.tar.gz | tar xz -C /tmp/luals
           make deps
-          /tmp/bin/lua-language-server --check . --checklevel=Warning
+          export VIMRUNTIME=$(nvim --headless --clean -c 'lua io.stdout:write(vim.env.VIMRUNTIME)' -c 'qa!')
+          /tmp/luals/bin/lua-language-server --check lua --configpath=$PWD/.luarc.json --checklevel=Warning

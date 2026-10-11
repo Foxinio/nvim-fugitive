@@ -116,9 +116,23 @@ function M.parse(out)
         kind = "unmerged",
       })
     elseif t == "?" then
-      table.insert(st.untracked, { status = "?", xy = "??", path = rec:sub(3), sub = "N...", submodule = false, kind = "untracked" })
+      table.insert(st.untracked, {
+        status = "?",
+        xy = "??",
+        path = rec:sub(3),
+        sub = "N...",
+        submodule = false,
+        kind = "untracked",
+      })
     elseif t == "!" then
-      table.insert(st.ignored, { status = "!", xy = "!!", path = rec:sub(3), sub = "N...", submodule = false, kind = "ignored" })
+      table.insert(st.ignored, {
+        status = "!",
+        xy = "!!",
+        path = rec:sub(3),
+        sub = "N...",
+        submodule = false,
+        kind = "ignored",
+      })
     end
     i = i + 1
   end

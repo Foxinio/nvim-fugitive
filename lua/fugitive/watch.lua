@@ -8,9 +8,10 @@ local uv = vim.uv
 local M = {}
 
 ---@class fugitive.Watcher
----@field handles uv.uv_fs_event_t[]
+---@field handles {path: string, handle: uv.uv_fs_event_t}[]
 ---@field timer uv.uv_timer_t?
 ---@field refs integer
+---@field fire fun()?
 
 ---@type table<string, fugitive.Watcher>
 M._watchers = {}

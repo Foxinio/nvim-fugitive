@@ -65,7 +65,9 @@ end
 ---@return string[] cmd, table sysopts, string? editor_id
 function M.build(args, opts)
   opts = opts or {}
+  local repo = opts.repo
   local cmd = { M.git }
+  ---@type table<string, string|false>
   local env = {
     GIT_TERMINAL_PROMPT = opts.interactive and nil or "0",
     GIT_PAGER = "cat",
@@ -81,7 +83,6 @@ function M.build(args, opts)
   if not opts.raw then
     vim.list_extend(cmd, M.common_flags)
   end
-  local repo = opts.repo
   local cwd = opts.cwd
   if repo then
     if repo.worktree then
@@ -164,6 +165,8 @@ end
 
 ---@class fugitive.Job
 ---@field pid integer?
+---@field handle vim.SystemObj?
+---@field editor_id string? editor service id of a foreground process
 ---@field cmd string[]
 ---@field done boolean
 ---@field result fugitive.ExecResult?
@@ -178,7 +181,8 @@ end
 function M.run(args, opts, cb)
   local cmd, sysopts, editor_id = M.build(args, opts)
   ---@type fugitive.Job
-  local job = { cmd = cmd, done = false, editor_id = editor_id }
+  ---@diagnostic disable-next-line: missing-fields
+  local job = { cmd = cmd, done = false, editor_id = editor_id } ---@type fugitive.Job
   local ok, handle = pcall(runner, cmd, sysopts, function(res)
     local r = normalize(res, cmd)
     vim.schedule(function()

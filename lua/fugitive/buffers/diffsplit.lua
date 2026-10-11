@@ -70,7 +70,12 @@ local function diffthis(win)
 end
 
 local function map(buf, lhs, rhs)
-  vim.keymap.set("n", lhs, rhs, { buffer = buf, silent = true, nowait = true, desc = "fugitive diff" })
+  vim.keymap.set(
+    "n",
+    lhs,
+    rhs,
+    { buffer = buf, silent = true, nowait = true, desc = "fugitive diff" }
+  )
 end
 
 ---Open `url` in a split next to the current window, diff both.
@@ -103,7 +108,10 @@ function M.split(opts)
   local mods_extra = (opts.mods or ""):gsub("vertical", ""):gsub("horizontal", "")
 
   -- three-way conflict layout
-  if opts.three_way or (opts.keep_focus and not opts.against and not obj and M.is_conflicted(repo, rel)) then
+  if
+    opts.three_way
+    or (opts.keep_focus and not opts.against and not obj and M.is_conflicted(repo, rel))
+  then
     if not M.is_conflicted(repo, rel) then
       notify.warn(rel .. " has no conflicts; diffing against the index")
     else
@@ -132,15 +140,15 @@ function M.split(opts)
   -- two-way
   local target
   if opts.against and opts.against ~= "" then
-    local spec = opts.against
+    local spec = opts.against --[[@as string]]
     local r = object.parse_rev(spec)
     if r and r.kind == "commit" then
-      spec = spec .. ":" .. rel
+      spec = spec .. ":" .. rel --[[@as string]]
     end
     local err
     target, err = object.resolve(repo, spec)
     if not target then
-      notify.error(err)
+      notify.error(err or ("invalid object: " .. spec))
       return
     end
   elseif obj then
@@ -169,6 +177,7 @@ end
 
 ---Close the diff: wipe the fugitive side windows, diffoff the rest (dq).
 function M.close()
+  ---@type integer?
   local cur = vim.api.nvim_get_current_win()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(win) and vim.w[win].fugitive_diff_side then
@@ -196,6 +205,7 @@ end
 ---@param cmd table user command argument
 ---@param layout "auto"|"vertical"|"horizontal"
 function M.command(cmd, layout)
+  ---@type string?
   local arg = vim.trim(cmd.args or "")
   if arg == "" then
     arg = nil

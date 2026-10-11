@@ -18,6 +18,7 @@ function M.parse(repo, out)
   local items = {}
   local revs = {}
   local function filename(name)
+    ---@diagnostic disable-next-line: param-type-mismatch
     if vim.uv.fs_lstat(repo:abs(name)) then
       return repo:abs(name)
     end
@@ -30,7 +31,9 @@ function M.parse(repo, out)
       end
       local rev = name:sub(1, colon - 1)
       if revs[rev] == nil then
-        revs[rev] = repo:rev_parse(rev .. "^{tree}") and (repo:rev_parse(rev .. "^{commit}") or false) or false
+        revs[rev] = repo:rev_parse(rev .. "^{tree}")
+            and (repo:rev_parse(rev .. "^{commit}") or false)
+          or false
       end
       if revs[rev] then
         return object.format(repo.git_dir, revs[rev], name:sub(colon + 1))
@@ -58,13 +61,19 @@ end
 
 local function fill_list(items, loclist, bang, title)
   local what = { title = title, items = items }
-  vim.api.nvim_exec_autocmds("QuickFixCmdPre", { pattern = loclist and "Glgrep" or "Ggrep", modeline = false })
+  vim.api.nvim_exec_autocmds(
+    "QuickFixCmdPre",
+    { pattern = loclist and "Glgrep" or "Ggrep", modeline = false }
+  )
   if loclist then
     vim.fn.setloclist(0, {}, " ", what)
   else
     vim.fn.setqflist({}, " ", what)
   end
-  vim.api.nvim_exec_autocmds("QuickFixCmdPost", { pattern = loclist and "Glgrep" or "Ggrep", modeline = false })
+  vim.api.nvim_exec_autocmds(
+    "QuickFixCmdPost",
+    { pattern = loclist and "Glgrep" or "Ggrep", modeline = false }
+  )
   if #items == 0 then
     notify.info("no matches")
     return
@@ -92,7 +101,12 @@ function M.grep(args, opts)
     require("fugitive.ui.output").record(res, repo.worktree)
     -- exit 1 means "no matches"
     if res.code ~= 0 and res.code ~= 1 then
-      notify.error(notify.truncate(require("fugitive.git.exec").error_text(res), { code = res.code, is_error = true }))
+      notify.error(
+        notify.truncate(
+          require("fugitive.git.exec").error_text(res),
+          { code = res.code, is_error = true }
+        )
+      )
       return
     end
     local items = M.parse(repo, res.stdout)

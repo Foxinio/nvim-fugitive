@@ -219,7 +219,10 @@ local function open(req)
       finish(req, req.written)
     end,
   })
-  vim.api.nvim_exec_autocmds("User", { pattern = "FugitiveEditor", modeline = false, data = { buf = buf } })
+  vim.api.nvim_exec_autocmds(
+    "User",
+    { pattern = "FugitiveEditor", modeline = false, data = { buf = buf } }
+  )
 end
 
 pump = function(key)
@@ -247,7 +250,8 @@ function M.request(id, file, state)
   if not job then
     return "unknown editor id " .. tostring(id)
   end
-  local req = { id = id, file = file, state = state, key = key_of(job), written = false, finished = false }
+  local req =
+    { id = id, file = file, state = state, key = key_of(job), written = false, finished = false }
   M._queue[req.key] = M._queue[req.key] or {}
   table.insert(M._queue[req.key], req)
   vim.schedule(function()

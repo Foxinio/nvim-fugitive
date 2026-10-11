@@ -126,7 +126,8 @@ M.providers = {
     end
     local anchor = ""
     if o.line1 > 0 then
-      anchor = o.line1 == o.line2 and ("#lines-" .. o.line1) or ("#lines-" .. o.line1 .. ":" .. o.line2)
+      anchor = o.line1 == o.line2 and ("#lines-" .. o.line1)
+        or ("#lines-" .. o.line1 .. ":" .. o.line2)
     end
     return base .. "/src/" .. o.commit .. "/" .. o.path .. anchor
   end,
@@ -143,7 +144,14 @@ M.providers = {
       return base .. "/commit/" .. o.commit
     end
     local sub = o.commit:match("^%x+$") and #o.commit >= 40 and "commit" or "branch"
-    return base .. "/src/" .. sub .. "/" .. o.commit .. "/" .. o.path:gsub("/$", "") .. anchor_github(o)
+    return base
+      .. "/src/"
+      .. sub
+      .. "/"
+      .. o.commit
+      .. "/"
+      .. o.path:gsub("/$", "")
+      .. anchor_github(o)
   end,
   sourcehut = function(o, base)
     local kind, name = ref_kind(o)
@@ -194,7 +202,8 @@ function M.url(opts)
     return nil
   end
   local base = "https://" .. remote.host .. "/" .. remote.path
-  local o = vim.tbl_extend("force", opts, { host = remote.host, repo_path = remote.path, base = base })
+  local o =
+    vim.tbl_extend("force", opts, { host = remote.host, repo_path = remote.path, base = base })
   return provider(o, base)
 end
 

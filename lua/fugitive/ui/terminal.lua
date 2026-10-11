@@ -11,7 +11,8 @@ local M = {}
 function M.run(repo, args, opts)
   opts = opts or {}
   local exec = require("fugitive.git.exec")
-  local cmd, sysopts = exec.build(args, { repo = repo, editor = true, interactive = true, mods = opts.mods })
+  local cmd, sysopts =
+    exec.build(args, { repo = repo, editor = true, interactive = true, mods = opts.mods })
   -- a terminal is a real tty: let git page/prompt as it would normally, but
   -- keep our editor so commit messages still open in this Neovim
   sysopts.env.GIT_PAGER = nil

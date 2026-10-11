@@ -91,7 +91,12 @@ function M.run(repo, args, opts)
       elseif ok then
         notify.info(notify.truncate(label(args) .. ": done\n" .. res.stdout, {}))
       else
-        notify.error(notify.truncate(label(args) .. " failed\n" .. res.stdout, { code = res.code, is_error = true }))
+        notify.error(
+          notify.truncate(
+            label(args) .. " failed\n" .. res.stdout,
+            { code = res.code, is_error = true }
+          )
+        )
       end
       require("fugitive").changed(repo)
       if opts.on_done then
@@ -118,14 +123,21 @@ function M.run_fallback(repo, args, opts)
     output.finish(entry, res)
     if res.code == 0 then
       local text = vim.trim(res.stdout .. "\n" .. res.stderr)
-      notify.info(notify.truncate(label(args) .. ": done" .. (text ~= "" and ("\n" .. text) or ""), {}))
+      notify.info(
+        notify.truncate(label(args) .. ": done" .. (text ~= "" and ("\n" .. text) or ""), {})
+      )
     elseif res.signal ~= 0 then
       notify.warn(label(args) .. ": cancelled")
     else
-      notify.error(notify.truncate(label(args) .. " failed\n" .. require("fugitive.git.exec").error_text(res), {
-        code = res.code,
-        is_error = true,
-      }))
+      notify.error(
+        notify.truncate(
+          label(args) .. " failed\n" .. require("fugitive.git.exec").error_text(res),
+          {
+            code = res.code,
+            is_error = true,
+          }
+        )
+      )
     end
     require("fugitive").changed(repo)
     if opts.on_done then

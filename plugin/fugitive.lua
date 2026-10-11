@@ -20,9 +20,13 @@ local function complete(kind)
 end
 
 for _, name in ipairs({ "Git", "G" }) do
-  cmd(name, function(c)
-    require("fugitive.cmd.git").command(c)
-  end, { nargs = "*", bang = true, range = -1, complete = complete("git"), desc = "Run a git command" })
+  cmd(
+    name,
+    function(c)
+      require("fugitive.cmd.git").command(c)
+    end,
+    { nargs = "*", bang = true, range = -1, complete = complete("git"), desc = "Run a git command" }
+  )
 end
 
 cmd("FugitiveOutput", function(c)
@@ -33,7 +37,11 @@ cmd("FugitiveRestore", function(c)
   require("fugitive.discard").pick(c.args ~= "" and c.args or nil)
 end, { nargs = "?", complete = complete("discarded"), desc = "Restore a discarded change" })
 
-for name, layout in pairs({ Gdiffsplit = "auto", Gvdiffsplit = "vertical", Ghdiffsplit = "horizontal" }) do
+for name, layout in pairs({
+  Gdiffsplit = "auto",
+  Gvdiffsplit = "vertical",
+  Ghdiffsplit = "horizontal",
+}) do
   cmd(name, function(c)
     require("fugitive.buffers.diffsplit").command(c, layout)
   end, { nargs = "*", bang = true, complete = complete("object"), desc = "Diff against an object" })
@@ -41,17 +49,32 @@ end
 
 cmd("Ggrep", function(c)
   require("fugitive.cmd.grep").command(c, false)
-end, { nargs = "*", bang = true, complete = complete("git_grep"), desc = "git grep into a picker/quickfix" })
+end, {
+  nargs = "*",
+  bang = true,
+  complete = complete("git_grep"),
+  desc = "git grep into a picker/quickfix",
+})
 cmd("Glgrep", function(c)
   require("fugitive.cmd.grep").command(c, true)
-end, { nargs = "*", bang = true, complete = complete("git_grep"), desc = "git grep into the location list" })
+end, {
+  nargs = "*",
+  bang = true,
+  complete = complete("git_grep"),
+  desc = "git grep into the location list",
+})
 
 cmd("GMove", function(c)
   require("fugitive.cmd.move").move(c, false)
 end, { nargs = 1, bang = true, complete = complete("path"), desc = "git mv the current file" })
 cmd("GRename", function(c)
   require("fugitive.cmd.move").move(c, true)
-end, { nargs = 1, bang = true, complete = complete("sibling"), desc = "git mv relative to the current file" })
+end, {
+  nargs = 1,
+  bang = true,
+  complete = complete("sibling"),
+  desc = "git mv relative to the current file",
+})
 cmd("GRemove", function(c)
   require("fugitive.cmd.move").remove(c, { delete_buffer = false })
 end, { nargs = 0, bang = true, desc = "git rm the current file, keep the buffer" })
@@ -64,7 +87,13 @@ end, { nargs = 0, bang = true, desc = "Alias of :GRemove" })
 
 cmd("GBrowse", function(c)
   require("fugitive.cmd.browse").command(c)
-end, { nargs = "?", bang = true, range = -1, complete = complete("browse"), desc = "Open the current object on the hosting provider" })
+end, {
+  nargs = "?",
+  bang = true,
+  range = -1,
+  complete = complete("browse"),
+  desc = "Open the current object on the hosting provider",
+})
 
 local group = vim.api.nvim_create_augroup("fugitive", { clear = true })
 
@@ -81,7 +110,9 @@ vim.api.nvim_create_autocmd({ "BufWriteCmd", "FileWriteCmd", "FileAppendCmd" }, 
   group = group,
   pattern = "fugitive://*",
   callback = function()
-    require("fugitive.ui.notify").error("fugitive:// buffers are read-only (editable index: backlog)")
+    require("fugitive.ui.notify").error(
+      "fugitive:// buffers are read-only (editable index: backlog)"
+    )
   end,
 })
 
@@ -130,7 +161,11 @@ vim.api.nvim_create_autocmd("BufReadPost", {
     if next(maps) == nil then
       return
     end
-    require("fugitive.maps").apply(ev.buf, "worktree", require("fugitive.integrations.gitsigns").actions)
+    require("fugitive.maps").apply(
+      ev.buf,
+      "worktree",
+      require("fugitive.integrations.gitsigns").actions
+    )
   end,
 })
 

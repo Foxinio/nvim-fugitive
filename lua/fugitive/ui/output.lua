@@ -29,7 +29,15 @@ end
 ---@return fugitive.OutputEntry
 function M.start(cmd, cwd)
   next_id = next_id + 1
-  local entry = { id = next_id, cmd = cmd, cwd = cwd, stdout = "", stderr = "", time = os.time(), running = true }
+  local entry = {
+    id = next_id,
+    cmd = cmd,
+    cwd = cwd,
+    stdout = "",
+    stderr = "",
+    time = os.time(),
+    running = true,
+  }
   table.insert(M._ring, entry)
   while #M._ring > cap() do
     table.remove(M._ring, 1)

@@ -118,7 +118,10 @@ describe(":Gdiffsplit", function()
     local other = vim.tbl_filter(function(w)
       return w ~= wt
     end, vim.api.nvim_tabpage_list_wins(0))[1]
-    assert.equals(object.format(repo.root .. "/.git", first, "f"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(other)))
+    assert.equals(
+      object.format(repo.root .. "/.git", first, "f"),
+      vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(other))
+    )
   end)
 
   it("opens the 3-way conflict layout with d2o/d3o and dp", function()
@@ -136,9 +139,15 @@ describe(":Gdiffsplit", function()
     table.sort(wins, function(a, b)
       return vim.api.nvim_win_get_position(a)[2] < vim.api.nvim_win_get_position(b)[2]
     end)
-    assert.equals(object.format(repo.root .. "/.git", "2", "c"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(wins[1])))
+    assert.equals(
+      object.format(repo.root .. "/.git", "2", "c"),
+      vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(wins[1]))
+    )
     assert.equals(wt, wins[2])
-    assert.equals(object.format(repo.root .. "/.git", "3", "c"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(wins[3])))
+    assert.equals(
+      object.format(repo.root .. "/.git", "3", "c"),
+      vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(wins[3]))
+    )
     assert.equals(wt, vim.api.nvim_get_current_win())
     assert.truthy(vim.fn.maparg("d2o", "n") ~= "")
     assert.truthy(vim.fn.maparg("d3o", "n") ~= "")
@@ -182,7 +191,10 @@ describe("conflict markers", function()
     H.feed("ct") -- theirs
     H.feed("]x")
     H.feed("cb") -- both
-    assert.same({ "top", "theirs", "m1", "m2", "m3", "m4", "m5", "ours2", "theirs2", "end" }, H.lines(0))
+    assert.same(
+      { "top", "theirs", "m1", "m2", "m3", "m4", "m5", "ours2", "theirs2", "end" },
+      H.lines(0)
+    )
     assert.equals(0, #require("fugitive.conflict").conflicts(0))
   end)
 
@@ -203,7 +215,8 @@ describe("conflict markers", function()
     vim.g.fugitive_no_maps = 1
     vim.cmd("edit " .. repo:path("c"))
     vim.g.fugitive_no_maps = nil
-    local marks = vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces().fugitive_conflict, 0, -1, {})
+    local marks =
+      vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces().fugitive_conflict, 0, -1, {})
     assert.is_true(#marks > 0)
     assert.equals("", vim.fn.maparg("]x", "n"))
   end)
@@ -240,7 +253,10 @@ describe(":Ggrep / :Glgrep", function()
       return #vim.fn.getloclist(0) == 1
     end, "loclist")
     local item = vim.fn.getloclist(0)[1]
-    assert.equals(object.format(repo.root .. "/.git", repo:rev("HEAD~1"), "a.txt"), vim.api.nvim_buf_get_name(item.bufnr))
+    assert.equals(
+      object.format(repo.root .. "/.git", repo:rev("HEAD~1"), "a.txt"),
+      vim.api.nvim_buf_get_name(item.bufnr)
+    )
     assert.equals("", vim.api.nvim_buf_get_name(0))
   end)
 end)

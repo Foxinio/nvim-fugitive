@@ -79,36 +79,46 @@ describe("diff.build_patch", function()
 
   it("returns whole hunks verbatim", function()
     local p = diff.build_patch(file, { { hunk = file.hunks[2] } }, false)
-    assert.equals(
-      table.concat({
-        "diff --git a/f.txt b/f.txt",
-        "index 1111111..2222222 100644",
-        "--- a/f.txt",
-        "+++ b/f.txt",
-        "@@ -10,2 +10,3 @@ ctx",
-        " ten",
-        "+ten and a half",
-        " eleven",
-      }, "\n") .. "\n",
-      p
-    )
+    assert.equals(table.concat({
+      "diff --git a/f.txt b/f.txt",
+      "index 1111111..2222222 100644",
+      "--- a/f.txt",
+      "+++ b/f.txt",
+      "@@ -10,2 +10,3 @@ ctx",
+      " ten",
+      "+ten and a half",
+      " eleven",
+    }, "\n") .. "\n", p)
   end)
 
   it("forward: unselected - become context, unselected + are dropped", function()
     -- select "-two" and "+TWO" only
-    local p = diff.build_patch(file, { { hunk = file.hunks[1], lines = { [2] = true, [3] = true } } }, false)
+    local p = diff.build_patch(
+      file,
+      { { hunk = file.hunks[1], lines = { [2] = true, [3] = true } } },
+      false
+    )
     local body = vim.split(p, "\n")
-    assert.same({ "@@ -1,4 +1,4 @@", " one", "-two", "+TWO", " three", " four" }, vim.list_slice(body, 5, 10))
+    assert.same(
+      { "@@ -1,4 +1,4 @@", " one", "-two", "+TWO", " three", " four" },
+      vim.list_slice(body, 5, 10)
+    )
   end)
 
   it("reverse: unselected + become context, unselected - are dropped", function()
-    local p = diff.build_patch(file, { { hunk = file.hunks[1], lines = { [5] = true, [6] = true } } }, true)
+    local p =
+      diff.build_patch(file, { { hunk = file.hunks[1], lines = { [5] = true, [6] = true } } }, true)
     local body = vim.split(p, "\n")
-    assert.same({ "@@ -1,4 +1,4 @@", " one", " TWO", " three", "-four", "+FOUR" }, vim.list_slice(body, 5, 10))
+    assert.same(
+      { "@@ -1,4 +1,4 @@", " one", " TWO", " three", "-four", "+FOUR" },
+      vim.list_slice(body, 5, 10)
+    )
   end)
 
   it("returns nil when no change line is selected", function()
-    assert.is_nil(diff.build_patch(file, { { hunk = file.hunks[1], lines = { [1] = true } } }, false))
+    assert.is_nil(
+      diff.build_patch(file, { { hunk = file.hunks[1], lines = { [1] = true } } }, false)
+    )
   end)
 
   it("drops a no-newline marker whose line was dropped", function()

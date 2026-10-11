@@ -17,7 +17,7 @@ function M.apply(buf, buftype, actions)
     if name then
       local action = type(name) == "function" and name or actions[name]
       if action then
-        local modes = type(action) == "function" and { n = action } or action
+        local modes = type(action) == "function" and { n = action } or action --[[@as table]]
         for mode, fn in pairs(modes) do
           if mode == "n" or mode == "x" then
             vim.keymap.set(mode, lhs, fn, {

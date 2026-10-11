@@ -11,6 +11,13 @@ local function summary()
   return require("fugitive.buffers.summary")
 end
 
+---State of a summary buffer; actions only run in summary buffers.
+---@param buf integer
+---@return fugitive.SummaryState
+local function state(buf)
+  return assert(summary().state(buf), "not a summary buffer")
+end
+
 -- ---------------------------------------------------------------------------
 -- Selection
 
@@ -29,7 +36,12 @@ local function section_entries(st, section)
   if not s then
     return {}
   end
-  return ({ Untracked = s.untracked, Unstaged = s.unstaged, Staged = s.staged, Unmerged = s.unmerged })[section] or {}
+  return ({
+    Untracked = s.untracked,
+    Unstaged = s.unstaged,
+    Staged = s.staged,
+    Unmerged = s.unmerged,
+  })[section] or {}
 end
 
 ---Items addressed by lines l1..l2 (normal mode: l1 == l2).
@@ -38,7 +50,7 @@ end
 ---@param l2 integer
 ---@return fugitive.Selection[]
 function M.selection(buf, l1, l2)
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return {}
   end
@@ -49,12 +61,26 @@ function M.selection(buf, l1, l2)
       return {}
     end
     if i.kind == "section" then
-      return { { type = "section", section = i.section, entries = section_entries(st, i.section), info = i } }
+      return {
+        {
+          type = "section",
+          section = i.section,
+          entries = section_entries(st, i.section),
+          info = i,
+        },
+      }
     elseif i.kind == "file" or i.kind == "diffmeta" then
       return { { type = "file", section = i.section, entry = i.entry, info = i } }
     elseif i.kind == "hunk" or i.kind == "diffline" then
       return {
-        { type = "patch", section = i.section, entry = i.entry, file = i.file, hunks = { { hunk = i.file.hunks[i.hunk_index] } }, info = i },
+        {
+          type = "patch",
+          section = i.section,
+          entry = i.entry,
+          file = i.file,
+          hunks = { { hunk = i.file.hunks[i.hunk_index] } },
+          info = i,
+        },
       }
     elseif i.kind == "commit" or i.kind == "rebase" then
       return { { type = "commit", section = i.section, info = i } }
@@ -79,12 +105,24 @@ function M.selection(buf, l1, l2)
         table.insert(files, { type = "file", section = i.section, entry = i.entry, info = i })
       end
     elseif i and i.kind == "section" then
-      table.insert(files, { type = "section", section = i.section, entries = section_entries(st, i.section), info = i })
+      table.insert(files, {
+        type = "section",
+        section = i.section,
+        entries = section_entries(st, i.section),
+        info = i,
+      })
     elseif i and (i.kind == "hunk" or i.kind == "diffline") then
       local k = i.section .. "\0" .. i.entry.path
       local p = patches[k]
       if not p then
-        p = { type = "patch", section = i.section, entry = i.entry, file = i.file, by_hunk = {}, info = i }
+        p = {
+          type = "patch",
+          section = i.section,
+          entry = i.entry,
+          file = i.file,
+          by_hunk = {},
+          info = i,
+        }
         patches[k] = p
         table.insert(order, k)
       end
@@ -151,7 +189,12 @@ function M.run_chain(repo, cmds, cb)
     repo:run(c.args, { stdin = c.stdin }, function(res)
       output.record(res, repo.worktree)
       if res.code ~= 0 then
-        notify.error(notify.truncate(require("fugitive.git.exec").error_text(res), { code = res.code, is_error = true }))
+        notify.error(
+          notify.truncate(
+            require("fugitive.git.exec").error_text(res),
+            { code = res.code, is_error = true }
+          )
+        )
         require("fugitive").changed(repo)
         if cb then
           cb(false)
@@ -202,7 +245,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Stage / unstage / toggle
 
-local function stage_cmds(st, items)
+local function stage_cmds(_, items)
   local cmds, staged = {}, {}
   for _, it in ipairs(items) do
     if it.type == "section" then
@@ -282,7 +325,7 @@ local function unstage_cmds(st, items)
 end
 
 local function do_cmds(buf, builder, verb, visual)
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return
   end
@@ -308,7 +351,7 @@ function M.stage(buf, visual)
 end
 
 function M.unstage(buf, visual)
-  local st = summary().state(buf)
+  local st = state(buf)
   local i = st and not visual and st.info[vim.fn.line(".")]
   if i and i.kind == "discarded" then
     -- `u` on the "Discarded:" hint line restores it (§4.2)
@@ -335,7 +378,9 @@ function M.toggle(buf, visual)
     if not c2 then
       return nil, e2
     end
-    return vim.list_extend(c1, c2), nil, vim.list_extend(p1, p2)
+    return vim.list_extend(c1 --[[@as table]], c2 --[[@as table]]),
+      nil,
+      vim.list_extend(p1 or {}, p2 or {})
   end, "Toggled", visual)
 end
 
@@ -344,14 +389,16 @@ end
 
 local function file_item_at(st, lnum)
   local i = st.info[lnum]
-  if i and (i.kind == "file" or i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta") then
+  if
+    i and (i.kind == "file" or i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta")
+  then
     return i
   end
 end
 
 ---@param mode "toggle"|"show"|"hide"
 function M.inline(buf, mode, visual)
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return
   end
@@ -395,7 +442,7 @@ end
 -- Navigation
 
 local function jump_kind(buf, kinds, dir, count)
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return
   end
@@ -452,7 +499,12 @@ local function section_ends(st)
   local ends = {}
   for l, i in ipairs(st.info) do
     local nxt = st.info[l + 1]
-    if i.kind ~= "blank" and i.kind ~= "header" and i.kind ~= "discarded" and (not nxt or nxt.kind == "blank") then
+    if
+      i.kind ~= "blank"
+      and i.kind ~= "header"
+      and i.kind ~= "discarded"
+      and (not nxt or nxt.kind == "blank")
+    then
       table.insert(ends, l)
     end
   end
@@ -460,7 +512,7 @@ local function section_ends(st)
 end
 
 function M.next_section_end(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   local cur = vim.fn.line(".")
   local n = vim.v.count1
   for _, l in ipairs(section_ends(st)) do
@@ -474,7 +526,7 @@ function M.next_section_end(buf)
 end
 
 function M.prev_section_end(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   local cur = vim.fn.line(".")
   local ends = section_ends(st)
   local n = vim.v.count1
@@ -494,14 +546,19 @@ function M.next_hunk(buf, dir)
   if vim.wo.diff then
     return vim.cmd("normal! " .. vim.v.count1 .. (dir > 0 and "]c" or "[c"))
   end
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return
   end
   local lnum = vim.fn.line(".")
   local i = st.info[lnum]
-  if dir > 0 and i and i.kind == "file" and not st.expanded[render.expand_key(i.section, i.entry.path)] then
-    local path, section = i.entry.path, i.section
+  if
+    dir > 0
+    and i
+    and i.kind == "file"
+    and not st.expanded[render.expand_key(i.section, i.entry.path)]
+  then
+    local path, section = i.entry.path, i.section --[[@as string]]
     st.expanded[render.expand_key(section, path)] = true
     summary().refresh(buf, function()
       for l, x in ipairs(st.info) do
@@ -518,7 +575,7 @@ end
 
 ---`i`: next file or hunk, expanding inline diffs automatically.
 function M.next_expanded_hunk(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return
   end
@@ -529,8 +586,12 @@ function M.next_expanded_hunk(buf)
     end
     local cur = vim.fn.line(".")
     local ci = st.info[cur]
-    if ci and ci.kind == "file" and not st.expanded[render.expand_key(ci.section, ci.entry.path)] then
-      local path, section = ci.entry.path, ci.section
+    if
+      ci
+      and ci.kind == "file"
+      and not st.expanded[render.expand_key(ci.section, ci.entry.path)]
+    then
+      local path, section = ci.entry.path, ci.section --[[@as string]]
       st.expanded[render.expand_key(section, path)] = true
       summary().refresh(buf, function()
         for l, x in ipairs(st.info) do
@@ -546,7 +607,11 @@ function M.next_expanded_hunk(buf)
     end
     jump_kind(buf, { file = true, hunk = true }, 1, 1)
     local ni = st.info[vim.fn.line(".")]
-    if ni and ni.kind == "file" and not st.expanded[render.expand_key(ni.section, ni.entry.path)] then
+    if
+      ni
+      and ni.kind == "file"
+      and not st.expanded[render.expand_key(ni.section, ni.entry.path)]
+    then
       return step(n) -- expand the file we landed on
     end
     step(n - 1)
@@ -556,7 +621,7 @@ end
 
 ---gu / gU / gs / gp / gP / gr
 local function stage_jump(buf, sections)
-  local st = summary().state(buf)
+  local st = state(buf)
   if not st then
     return
   end
@@ -564,7 +629,13 @@ local function stage_jump(buf, sections)
   for _, name in ipairs(sections) do
     local n = 0
     for l, i in ipairs(st.info) do
-      if i.section == name and i.kind ~= "section" and i.kind ~= "hunk" and i.kind ~= "diffline" and i.kind ~= "diffmeta" then
+      if
+        i.section == name
+        and i.kind ~= "section"
+        and i.kind ~= "hunk"
+        and i.kind ~= "diffline"
+        and i.kind ~= "diffmeta"
+      then
         n = n + 1
         if count == 0 or n == count then
           return vim.api.nvim_win_set_cursor(0, { l, 0 })
@@ -589,7 +660,7 @@ end
 ---Target under the cursor: path/URL, line, and special handling.
 ---@return {target?: string, lnum?: integer, submodule?: string, err?: string}
 function M.target(buf, lnum)
-  local st = summary().state(buf)
+  local st = state(buf)
   local repo = st.repo
   local i = st.info[lnum]
   if not i then
@@ -603,7 +674,7 @@ function M.target(buf, lnum)
     return url
   end
   if i.kind == "file" or i.kind == "diffmeta" then
-    local e = i.entry
+    local e = i.entry --[[@as fugitive.StatusEntry]]
     if e.submodule then
       return { submodule = repo:abs(e.path) }
     end
@@ -619,21 +690,23 @@ function M.target(buf, lnum)
     return { target = repo:abs(e.path) }
   end
   if i.kind == "hunk" or i.kind == "diffline" then
-    local e = i.entry
-    local hunk = i.file.hunks[i.hunk_index]
+    local e = i.entry --[[@as fugitive.StatusEntry]]
+    local file = i.file --[[@as fugitive.FileDiff]]
+    local hunk = file.hunks[i.hunk_index]
     if hunk.submodule or hunk.combined then
       return { target = repo:abs(e.path) }
     end
-    local nums = i.kind == "diffline" and diff_mod.line_numbers(hunk)[i.line_index] or { new = hunk.new_start, old = hunk.old_start }
+    local nums = i.kind == "diffline" and diff_mod.line_numbers(hunk)[i.line_index]
+      or { new = hunk.new_start, old = hunk.old_start }
     local minus = i.kind == "diffline" and nums.new == nil
     if i.section == "Staged" then
       if minus then
-        return { target = at_head(i.file.old_path or e.path), lnum = nums.old }
+        return { target = at_head(file.old_path or e.path), lnum = nums.old }
       end
       return { target = at_index(e.path), lnum = nums.new }
     end
     if minus then
-      return { target = at_index(i.file.old_path or e.path), lnum = nums.old }
+      return { target = at_index(file.old_path or e.path), lnum = nums.old }
     end
     return { target = repo:abs(e.path), lnum = nums.new }
   end
@@ -645,7 +718,9 @@ function M.target(buf, lnum)
   end
   if i.kind == "header" and i.key ~= "Help" and i.key ~= "Error" then
     local rev = i.key == "Head" and "HEAD" or i.value
-    return { target = object.resolve(repo, rev) }
+    return {
+      target = object.resolve(repo, rev --[[@as string]]),
+    }
   end
   return {}
 end
@@ -667,12 +742,12 @@ function M.open(buf, how)
   end
   if not t.target then
     if how == "edit" then
-      local i = summary().state(buf).info[vim.fn.line(".")]
+      local i = state(buf).info[vim.fn.line(".")]
       if i and i.kind == "header" and i.key == "Help" then
         return summary().show_help("summary")
       end
       if i and i.kind == "discarded" then
-        return require("fugitive.discard").restore_latest(summary().state(buf).repo)
+        return require("fugitive.discard").restore_latest(state(buf).repo)
       end
     end
     notify.warn("nothing to open under the cursor")
@@ -685,13 +760,13 @@ end
 -- Diffs
 
 function M.diff(buf, layout)
-  local st = summary().state(buf)
+  local st = state(buf)
   local i = st.info[vim.fn.line(".")]
   if not i or not i.entry then
     notify.warn("no file under the cursor")
     return
   end
-  local e = i.entry
+  local e = i.entry --[[@as fugitive.StatusEntry]]
   local ds = require("fugitive.buffers.diffsplit")
   local repo = st.repo
   if i.section == "Untracked" or e.submodule then
@@ -704,7 +779,10 @@ function M.diff(buf, layout)
   end
   if i.section == "Staged" then
     if e.status == "D" then
-      require("fugitive.buffers.reader").open(object.resolve(repo, "HEAD:" .. e.path), "edit")
+      local url = object.resolve(repo, "HEAD:" .. e.path)
+      if url then
+        require("fugitive.buffers.reader").open(url, "edit")
+      end
       return
     end
     require("fugitive.buffers.reader").open(object.format(repo.git_dir, "0", e.path), "edit")
@@ -719,7 +797,7 @@ function M.diff(buf, layout)
 end
 
 function M.diff_patch(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   local i = st.info[vim.fn.line(".")]
   local args = { "diff" }
   if i and i.section == "Staged" then
@@ -736,7 +814,7 @@ end
 
 ---Commit under the cursor (upstream's s:SquashArgument).
 function M.cursor_commit(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   local i = st and st.info[vim.fn.line(".")]
   if i and (i.kind == "commit" or i.kind == "rebase") then
     return i.commit
@@ -750,7 +828,7 @@ local function rebase_argument(buf)
 end
 
 local function git(buf, args, opts)
-  local st = summary().state(buf)
+  local st = state(buf)
   opts = vim.tbl_extend("force", { repo = st and st.repo, skip_picker = true }, opts or {})
   return require("fugitive.cmd.git").run(args, opts)
 end
@@ -800,7 +878,7 @@ local function exclude_path(repo, count)
 end
 
 function M.ignore(buf, visual)
-  local st = summary().state(buf)
+  local st = state(buf)
   local l1, l2 = range(visual)
   local paths = {}
   for _, it in ipairs(M.selection(buf, l1, l2)) do
@@ -829,7 +907,7 @@ function M.ignore(buf, visual)
 end
 
 function M.open_exclude(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   local file = exclude_path(st.repo, vim.v.count)
   vim.fn.mkdir(vim.fn.fnamemodify(file, ":h"), "p")
   vim.cmd("split " .. vim.fn.fnameescape(file))
@@ -839,7 +917,7 @@ end
 -- Patch (interactive) and discard
 
 function M.patch(buf, visual)
-  local st = summary().state(buf)
+  local st = state(buf)
   local l1, l2 = range(visual)
   local add, reset, intent = {}, {}, {}
   for _, it in ipairs(M.selection(buf, l1, l2)) do
@@ -872,15 +950,19 @@ function M.patch(buf, visual)
 end
 
 function M.discard(buf, visual)
-  local st = summary().state(buf)
+  local st = state(buf)
   local count = vim.v.count
   local l1, l2 = range(visual)
   local items = M.selection(buf, l1, l2)
-  require("fugitive.discard").discard(st.repo, items, { count = count, has_head = has_head(st), snap = st.snap })
+  require("fugitive.discard").discard(
+    st.repo,
+    items,
+    { count = count, has_head = has_head(st), snap = st.snap }
+  )
 end
 
 function M.restore_discard(buf)
-  local st = summary().state(buf)
+  local st = state(buf)
   if vim.v.count > 0 then
     return require("fugitive.discard").pick(nil, st.repo)
   end
@@ -922,8 +1004,12 @@ function M.actions(buf)
     unstage = nx(M.unstage),
     toggle = nx(M.toggle),
     unstage_all = function()
-      local st = summary().state(buf)
-      M.run_chain(st.repo, { { args = has_head(st) and { "reset", "-q" } or { "rm", "--cached", "-r", "-q", "--", "." } } })
+      local st = state(buf)
+      M.run_chain(st.repo, {
+        {
+          args = has_head(st) and { "reset", "-q" } or { "rm", "--cached", "-r", "-q", "--", "." },
+        },
+      })
     end,
     discard = nx(M.discard),
     restore_discard = n(M.restore_discard),
@@ -975,11 +1061,11 @@ function M.actions(buf)
       summary().show_help("summary")
     end,
     reload = function()
-      local st = summary().state(buf)
+      local st = state(buf)
       summary().load(buf, st.repo)
     end,
     cmdline = function()
-      local st = summary().state(buf)
+      local st = state(buf)
       local i = st.info[vim.fn.line(".")]
       local word = ""
       if i and i.entry then
@@ -1013,14 +1099,24 @@ function M.actions(buf)
     end,
     commit_fixup_rebase = function()
       local c = M.cursor_commit(buf)
-      cmdline("Git commit --fixup=" .. c .. " | Git -c sequence.editor=true rebase --interactive --autosquash" .. rebase_argument(buf))
+      cmdline(
+        "Git commit --fixup="
+          .. c
+          .. " | Git -c sequence.editor=true rebase --interactive --autosquash"
+          .. rebase_argument(buf)
+      )
     end,
     commit_squash = function()
       cmdline("Git commit --no-edit --squash=" .. M.cursor_commit(buf))
     end,
     commit_squash_rebase = function()
       local c = M.cursor_commit(buf)
-      cmdline("Git commit --no-edit --squash=" .. c .. " | Git -c sequence.editor=true rebase --interactive --autosquash" .. rebase_argument(buf))
+      cmdline(
+        "Git commit --no-edit --squash="
+          .. c
+          .. " | Git -c sequence.editor=true rebase --interactive --autosquash"
+          .. rebase_argument(buf)
+      )
     end,
     commit_squash_edit = function()
       cmdline("Git commit --edit --squash=" .. M.cursor_commit(buf))
@@ -1073,11 +1169,15 @@ function M.actions(buf)
     end,
     -- stash (M2)
     stash_push = function()
-      local extra = vim.v.count > 1 and { "--all" } or vim.v.count > 0 and { "--include-untracked" } or {}
+      local extra = vim.v.count > 1 and { "--all" }
+        or vim.v.count > 0 and { "--include-untracked" }
+        or {}
       git(buf, vim.list_extend({ "stash", "push" }, extra))
     end,
     stash_push_keep_index = function()
-      local extra = vim.v.count > 1 and { "--all" } or vim.v.count > 0 and { "--include-untracked" } or {}
+      local extra = vim.v.count > 1 and { "--all" }
+        or vim.v.count > 0 and { "--include-untracked" }
+        or {}
       git(buf, vim.list_extend({ "stash", "push", "--keep-index" }, extra))
     end,
     stash_push_staged = run({ "stash", "push", "--staged" }),
@@ -1094,7 +1194,7 @@ function M.actions(buf)
       git(buf, { "stash", "pop", "--quiet", count_ref() })
     end,
     stash_view = function()
-      local st = summary().state(buf)
+      local st = state(buf)
       local url = object.resolve(st.repo, count_ref())
       if not url then
         notify.error("no stash " .. count_ref())
@@ -1113,7 +1213,13 @@ function M.actions(buf)
       git(buf, vim.list_extend({ "rebase", "--interactive" }, split_words(rebase_argument(buf))))
     end,
     rebase_autosquash = function()
-      git(buf, vim.list_extend({ "-c", "sequence.editor=true", "rebase", "--interactive", "--autosquash" }, split_words(rebase_argument(buf))))
+      git(
+        buf,
+        vim.list_extend(
+          { "-c", "sequence.editor=true", "rebase", "--interactive", "--autosquash" },
+          split_words(rebase_argument(buf))
+        )
+      )
     end,
     rebase_upstream = run({ "rebase", "--interactive", "@{upstream}" }),
     rebase_push = run({ "rebase", "--interactive", "@{push}" }),

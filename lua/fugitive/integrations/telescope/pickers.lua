@@ -33,7 +33,13 @@ local function command_previewer(repo, title, argv_of)
     define_preview = function(self, entry)
       local res = repo:sync(argv_of(entry))
       local text = (res.code == 0 and res.stdout or res.stderr):gsub("\n$", "")
-      vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, vim.split(text, "\n", { plain = true }))
+      vim.api.nvim_buf_set_lines(
+        self.state.bufnr,
+        0,
+        -1,
+        false,
+        vim.split(text, "\n", { plain = true })
+      )
       vim.bo[self.state.bufnr].filetype = "git"
     end,
   })
@@ -163,7 +169,10 @@ function M.log(opts)
             function()
               local c = selected(prompt_bufnr)
               if c then
-                require("fugitive.cmd.browse").browse({ arg = c.sha, count = -1, line1 = 0, range = 0, buf = origin }, false)
+                require("fugitive.cmd.browse").browse(
+                  { arg = c.sha, count = -1, line1 = 0, range = 0, buf = origin },
+                  false
+                )
               end
             end,
           },
@@ -198,7 +207,10 @@ function M.refs(opts)
             display = function()
               return displayer({
                 { r.kind, "TelescopeResultsComment" },
-                { r.name, r.kind == "branch" and "TelescopeResultsIdentifier" or "TelescopeResultsConstant" },
+                {
+                  r.name,
+                  r.kind == "branch" and "TelescopeResultsIdentifier" or "TelescopeResultsConstant",
+                },
                 { r.sha, "TelescopeResultsNumber" },
                 { r.date, "TelescopeResultsComment" },
                 r.subject,
@@ -209,7 +221,17 @@ function M.refs(opts)
       }),
       sorter = conf.generic_sorter(opts),
       previewer = command_previewer(repo, "HEAD...ref", function(e)
-        return { "log", "--oneline", "--graph", "--left-right", "--boundary", "-n", "200", "HEAD..." .. e.value.ref, "--" }
+        return {
+          "log",
+          "--oneline",
+          "--graph",
+          "--left-right",
+          "--boundary",
+          "-n",
+          "200",
+          "HEAD..." .. e.value.ref,
+          "--",
+        }
       end),
       attach_mappings = function(prompt_bufnr, map)
         actions.select_default:replace(function()
@@ -260,9 +282,16 @@ function M.refs(opts)
               local files = repo:lines({ "diff", "--name-only", r.ref, "--" }) or {}
               local items = {}
               for _, f in ipairs(files) do
-                table.insert(items, { filename = repo:abs(f), lnum = 1, text = "changed vs " .. r.name })
+                table.insert(
+                  items,
+                  { filename = repo:abs(f), lnum = 1, text = "changed vs " .. r.name }
+                )
               end
-              vim.fn.setqflist({}, " ", { title = "git diff --name-only " .. r.name, items = items })
+              vim.fn.setqflist(
+                {},
+                " ",
+                { title = "git diff --name-only " .. r.name, items = items }
+              )
               vim.cmd("copen")
             end,
           },
@@ -287,7 +316,11 @@ function M.stash(opts)
       finder = finders.new_table({
         results = stashes,
         entry_maker = function(s)
-          return { value = s, ordinal = s.ref .. " " .. s.subject, display = s.ref .. " " .. s.subject }
+          return {
+            value = s,
+            ordinal = s.ref .. " " .. s.subject,
+            display = s.ref .. " " .. s.subject,
+          }
         end,
       }),
       sorter = conf.generic_sorter(opts),

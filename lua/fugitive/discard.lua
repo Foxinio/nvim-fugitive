@@ -10,6 +10,7 @@
 ---Saved blobs are unreachable loose objects: `git gc` prunes them after
 ---`gc.pruneExpire` (two weeks by default).
 
+local bit = require("bit")
 local notify = require("fugitive.ui.notify")
 
 local M = {}
@@ -171,19 +172,40 @@ local function plan(item, opts)
       table.insert(args, "--index")
     end
     table.insert(args, "-")
-    return { cmds = { { args = args, stdin = patch } }, kind = "partial", touches_index = item.section == "Staged" }
+    return {
+      cmds = { { args = args, stdin = patch } },
+      kind = "partial",
+      touches_index = item.section == "Staged",
+    }
   end
   local count = opts.count or 0
   if item.section == "Untracked" then
-    return { cmds = { { args = { "clean", "-f", "--", path } } }, kind = "untracked", touches_index = false }
+    return {
+      cmds = { { args = { "clean", "-f", "--", path } } },
+      kind = "untracked",
+      touches_index = false,
+    }
   end
   if count == 2 or count == 3 then
     local side = count == 2 and "--ours" or "--theirs"
     local other = count == 2 and "Staged" or "Unstaged"
-    if status_in(opts.snap, other, path) == "D" or e.xy and ((count == 2 and e.xy:sub(1, 1) == "D") or (count == 3 and e.xy:sub(2, 2) == "D")) then
-      return { cmds = {}, delete = true, kind = count == 2 and "ours" or "theirs", touches_index = false }
+    if
+      status_in(opts.snap, other, path) == "D"
+      or e.xy
+        and ((count == 2 and e.xy:sub(1, 1) == "D") or (count == 3 and e.xy:sub(2, 2) == "D"))
+    then
+      return {
+        cmds = {},
+        delete = true,
+        kind = count == 2 and "ours" or "theirs",
+        touches_index = false,
+      }
     end
-    return { cmds = { { args = { "checkout", side, "--", path } } }, kind = count == 2 and "ours" or "theirs", touches_index = false }
+    return {
+      cmds = { { args = { "checkout", side, "--", path } } },
+      kind = count == 2 and "ours" or "theirs",
+      touches_index = false,
+    }
   end
   if item.section == "Unmerged" then
     return nil, "Use 2X for --ours or 3X for --theirs"
@@ -195,7 +217,11 @@ local function plan(item, opts)
     return { cmds = { { args = { "rm", "-f", "--", path } } }, kind = "added", touches_index = true }
   end
   if item.section == "Unstaged" then
-    return { cmds = { { args = { "checkout", "--", path } } }, kind = e.status == "D" and "deleted" or "modified", touches_index = false }
+    return {
+      cmds = { { args = { "checkout", "--", path } } },
+      kind = e.status == "D" and "deleted" or "modified",
+      touches_index = false,
+    }
   end
   if item.section == "Staged" then
     if not opts.has_head then
@@ -254,7 +280,9 @@ function M.discard(repo, items, opts, cb)
     for _, path in ipairs(paths) do
       local blob, mode, err2 = save_worktree(repo, path)
       if blob == nil then
-        notify.error("discard refused, could not save " .. path .. ": " .. (err2 or "unknown error"))
+        notify.error(
+          "discard refused, could not save " .. path .. ": " .. (err2 or "unknown error")
+        )
         if cb then
           cb(false)
         end
@@ -264,7 +292,9 @@ function M.discard(repo, items, opts, cb)
       if p.touches_index then
         local idx, err3 = save_index(repo, path)
         if not idx then
-          notify.error("discard refused, could not save the index entry of " .. path .. ": " .. err3)
+          notify.error(
+            "discard refused, could not save the index entry of " .. path .. ": " .. err3
+          )
           if cb then
             cb(false)
           end
@@ -314,7 +344,9 @@ function M.discard(repo, items, opts, cb)
       local last = journal_new[#journal_new]
       local blob = last.worktree_blob and last.worktree_blob:sub(1, 7) or "-"
       local what = #journal_new == 1 and last.path or (#journal_new .. " files")
-      notify.info(string.format("Discarded %s (saved as %s). Undo: :Git restore-discard", what, blob))
+      notify.info(
+        string.format("Discarded %s (saved as %s). Undo: :Git restore-discard", what, blob)
+      )
     end
     if cb then
       cb(ok)
@@ -377,9 +409,14 @@ function M.restore(repo, entry, cb)
     for _, ie in ipairs(entry.index_entry) do
       table.insert(lines, string.format("%s %s %d\t%s", ie.mode, ie.sha, ie.stage, entry.path))
     end
-    local res = repo:sync({ "update-index", "--index-info" }, { stdin = table.concat(lines, "\n") .. "\n" })
+    local res = repo:sync(
+      { "update-index", "--index-info" },
+      { stdin = table.concat(lines, "\n") .. "\n" }
+    )
     if res.code ~= 0 then
-      notify.error("restore of the index entry failed: " .. require("fugitive.git.exec").error_text(res))
+      notify.error(
+        "restore of the index entry failed: " .. require("fugitive.git.exec").error_text(res)
+      )
       if cb then
         cb(false)
       end
@@ -390,7 +427,12 @@ function M.restore(repo, entry, cb)
   local journal = M.read_journal(repo)
   for i = #journal, 1, -1 do
     local j = journal[i]
-    if j.time == entry.time and j.path == entry.path and j.worktree_blob == entry.worktree_blob and j.kind == entry.kind then
+    if
+      j.time == entry.time
+      and j.path == entry.path
+      and j.worktree_blob == entry.worktree_blob
+      and j.kind == entry.kind
+    then
       table.remove(journal, i)
       break
     end
@@ -438,7 +480,13 @@ function M.pick(path, repo)
   vim.ui.select(entries, {
     prompt = "Restore discarded change",
     format_item = function(e)
-      return string.format("%s  %-9s %s  %s", os.date("%Y-%m-%d %H:%M:%S", e.time), e.kind, e.path, e.worktree_blob and e.worktree_blob:sub(1, 7) or "")
+      return string.format(
+        "%s  %-9s %s  %s",
+        os.date("%Y-%m-%d %H:%M:%S", e.time),
+        e.kind,
+        e.path,
+        e.worktree_blob and e.worktree_blob:sub(1, 7) or ""
+      )
     end,
   }, function(choice)
     if choice then

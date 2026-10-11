@@ -37,7 +37,17 @@ function M.commit_lines(repo, sha)
     return nil, require("fugitive.git.exec").error_text(raw)
   end
   local lines = split(raw.stdout)
-  local d = repo:sync({ "diff-tree", "--no-color", "--no-ext-diff", "--no-commit-id", "-p", "--cc", "--root", "-M", sha })
+  local d = repo:sync({
+    "diff-tree",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-commit-id",
+    "-p",
+    "--cc",
+    "--root",
+    "-M",
+    sha,
+  })
   local dl = split(d.stdout)
   if #dl > 0 then
     table.insert(lines, "")
@@ -159,7 +169,8 @@ end
 ---@param how? "edit"|"split"|"vsplit"|"tab"|"pedit"
 ---@param lnum? integer
 function M.open(target, how, lnum)
-  local cmds = { edit = "edit", split = "split", vsplit = "vsplit", tab = "tabedit", pedit = "pedit" }
+  local cmds =
+    { edit = "edit", split = "split", vsplit = "vsplit", tab = "tabedit", pedit = "pedit" }
   local cmd = cmds[how or "edit"] or "edit"
   -- leave a float before opening a real window
   local win = vim.api.nvim_get_current_win()
@@ -217,11 +228,15 @@ function M.target_under_cursor(buf, repo)
     return object.format(repo.git_dir, obj.commit, base .. entry)
   end
 
-  local sha = line:match("^tree (%x+)$") or line:match("^parent (%x+)$") or line:match("^object (%x+)$")
+  local sha = line:match("^tree (%x+)$")
+    or line:match("^parent (%x+)$")
+    or line:match("^object (%x+)$")
   if sha then
     return object.format(repo.git_dir, sha)
   end
-  sha = line:match("^commit (%x+)") or line:match("^(%x%x%x%x%x%x%x+) ") or line:match("^[|*\\/ ]+(%x%x%x%x%x%x%x+) ")
+  sha = line:match("^commit (%x+)")
+    or line:match("^(%x%x%x%x%x%x%x+) ")
+    or line:match("^[|*\\/ ]+(%x%x%x%x%x%x%x+) ")
   if sha then
     local full = repo:rev_parse(sha .. "^{commit}")
     if full then
@@ -352,10 +367,12 @@ function M.actions(buf, repo)
     end,
     close = function()
       local win = vim.api.nvim_get_current_win()
-      if vim.api.nvim_win_get_config(win).relative ~= "" or #vim.api.nvim_tabpage_list_wins(0) > 1 then
+      if
+        vim.api.nvim_win_get_config(win).relative ~= "" or #vim.api.nvim_tabpage_list_wins(0) > 1
+      then
         pcall(vim.api.nvim_win_close, win, false)
       else
-        pcall(vim.cmd, "bdelete")
+        pcall(vim.cmd.bdelete)
       end
     end,
     help = function()
@@ -429,7 +446,12 @@ function M.setup_pager(buf, repo)
   for lhs, name in pairs(cfg.object) do
     local fn = name and (type(name) == "function" and name or actions[name])
     if fn and not pager_keys[lhs] then
-      vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, silent = true, desc = "fugitive: " .. tostring(name) })
+      vim.keymap.set(
+        "n",
+        lhs,
+        fn,
+        { buffer = buf, nowait = true, silent = true, desc = "fugitive: " .. tostring(name) }
+      )
     end
   end
   setup_folds(buf)
