@@ -1,0 +1,541 @@
+*fugitive.txt*  A Lua, Neovim-only rewrite of vim-fugitive
+
+==============================================================================
+CONTENTS                                                   *fugitive-contents*
+
+  1. Introduction ............................... |fugitive-intro|
+  2. Requirements ............................... |fugitive-requirements|
+  3. Setup and configuration .................... |fugitive-config|
+  4. Commands ................................... |fugitive-commands|
+  5. The summary buffer ......................... |fugitive-summary|
+  6. Object buffers and fugitive:// URLs ........ |fugitive-objects|
+  7. Diffs and conflicts ........................ |fugitive-conflicts|
+  8. Output routing ............................. |fugitive-output|
+  9. The editor service ......................... |fugitive-editor|
+ 10. Discard and recovery ....................... |fugitive-discard|
+ 11. :GBrowse and URL providers ................. |fugitive-browse|
+ 12. Integrations ............................... |fugitive-integrations|
+ 13. Events and Lua API ......................... |fugitive-api|
+ 14. Differences from vim-fugitive .............. |fugitive-differences|
+
+==============================================================================
+1. INTRODUCTION                                               *fugitive-intro*
+
+nvim-fugitive is a rewrite of tpope's vim-fugitive in Lua for Neovim. The
+core features are drop-in compatible: the same command names, the same
+summary buffer and maps, and the same `fugitive://` URL scheme. It adds
+integrations with |vim.notify| (and therefore noice.nvim), telescope.nvim,
+overseer.nvim and gitsigns.nvim, none of which is required.
+
+Deprecated upstream aliases (`:Gstatus`, `:Gblame`, `:Gcommit`, ...) do not
+exist. Features that are not implemented yet are listed in
+|fugitive-differences|.
+
+==============================================================================
+2. REQUIREMENTS                                        *fugitive-requirements*
+
+- Neovim 0.11 or later.
+- git 2.40 or later.
+- plenary.nvim.
+- Linux or macOS. Windows and WSL are not supported for now.
+
+Optional: telescope.nvim, overseer.nvim, gitsigns.nvim, and any plugin
+that renders |vim.notify| (noice.nvim, nvim-notify, ...).
+
+==============================================================================
+3. SETUP AND CONFIGURATION                                   *fugitive-config*
+
+Calling setup is optional; without it the defaults below apply. >lua
+
+  require("fugitive").setup({
+    -- Map tables per buffer type. `false` disables a map, any key can be
+    -- pointed at an action name (see the lists in this help file).
+    maps = {
+      summary = { ["s"] = "stage", ["a"] = false },
+      object = {},     -- fugitive:// commit, tree and blob buffers
+      conflict = {},   -- work-tree files with conflict markers
+      worktree = {},   -- opt-in gitsigns-backed hunk maps
+      pager = {},      -- the output float and editor-less pager windows
+    },
+    -- Per-subcommand route overrides, see |fugitive-output|.
+    routes = { status = "float" },
+    notify = { max_lines = 10 },
+    output = { ring_size = 20 },
+    float = { width = 0.9, height = 0.85, border = "rounded" },
+    editor = { window = "split" },      -- "split", "vsplit", "tab", "current"
+    discard = { journal_size = 200 },
+    watch = { enabled = true, debounce = 150 },
+    long_running = { "pull", "fetch", "push", "clone",
+                     "submodule update", "lfs" },
+    browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
+    integrations = { telescope = true, overseer = true, gitsigns = true },
+    summary = { window = "split", log_limit = 256 },
+  })
+<
+Map tables are merged key by key, so a single map can be changed. Lists
+such as `long_running` replace the default list.
+
+                                                          *g:fugitive_no_maps*
+Setting `g:fugitive_no_maps` disables the maps that fugitive would put in
+ordinary work-tree buffers (the conflict maps and the opt-in worktree
+maps). Maps inside fugitive's own buffers are always set.
+
+==============================================================================
+4. COMMANDS                                                *fugitive-commands*
+
+                                                                *:Git* *:G*
+:Git                    Open the summary buffer of the current repository,
+                        or focus it if it is already visible in this tab.
+                        See |fugitive-summary|. Command modifiers such as
+                        |:vertical| or |:tab| control the window.
+
+:Git {args}             Run an arbitrary git command. Where its output goes
+                        depends on the kind of command, see
+                        |fugitive-output|. `%` and `#` expand to the path of
+                        the current and alternate buffer as git sees it.
+                        A `|` that is not quoted or escaped ends the git
+                        command; the rest runs as an Ex command after the
+                        git command succeeded.
+
+:Git! {args}            Run in the background. The editor is never opened:
+                        a command that needs one fails with "fugitive:
+                        aborting edit due to background operation".
+
+:Git -p {args}          Show the output in the pager float even for
+:Git --paginate {args}  commands that would only notify.
+
+:Git restore-discard [path]                           *:Git-restore-discard*
+                        Restore the most recent discarded change (of
+                        [path]). See |fugitive-discard|.
+
+                                                             *:FugitiveOutput*
+:FugitiveOutput [n]     Show the complete stdout and stderr of a recent
+                        command, newest first ([n] = 1 is the latest).
+                        Opens in the float; modifiers open a split.
+
+                                                            *:FugitiveRestore*
+:FugitiveRestore [path] Pick a discarded change from the journal and
+                        restore it.
+
+                                         *:Gdiffsplit* *:Gvdiffsplit* *:Ghdiffsplit*
+:Gdiffsplit [object]    Diff the current file against [object]. A commit
+                        means the current file in that commit. Without an
+                        argument a work-tree file is compared with the
+                        index, and an index or commit blob with the work
+                        tree. The work tree version is always placed to the
+                        right or bottom. Focus moves to the new window.
+:Gdiffsplit! [object]   Like above but keep focus. During a merge conflict,
+                        open the three-way layout, see |fugitive-conflicts|.
+:Gvdiffsplit [object]   Always split vertically.
+:Ghdiffsplit [object]   Always split horizontally.
+
+The other side of these diffs is read only; editing the index side is not
+implemented yet.
+
+                                                          *:Ggrep* *:Glgrep*
+:Ggrep[!] {args}        Run `git grep`. With telescope.nvim installed the
+                        results open in a picker (its <C-q> sends them to
+                        quickfix). Without it they fill the quickfix list
+                        and jump to the first match unless ! is given.
+                        Grepping a revision (`:Ggrep foo HEAD~3`) yields
+                        fugitive:// blobs.
+:Glgrep[!] {args}       Like :Ggrep but always fills the location list.
+
+                                                                    *:GMove*
+:GMove {destination}    `git mv` the current file and rename the buffer.
+                        A relative destination is relative to the work tree
+                        root, `./` and `../` to the current directory, and
+                        `/` starts an absolute path. ! passes -f.
+                                                                  *:GRename*
+:GRename {destination}  Like :GMove, relative to the file's directory.
+                                                                  *:GDelete*
+:GDelete                `git rm` the current file and delete the buffer.
+                        In an index buffer, --cached is passed. ! forces.
+                                                       *:GRemove* *:GUnlink*
+:GRemove                Like :GDelete but keep the (now empty) buffer.
+:GUnlink                Same as :GRemove.
+
+                                                                  *:GBrowse*
+:GBrowse [object] [@remote]
+                        Open the current file, blob, tree, commit or ref at
+                        the hosting provider. See |fugitive-browse|.
+:{range}GBrowse         Point at the given lines, pinned to a commit.
+:GBrowse!               Copy the URL instead of opening it.
+
+==============================================================================
+5. THE SUMMARY BUFFER                                        *fugitive-summary*
+
+`:Git` with no arguments shows the state of the repository: >
+
+  Head: main
+  Merge: origin/main
+  Help: g?
+
+  Untracked (1)
+  ? notes.txt
+
+  Unstaged (1)
+  M lua/init.lua
+
+  Staged (1)
+  A doc/new.txt
+
+  Unpushed to origin/main (2)
+  1a2b3c4 Add the thing
+<
+Sections, in order: Rebasing / Cherry Picking / Reverting, Unmerged,
+Untracked, Unstaged, Staged, Unpushed, Unpulled and Stashes. The header
+shows Head, Merge or Rebase (the upstream), Push (when it differs) and
+Help. After a discard, a "Discarded:" line offers the undo.
+
+The buffer refreshes by itself: after every command run through fugitive,
+when the repository changes on disk (index, HEAD, refs; watched with
+filesystem events), on |FocusGained| and on |BufEnter|. The cursor stays on
+the same item.
+
+                                                     *fugitive-summary-maps*
+Staging maps ~
+  s           Stage the file or hunk under the cursor (or the selection).
+              On a section heading: stage the whole section. On an
+              unmerged file: mark it resolved.
+  u           Unstage. On the Discarded line: restore it.
+  -           Stage or unstage, whichever applies.
+  U           Unstage everything.
+  X           Discard the change under the cursor (saved first, see
+              |fugitive-discard|). On an unmerged file, 2X takes ours and
+              3X takes theirs for the whole file.
+  g-          Restore the most recent discard; with a count, pick one.
+  =           Toggle an inline diff of the file under the cursor.
+  >  <        Show or hide the inline diff.
+  I  P        Stage or unstage interactively (`git add --patch`) in a
+              terminal.
+  gI          Add the file to .git/info/exclude (with a count: .gitignore).
+  gi          Open .git/info/exclude (with a count: .gitignore).
+
+In an inline diff, `s`, `u` and `X` act on the hunk under the cursor. In
+Visual mode they act on the selected lines only, which is how a part of a
+hunk is staged, unstaged or discarded.
+
+Navigation maps ~
+  <CR>        Open the file, the index version, the commit or the ref under
+              the cursor. On a diff line, open the matching version at that
+              line. On a submodule, open the submodule's own summary.
+  o  gO  O    Open in a split, a vertical split or a tab.
+  p           Open in the preview window.
+  (  )        Previous or next file, hunk or commit.
+  [c ]c  K J  Previous or next hunk; ]c expands the file under the cursor.
+  i           Next file or hunk, expanding inline diffs on the way.
+  [/ ]/ [m ]m Previous or next file.
+  [[ ]]       Previous or next section.
+  [] ][       Previous or next section end.
+  gu gU gs    Jump to Untracked, Unstaged or Staged.
+  gp gP gr    Jump to Unpushed, Unpulled or Rebasing.
+  .           Start a command line with the path under the cursor.
+  gq          Close the summary.
+  g?  <F1>    Show these maps.
+  R           Reload synchronously.
+
+Diff maps ~
+  dd  dv  ds  dh  Run |:Gdiffsplit| (vertical or horizontal) on the file.
+                  On an unmerged file this opens the three-way layout.
+  dp              Show `git diff` of the file in the pager float.
+  dq              Close the diff windows.
+
+Commit maps ~
+  cc   commit                   ca   commit --amend
+  ce   commit --amend --no-edit cw   commit --amend --only (reword)
+  cvc  tab commit -v            cva  tab commit -v --amend
+  cRa  cRe  cRw                 like ca, ce, cw with --reset-author
+  cf   commit --fixup= the commit under the cursor (command line)
+  cF   like cf, then rebase --autosquash
+  cs   commit --squash= (command line), cS like cF for squash
+  cn   commit --edit --squash= (command line)
+  crc  revert the commit under the cursor
+  crn  revert --no-commit
+  c<Space> cr<Space> cm<Space> cz<Space> co<Space> cb<Space> r<Space>
+       put the matching :Git command on the command line
+
+Checkout and branch maps ~
+  coo         Check out the commit under the cursor.
+  co<CR> cb<CR>  :Git checkout, :Git branch.
+
+Stash maps ~
+  czz         stash push ([count] 1: --include-untracked, 2: --all)
+  czw         stash push --keep-index
+  czs         stash push --staged
+  cza  czA    stash apply ([count] selects stash@{count}), with or without
+              --index
+  czp  czP    stash pop, with or without --index
+  czv         Open stash@{count} as a commit.
+
+Rebase maps ~
+  ri          rebase --interactive from the parent of the commit under the
+              cursor (or the upstream).
+  rf          The same with --autosquash and no editor.
+  ru  rp      rebase --interactive @{upstream} / @{push}.
+  rw  rm  rd  Start an interactive rebase with the first commit set to
+              reword, edit or drop.
+  rr  rs  ra  rebase --continue, --skip, --abort.
+  re          rebase --edit-todo.
+
+Folding ~
+Every section and every inline diff is a fold; all start open. Use the
+usual |zc| and |zo|.
+
+==============================================================================
+6. OBJECT BUFFERS AND FUGITIVE:// URLS                       *fugitive-objects*
+                                                              *fugitive-object*
+Read-only buffers named `fugitive://<git dir>//<commit>/<path>` show git
+objects. <commit> is a full object id or a stage number: 0 is the index,
+1 the common ancestor, 2 "ours" and 3 "theirs". The summary buffer itself
+is `fugitive://<git dir>//`.
+
+Object names accepted by commands:
+  rev:path     a blob or tree at a revision     HEAD~2:lua/init.lua
+  :N:path      index stage N                     :2:conflicted.c
+  :path        index stage 0                     :README
+  rev          a commit                          v1.0
+  rev:         the root tree                     main:
+
+Commit buffers show the raw commit followed by its diff, with one fold per
+file. Maps in commit, tree and pager buffers:
+  <CR> o gO O Open the object under the cursor (parent, tree, the file on a
+              diff header, the right version and line on a diff line, a
+              commit id at the start of a line).
+  ( )         Previous or next file, hunk or commit.
+  [c ]c       Previous or next hunk (in diff mode: Vim's own).
+  dq          Close diff windows.
+  gq          Close the buffer.
+
+==============================================================================
+7. DIFFS AND CONFLICTS                                     *fugitive-conflicts*
+
+`:Gdiffsplit!` on a file with merge conflicts opens three windows: ours
+(`//2`) on the left, the work tree in the middle and theirs (`//3`) on the
+right. In the side windows `dp` puts the hunk into the work tree; in the
+work tree `d2o` and `d3o` obtain the hunk from ours or theirs.
+
+                                                         *fugitive-markers*
+Work-tree files that contain conflict markers get these maps (table
+`conflict`) and their regions are highlighted:
+  ]x  [x      Next or previous conflict block.
+  co          Choose ours for the block under the cursor.
+  ct          Choose theirs.
+  cb          Choose both (ours, then theirs).
+  c0          Choose none.
+Both the "merge" and the "diff3"/"zdiff3" marker styles are understood.
+Highlight groups: FugitiveConflictMarker, FugitiveConflictOurs,
+FugitiveConflictTheirs, FugitiveConflictBase.
+
+In the summary, unmerged files have their own section: `2X` / `3X` take
+ours / theirs for the whole file, `s` marks it resolved and `dd` / `dv`
+open the three-way diff.
+
+==============================================================================
+8. OUTPUT ROUTING                                              *fugitive-output*
+
+Where the output of `:Git {args}` goes depends on the kind of command, not
+on the length of its output: if git would use a pager for it, the output
+goes to a large float; otherwise to a notification.
+
+  Route      Subcommands
+  float      log show diff blame shortlog reflog grep help whatchanged
+             range-diff, branch/tag listings, stash list/show
+  notify     add rm mv reset commit (with a message) checkout switch,
+             creating/deleting branches and tags, stash push/pop,
+             cherry-pick revert merge, and everything not listed
+  task       pull fetch push clone submodule update lfs (see
+             |fugitive-overseer|)
+  terminal   add -p, reset -p, checkout -p, restore -p, stash -p,
+             clean -i, commit -p
+  editor     commands that always edit: commit without -m/-F/-C/--no-edit,
+             rebase -i, rebase --edit-todo, config -e, notes add/edit
+             without -m/-F, tag -a/-s without -m/-F, revert without
+             --no-edit. The output is notified after the editor closes.
+
+Flags are classified per subcommand: `-e` means --edit for commit, merge,
+tag, revert, cherry-pick, config and notes, but it is a pattern for grep.
+Override the route of a subcommand with `routes = { name = "float" }`.
+
+The float closes with `q` or <Esc>; <C-c> cancels a running command.
+Window modifiers (`:vert Git log`, `:tab Git show`, `:horizontal`,
+`:topleft`, `:botright`, ...) open the output in a regular window instead.
+
+Notifications carry `title = "Fugitive"`. They are cut after
+`notify.max_lines` lines and end with "… (+N lines) — :FugitiveOutput".
+Errors always show the error line and the exit code. The complete output
+of the last `output.ring_size` commands is kept for |:FugitiveOutput|.
+
+==============================================================================
+9. THE EDITOR SERVICE                                          *fugitive-editor*
+
+Every git process started by fugitive, on every route, gets GIT_EDITOR and
+GIT_SEQUENCE_EDITOR pointing at a small shell script. When git needs an
+editor (a commit message, a rebase todo list, a merge message during a
+pull), the script asks this Neovim to open the file and waits.
+
+- `:w` and close the buffer (`:wq`, `:x`, `ZZ`): git continues.
+- Close without writing (`:q!`, |:bwipeout|): git aborts the operation,
+  e.g. no commit is created and a rebase does not start. The buffer starts
+  out marked as modified, so a bare `:q` asks for `:q!` instead of
+  silently aborting.
+- Cancelling the git process (<C-c> in the float, stopping the overseer
+  task, leaving Neovim) closes the editor and aborts.
+- Background commands (`:Git!`) and sessions without a server never open
+  the editor: git fails with "fugitive: aborting edit due to background
+  operation".
+
+Only one editor per repository is open at a time; further requests wait.
+The window is placed by `editor.window` or by the modifiers of the `:Git`
+command (`:tab Git commit -v`). `-c sequence.editor=...` and
+`-c core.editor=...` given to `:Git` still win.
+
+==============================================================================
+10. DISCARD AND RECOVERY                                      *fugitive-discard*
+
+`X` in the summary saves before it destroys:
+
+1. The work-tree content of every selected file is written to the object
+   database (`git hash-object -w`; symlinks as their link text) and, when
+   the discard changes the index, the index entries are recorded. If any
+   save fails, nothing is discarded.
+2. Every discard is appended to `<git common dir>/fugitive/discard.json`
+   (at most `discard.journal_size` entries). The journal survives
+   restarts.
+3. The notification names the blob and the undo: `:Git restore-discard`.
+   |:FugitiveRestore| picks from the journal; `g-` restores the latest
+   and `u` on the summary's "Discarded:" line does the same.
+
+Restoring writes the saved content back (with its mode, symlinks as
+links) and the index entries. Undoing the discard of a deleted file
+deletes it again.
+
+Directories and submodules are not discarded.
+
+Caveat: the saved blobs are unreachable objects, so `git gc` prunes them
+after `gc.pruneExpire` (two weeks by default). Restore before that.
+
+==============================================================================
+11. :GBROWSE AND URL PROVIDERS                                 *fugitive-browse*
+
+:GBrowse builds the same options dictionary as upstream vim-fugitive and
+passes a copy to every function in `g:fugitive_browse_handlers`, so
+vim-rhubarb, fugitive-gitlab.vim and similar plugins keep working. The
+first string containing "://" wins. The keys are:
+
+  git_dir      the repository's git dir
+  repo         a dictionary {'git_dir': git_dir}
+  remote       the remote URL (insteadOf applied)
+  remote_name  the remote name
+  commit       the commit or branch, URL-encoded
+  path         the repo-relative path, URL-encoded with spaces kept
+  type         blob, tree, commit, ref, or "" for refs and the root
+  line1 line2  the line range, 0 without one
+
+If no handler answers, built-in providers handle github.com, gitlab.com,
+bitbucket.org, codeberg.org, gitea.com and git.sr.ht. Self-hosted
+instances and custom providers are configured in setup: >lua
+
+  require("fugitive").setup({
+    browse = {
+      hosts = { ["git.corp.example"] = "gitlab" },
+      providers = {
+        cgit = function(o)
+          return o.base .. "/tree/" .. o.path .. "?id=" .. o.commit
+        end,
+      },
+    },
+  })
+<
+A provider receives the dictionary above plus `host`, `repo_path` and
+`base` ("https://host/repo_path") and returns a URL or nil.
+
+The URL is opened with |vim.ui.open()|; `:GBrowse!` copies it to the `+`
+and unnamed registers instead.
+
+==============================================================================
+12. INTEGRATIONS                                         *fugitive-integrations*
+
+All integrations are loaded only when used and can be disabled with
+`integrations = { telescope = false, ... }`.
+
+                                                         *fugitive-telescope*
+telescope.nvim ~
+  :Telescope fugitive log     Commits. <CR> opens the commit. <M-d> diffs
+                              the current file against it, <M-c> checks it
+                              out (detached), <M-r> reverts, <M-p>
+                              cherry-picks, <C-y>/<M-y> yank the short/full
+                              id, <M-b> runs :GBrowse.
+  :Telescope fugitive refs    Branches, remote branches and tags, newest
+                              first. <CR> checks out (a remote branch gets a
+                              local tracking branch), <M-m> merges, <M-r>
+                              rebases onto it, <M-d> lists the files that
+                              differ in quickfix.
+  :Telescope fugitive stash   <CR> applies, <M-p> pops, <M-d> drops after
+                              confirming, <M-b> runs `stash branch`, <M-o>
+                              opens the stash as a commit.
+
+Picker input: exactly `:Git checkout`, `:Git switch`, `:Git merge` and
+`:Git rebase` with no arguments ask for a ref; `:Git rebase -i` asks for
+the base commit; `:Git switch -c {name}` and `:Git checkout -b {name}`
+ask for the start point. Every other invocation runs unchanged. Without
+telescope, |vim.ui.select()| is used.
+
+                                                          *fugitive-overseer*
+overseer.nvim ~
+Long-running commands (`long_running`) run as overseer tasks: they show up
+in the task list, can be stopped, and their output is in the task buffer.
+Without overseer they run as background jobs with a progress and a
+completion notification. Either way the editor service stays attached and
+the summary refreshes afterwards.
+
+                                                          *fugitive-gitsigns*
+gitsigns.nvim ~
+After every change fugitive asks gitsigns to refresh. Work-tree hunk maps
+are opt-in through the `worktree` map table, with the actions
+`next_hunk`, `prev_hunk`, `stage_hunk` and `reset_hunk`; they are handled
+by gitsigns, and say "requires gitsigns.nvim" without it. Staging works
+fully from the summary buffer either way.
+
+==============================================================================
+13. EVENTS AND LUA API                                            *fugitive-api*
+
+                                                             *FugitiveChanged*
+User FugitiveChanged      After any change made through fugitive and when
+                          the watcher sees a change on disk. `data.git_dir`
+                          names the repository.
+User FugitiveEditor       An editor buffer was opened (`data.buf`).
+User FugitiveSummaryRendered
+                          A summary buffer was redrawn (`data.buf`).
+
+Lua: >lua
+  local fugitive = require("fugitive")
+  fugitive.setup(opts)
+  fugitive.git("log --oneline -5")      -- like :Git
+  fugitive.git({ "commit", "-m", "x" }, { bang = true })
+  fugitive.summary()                    -- like :Git with no arguments
+  local repo = fugitive.repo()          -- repository of the buffer
+  -- repo.git_dir, repo.common_dir, repo.worktree, repo:rel(path)
+<
+`b:git_dir` is set in every buffer fugitive has resolved a repository for.
+
+==============================================================================
+14. DIFFERENCES FROM VIM-FUGITIVE                         *fugitive-differences*
+
+Deliberate changes:
+- Unmerged files have their own section in the summary, and stashes are
+  listed.
+- `:Ggrep` opens a telescope picker when telescope is installed.
+- Output goes to notifications or a float instead of temporary buffers.
+- `X` journals every discard and can undo it.
+
+Not implemented yet (backlog): `:Git blame` in a side window (blame output
+shows in the float for now), `:Gedit`/`:Gsplit`/`:Gread`/`:Gwrite` and
+editing the index side of a diff, the full object syntax (`!`, `@`,
+`:/message`), `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
+`gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
+helpers, push error parsing into quickfix, bare repositories and
+$GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without
+gitsigns.
+
+ vim:tw=78:ts=8:noet:ft=help:norl:
