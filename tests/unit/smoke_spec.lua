@@ -1,0 +1,10 @@
+local H = require("helpers")
+
+describe("test harness", function()
+  it("builds fixture repos", function()
+    local repo = H.repo({ files = { ["a.txt"] = "a\n" } })
+    assert.equals("", repo:status())
+    repo:write("a.txt", "b\n")
+    assert.equals(" M a.txt\n", repo:status())
+  end)
+end)

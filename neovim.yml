@@ -1,0 +1,19 @@
+---
+base: lua51
+name: neovim
+
+globals:
+  vim:
+    any: true
+  describe:
+    any: true
+  it:
+    any: true
+  before_each:
+    any: true
+  after_each:
+    any: true
+  pending:
+    any: true
+  assert:
+    any: true
