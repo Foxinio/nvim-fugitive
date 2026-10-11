@@ -138,10 +138,17 @@ function M.read(buf)
   if ftype == "blob" then
     filetype = obj.path and vim.filetype.match({ filename = obj.path, buf = buf }) or nil
   end
-  if filetype then
-    vim.bo[buf].filetype = filetype
-  end
   M.setup_object(buf, repo)
+  if filetype then
+    -- a broken ftplugin (e.g. a missing treesitter parser) must not break
+    -- reading the object
+    local ok, ft_err = pcall(function()
+      vim.bo[buf].filetype = filetype
+    end)
+    if not ok then
+      notify.warn("filetype " .. filetype .. ": " .. tostring(ft_err))
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------------

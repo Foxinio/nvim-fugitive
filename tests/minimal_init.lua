@@ -2,7 +2,9 @@
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 local deps = vim.env.FUGITIVE_TEST_DEPS or (root .. "/.deps")
 
-vim.opt.runtimepath = { root, deps .. "/plenary.nvim", vim.env.VIMRUNTIME }
+-- keep Neovim's own lib dir (bundled treesitter parsers) like a real install
+local libdir = vim.fn.fnamemodify(vim.v.progpath, ":p:h:h") .. "/lib/nvim"
+vim.opt.runtimepath = { root, deps .. "/plenary.nvim", vim.env.VIMRUNTIME, libdir }
 vim.opt.packpath = {}
 vim.opt.swapfile = false
 vim.opt.shadafile = "NONE"
