@@ -81,10 +81,12 @@ end
 function M.result(res, opts)
   opts = opts or {}
   local ok = res.code == 0
+  -- on failure the error comes first so truncation never hides it
+  local parts = ok and { res.stdout or "", res.stderr or "" } or { res.stderr or "", res.stdout or "" }
   local text = vim.trim(table.concat(
     vim.tbl_filter(function(s)
       return s ~= ""
-    end, { vim.trim(res.stdout or ""), vim.trim(res.stderr or "") }),
+    end, { vim.trim(parts[1]), vim.trim(parts[2]) }),
     "\n"
   ))
   if text == "" then
