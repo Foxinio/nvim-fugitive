@@ -207,13 +207,6 @@ function M.run_chain(repo, cmds, cb)
   step()
 end
 
-local function describe(paths)
-  if #paths == 1 then
-    return paths[1]
-  end
-  return #paths .. " files"
-end
-
 local function has_head(st)
   return st.snap and st.snap.status and st.snap.status.oid ~= nil
 end
@@ -324,14 +317,13 @@ local function unstage_cmds(st, items)
   return cmds, nil, unstaged
 end
 
-local function do_cmds(buf, builder, verb, visual)
+-- Staging is routine: errors notify (from run_chain), success is silent and
+-- shows in the refreshed summary.
+local function do_cmds(buf, builder, visual)
   local st = state(buf)
-  if not st then
-    return
-  end
   local l1, l2 = range(visual)
   local items = M.selection(buf, l1, l2)
-  local cmds, err, paths = builder(st, items)
+  local cmds, err = builder(st, items)
   if not cmds then
     notify.error(err)
     return
@@ -339,15 +331,11 @@ local function do_cmds(buf, builder, verb, visual)
   if #cmds == 0 then
     return
   end
-  M.run_chain(st.repo, cmds, function(ok)
-    if ok and verb and #paths > 0 then
-      notify.info(verb .. " " .. describe(paths))
-    end
-  end)
+  M.run_chain(st.repo, cmds)
 end
 
 function M.stage(buf, visual)
-  do_cmds(buf, stage_cmds, "Staged", visual)
+  do_cmds(buf, stage_cmds, visual)
 end
 
 function M.unstage(buf, visual)
@@ -357,7 +345,7 @@ function M.unstage(buf, visual)
     -- `u` on the "Discarded:" hint line restores it (§4.2)
     return require("nvim-fugitive.discard").restore_latest(st.repo)
   end
-  do_cmds(buf, unstage_cmds, "Unstaged", visual)
+  do_cmds(buf, unstage_cmds, visual)
 end
 
 function M.toggle(buf, visual)
@@ -381,7 +369,7 @@ function M.toggle(buf, visual)
     return vim.list_extend(c1 --[[@as table]], c2 --[[@as table]]),
       nil,
       vim.list_extend(p1 or {}, p2 or {})
-  end, "Toggled", visual)
+  end, visual)
 end
 
 -- ---------------------------------------------------------------------------

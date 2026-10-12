@@ -7,7 +7,7 @@ local M = {}
 ---@class fugitive.Config
 ---@field maps table<string, table<string, string|false>> per-buffer-type `lhs -> action` tables
 ---@field routes table<string, fugitive.Route> per-subcommand route overrides
----@field notify {max_lines: integer}
+---@field notify {max_lines: integer, significant: string[]}
 ---@field output {ring_size: integer}
 ---@field float {width: number, height: number, border: string|string[]}
 ---@field editor {window: "split"|"vsplit"|"tab"|"current"}
@@ -172,7 +172,34 @@ M.defaults = {
     },
   },
   routes = {},
-  notify = { max_lines = 10 },
+  notify = {
+    max_lines = 10,
+    -- Successful commands notify only when they are significant: a
+    -- subcommand name, or "sub flag" to require a flag. Errors always notify,
+    -- and the full output of every command is in :FugitiveOutput.
+    significant = {
+      "commit",
+      "merge",
+      "rebase",
+      "revert",
+      "cherry-pick",
+      "pull",
+      "push",
+      "fetch",
+      "clone",
+      "checkout",
+      "switch",
+      "stash",
+      "am",
+      "bisect",
+      "tag",
+      "branch",
+      "reset --hard",
+      "reset --keep",
+      "reset --merge",
+      "restore-discard",
+    },
+  },
   output = { ring_size = 20 },
   float = { width = 0.9, height = 0.85, border = "rounded" },
   editor = { window = "split" },

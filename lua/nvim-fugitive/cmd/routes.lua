@@ -404,6 +404,30 @@ M.subcommands = {
   },
 }
 
+---Does a successful run of `args` deserve a notification? `list` entries are
+---a subcommand ("commit") or a subcommand plus a flag ("reset --hard").
+---@param args string[]
+---@param list? string[] defaults to config.notify.significant
+---@return boolean
+function M.is_significant(args, list)
+  list = list or require("nvim-fugitive.config").get().notify.significant
+  local parsed = M.parse(args)
+  if not parsed.sub then
+    return false
+  end
+  for _, entry in ipairs(list) do
+    local name, flag = entry:match("^(%S+)%s+(%S+)$")
+    if name then
+      if name == parsed.sub and M.has_flag(parsed.rest, { flag }) then
+        return true
+      end
+    elseif entry == parsed.sub then
+      return true
+    end
+  end
+  return false
+end
+
 ---Is `sub rest…` a long-running command (overseer task)?
 ---@param sub string
 ---@param rest string[]

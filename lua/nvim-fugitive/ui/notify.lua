@@ -76,12 +76,16 @@ function M.truncate(text, opts)
   return table.concat(out, "\n")
 end
 
----Notify the result of a command: stdout/stderr, truncated.
+---Notify the result of a command: stdout/stderr, truncated. Failures always
+---notify; a success only when `opts.significant` is set.
 ---@param res fugitive.ExecResult
----@param opts? {label?: string, success?: string}
+---@param opts? {label?: string, success?: string, significant?: boolean}
 function M.result(res, opts)
   opts = opts or {}
   local ok = res.code == 0
+  if ok and not opts.significant then
+    return
+  end
   -- on failure the error comes first so truncation never hides it
   local parts = ok and { res.stdout or "", res.stderr or "" }
     or { res.stderr or "", res.stdout or "" }

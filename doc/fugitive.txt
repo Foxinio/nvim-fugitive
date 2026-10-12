@@ -361,6 +361,14 @@ The float closes with `q` or <Esc>; <C-c> cancels a running command.
 Window modifiers (`:vert Git log`, `:tab Git show`, `:horizontal`,
 `:topleft`, `:botright`, ...) open the output in a regular window instead.
 
+Successful commands only notify when they are significant: by default
+commit, merge, rebase, revert, cherry-pick, pull, push, fetch, clone,
+checkout, switch, stash, am, bisect, tag, branch and `reset --hard`/
+`--keep`/`--merge` (configure `notify.significant`; entries are a
+subcommand or "subcommand flag"). `:Git --no-pager` and `:Git!` always
+report. Routine actions such as staging in the summary are silent.
+Errors always notify.
+
 Notifications carry `title = "Fugitive"`. They are cut after
 `notify.max_lines` lines and end with "… (+N lines) — :FugitiveOutput".
 Errors always show the error line and the exit code. The complete output

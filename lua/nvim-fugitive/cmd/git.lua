@@ -103,9 +103,10 @@ end
 ---Notify-style completion of a finished command.
 ---@param repo fugitive.Repo
 ---@param res fugitive.ExecResult
-local function finish_notify(repo, res, entry)
+---@param significant boolean notify a success too (errors always notify)
+local function finish_notify(repo, res, entry, significant)
   output.finish(entry, res)
-  notify.result(res)
+  notify.result(res, { significant = significant })
   require("nvim-fugitive").changed(repo)
 end
 
@@ -117,8 +118,10 @@ end
 function M.run_notify(repo, args, opts)
   local job
   local entry
+  -- `--no-pager` explicitly asks for the output as a notification
+  local significant = routes.is_significant(args) or routes.parse(args).no_pager
   job = repo:run(args, { editor = true, mods = opts.mods }, function(res)
-    finish_notify(repo, res, entry)
+    finish_notify(repo, res, entry, significant)
     if opts.on_done then
       opts.on_done(res)
     end
@@ -134,8 +137,9 @@ end
 ---@return fugitive.Job
 function M.run_background(repo, args, opts)
   local entry
+  -- a background run was asked for explicitly: always report its result
   local job = repo:run(args, { editor = false }, function(res)
-    finish_notify(repo, res, entry)
+    finish_notify(repo, res, entry, true)
     if opts.on_done then
       opts.on_done(res)
     end
@@ -237,10 +241,10 @@ function M.run_float(repo, args, opts)
       and vim.api.nvim_buf_is_valid(buf)
       and vim.trim(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "")) == ""
     then
+      -- nothing to page: just close the empty float
       for _, win in ipairs(vim.fn.win_findbuf(buf)) do
         pcall(vim.api.nvim_win_close, win, true)
       end
-      notify.info("git " .. table.concat(args, " ") .. ": no output")
     end
   end)
   entry = output.start(job.cmd, repo.worktree)

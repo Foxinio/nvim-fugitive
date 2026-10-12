@@ -88,7 +88,6 @@ function M.move(cmd, rename)
         end
       end)
     end
-    notify.info("Moved " .. (repo:rel(src) or src) .. " → " .. (repo:rel(dest) or dest))
     require("nvim-fugitive").changed(repo)
   end)
 end
@@ -129,7 +128,6 @@ function M.remove(cmd, opts)
         end)
       end
     end
-    notify.info("Removed " .. (repo:rel(path) or path))
     require("nvim-fugitive").changed(repo)
   end)
 end

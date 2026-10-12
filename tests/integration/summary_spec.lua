@@ -94,9 +94,8 @@ describe("summary buffer", function()
       H.feed("-")
     end)
     assert.equals(" M a.txt\nA  u.txt\n", repo:status())
-    assert.truthy(vim.iter(log):any(function(m)
-      return m.msg:match("u.txt") and m.opts.title == "Fugitive"
-    end))
+    -- staging is routine: no notification for any of these keypresses
+    assert.same({}, log)
   end)
 
   it("stages a whole section from its heading and unstages all with U", function()
