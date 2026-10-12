@@ -150,6 +150,11 @@ M.defaults = {
       ["dq"] = "diff_close",
       ["gq"] = "close",
       ["g?"] = "help",
+      ["~"] = "ancestor",
+      ["P"] = "parent",
+      ["C"] = "containing_commit",
+      ["-"] = "navigate_up",
+      ["."] = "cmdline",
     },
     -- work-tree files that contain conflict markers
     conflict = {

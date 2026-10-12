@@ -155,6 +155,51 @@ describe("parity with upstream vim-fugitive", function()
     end)
   end
 
+  it("object resolution matches FugitiveFind()", function()
+    if skip() then
+      return
+    end
+    local repo = P.repo({ ["dir/f.txt"] = "1\n", ["Makefile"] = "all:\n" })
+    P.commit(repo, "second", { ["dir/f.txt"] = "2\n" })
+    P.commit(repo, "fix the frobnicator", { ["dir/f.txt"] = "3\n" })
+    local specs = {
+      "@",
+      "HEAD^",
+      "@^:dir/f.txt",
+      "main:",
+      ":Makefile",
+      ":2:dir/f.txt",
+      "Makefile",
+      ":(top)dir/f.txt",
+      ".git/config",
+      ":",
+      ":/frobnicator",
+      "@~2:%",
+      ":%",
+    }
+    local lines = { "edit dir/f.txt", "let g:result = {}" }
+    for _, s in ipairs(specs) do
+      table.insert(
+        lines,
+        "let g:result["
+          .. vim.fn.string(s)
+          .. "] = FugitiveFind(fugitive#Expand("
+          .. vim.fn.string(s)
+          .. "))"
+      )
+    end
+    local upstream = P.run_upstream(repo.root, lines)
+    H.reset_ui()
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("edit dir/f.txt")
+    local object = require("nvim-fugitive.object")
+    local r = require("nvim-fugitive.git.repo").find(repo.root)
+    for _, s in ipairs(specs) do
+      local ours = object.find(r, object.expand(s, r))
+      assert.equals(upstream[s], ours, s)
+    end
+  end)
+
   it(":GBrowse handler dicts are identical (and refresh the fixture)", function()
     if skip() then
       return

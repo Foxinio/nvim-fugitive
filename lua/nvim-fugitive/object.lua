@@ -106,8 +106,8 @@ end
 ---@field stage integer? index stage for kind == "stage"
 ---@field path string? repo-relative path ("" for the root tree)
 
----Parse the reduced object syntax. Returns nil for unsupported forms
----(`!`, `@` alone, `:/msg`, …) which are backlog.
+---Parse the object syntax (after `expand`). `:/message` is a commit;
+---unexpanded `!` forms return nil.
 ---@param spec string
 ---@return fugitive.Rev?
 function M.parse_rev(spec)
@@ -119,7 +119,7 @@ function M.parse_rev(spec)
     return { kind = "stage", stage = tonumber(stage), path = path }
   end
   if spec:match("^:/") then
-    return nil -- :/message search: backlog
+    return { kind = "commit", rev = spec } -- :/message search
   end
   path = spec:match("^:(.+)$")
   if path then
@@ -173,18 +173,171 @@ function M.resolve(repo, spec, cwd_rel)
     return M.format(repo.git_dir, tostring(r.stage), fix_path(r.path))
   end
   local rev = (r.rev == nil or r.rev == "") and "HEAD" or r.rev --[[@as string]]
+  local sha = M.peel(repo, rev)
+  if not sha then
+    return nil, (r.kind == "commit" and "invalid object: " or "invalid revision: ") .. rev
+  end
   if r.kind == "commit" then
-    local sha = repo:rev_parse(rev .. "^{commit}") or repo:rev_parse(rev)
-    if not sha then
-      return nil, "invalid object: " .. spec
-    end
     return M.format(repo.git_dir, sha)
   end
-  local sha = repo:rev_parse(rev .. "^{commit}")
-  if not sha then
-    return nil, "invalid revision: " .. rev
-  end
   return M.format(repo.git_dir, sha, fix_path(r.path))
+end
+
+---Resolve a revision to the object id it names, peeling tags (`rev^{}`).
+---`A...B` is the merge base of A and B, like upstream.
+---@param repo fugitive.Repo
+---@param rev string
+---@return string?
+function M.peel(repo, rev)
+  local a, b = rev:match("^(.-)%.%.%.(.*)$")
+  if a and not rev:match("^:/") then
+    local base = repo:chomp({ "merge-base", a == "" and "@" or a, b == "" and "@" or b, "--" })
+    return base and base:match("^%x+$") and base or nil
+  end
+  if rev:match("^:/") then
+    return repo:rev_parse(rev)
+  end
+  return repo:rev_parse(rev .. "^{}") or repo:rev_parse(rev)
+end
+
+---The commit "owning" a buffer, for `!`: the commit of a fugitive:// blob
+---or commit buffer, `@` for stage 2 and work-tree files (upstream s:Owner).
+---@param buf integer
+---@return string
+function M.owner(buf)
+  local obj = M.parse(vim.api.nvim_buf_get_name(buf))
+  if obj and obj.commit:match("^%x+$") and #obj.commit >= 40 then
+    return obj.commit
+  end
+  if obj and obj.commit == "3" then
+    return "MERGE_HEAD"
+  end
+  return "@"
+end
+
+---The git path of a buffer relative to the work tree ("" when unknown).
+---@param buf integer
+---@param repo fugitive.Repo
+---@return string?
+function M.buf_rel(buf, repo)
+  local name = vim.api.nvim_buf_get_name(buf)
+  local obj = M.parse(name)
+  if obj then
+    return obj.path
+  end
+  if name == "" then
+    return nil
+  end
+  return repo:rel(name)
+end
+
+local function buf_of(token)
+  if token == "%" then
+    return vim.api.nvim_get_current_buf()
+  end
+  local n = token:match("^[#!](%d+)$")
+  if n then
+    return tonumber(n)
+  end
+  if token == "#" then
+    local alt = vim.fn.bufnr("#")
+    return alt > 0 and alt or nil
+  end
+  return vim.api.nvim_get_current_buf()
+end
+
+---Expand upstream's |cmdline-special|-style forms in an object spec:
+---  %  #  #N   the buffer's file (repo-relative after a ':', else the whole
+---             object: work-tree path, `sha:path` or `:N:path`)
+---  !  !N      the commit owning the current (or Nth) buffer
+---  :%  :#     the buffer's file in the index (`:0:`)
+---@param spec string
+---@param repo fugitive.Repo
+---@return string
+function M.expand(spec, repo)
+  -- ! and !N at the start: the owning commit
+  local bang, rest = spec:match("^(!%d*)(.*)$")
+  if bang then
+    local b = (bang == "!" and vim.api.nvim_get_current_buf() or tonumber(bang:sub(2))) --[[@as integer]]
+    spec = M.owner(b) .. rest
+  end
+  -- :% / :# without a stage mean stage 0
+  spec = spec:gsub("^:([%%#])", ":0:%1")
+  local function token_value(token, after_colon)
+    local buf = buf_of(token)
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
+      return token
+    end
+    if after_colon then
+      return M.buf_rel(buf, repo) or token
+    end
+    local name = vim.api.nvim_buf_get_name(buf)
+    local obj = M.parse(name)
+    if obj then
+      return obj.path and M.git_name(obj) or obj.commit
+    end
+    return repo:rel(name) or name
+  end
+  -- a % or # (optionally #N) that is the whole spec or the path after ':'
+  local prefix, token = spec:match("^(.*:)([%%#]%d*)$")
+  if prefix then
+    return prefix .. token_value(token, true)
+  end
+  if spec:match("^[%%#]%d*$") then
+    return token_value(spec, false)
+  end
+  return spec
+end
+
+---Find what an object spec names, like upstream's fugitive#Find: a
+---fugitive:// URL for git objects, a file path for work-tree and .git
+---files. Bare words that are not revisions are work-tree paths.
+---@param repo fugitive.Repo
+---@param spec string already expanded
+---@param cwd? string
+---@return string? target, string? err
+function M.find(repo, spec, cwd)
+  cwd = cwd or vim.fn.getcwd()
+  if spec:match("^%a%a+://") then
+    return spec
+  end
+  if spec == ":" then
+    return M.format(repo.git_dir, "")
+  end
+  if spec:sub(1, 1) == "/" then
+    return spec
+  end
+  if spec:match("^%.%.?/") or spec == "." or spec == ".." then
+    return vim.fs.normalize(cwd .. "/" .. spec)
+  end
+  if spec == ".git" or spec:match("^%.git/") then
+    local rel = spec:sub(6)
+    if rel == "" then
+      return repo.git_dir
+    end
+    return repo:git_path(rel)
+  end
+  local top = spec:match("^:%(top%)(.*)$") or spec:match("^:/:(.*)$")
+  if top then
+    return repo:abs(top)
+  end
+  local cwd_rel = repo:rel(cwd) or ""
+  local r = M.parse_rev(spec)
+  if r and r.kind == "commit" then
+    -- a revision, else a work-tree path
+    local sha = M.peel(repo, spec)
+    if sha then
+      return M.format(repo.git_dir, sha)
+    end
+    if spec:match("^:/") then
+      return nil, "no commit matches " .. spec
+    end
+    return repo:abs(spec)
+  end
+  if not r then
+    return nil, "unsupported object: " .. spec
+  end
+  return M.resolve(repo, spec, cwd_rel)
 end
 
 ---The git object name addressed by a parsed URL (`sha:path`, `:N:path`, `sha`).

@@ -78,4 +78,6 @@ jobs:
           curl -sL https://github.com/LuaLS/lua-language-server/releases/download/3.13.5/lua-language-server-3.13.5-linux-x64.tar.gz | tar xz -C /tmp/luals
           make deps
           export VIMRUNTIME=$(nvim --headless --clean -c 'lua io.stdout:write(vim.env.VIMRUNTIME)' -c 'qa!')
-          /tmp/luals/bin/lua-language-server --check lua --configpath=$PWD/.luarc.json --checklevel=Warning
+          /tmp/luals/bin/lua-language-server --check lua --configpath=$PWD/.luarc.json --checklevel=Warning --logpath=/tmp/luals-log | tee /tmp/luals.out
+          # lua-language-server exits 0 even when it finds problems
+          grep -q "no problems found" /tmp/luals.out

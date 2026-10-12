@@ -24,7 +24,8 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
   "Foxinio/nvim-fugitive",
   dependencies = { "nvim-lua/plenary.nvim" },
-  cmd = { "Git", "G", "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",
+  cmd = { "Git", "G", "Gedit", "Gsplit", "Gvsplit", "Gtabedit", "Gpedit", "Gdrop",
+          "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",
           "GMove", "GRename", "GDelete", "GRemove", "GUnlink", "GBrowse",
           "FugitiveOutput", "FugitiveRestore" },
   opts = {}, -- optional, see "Configuration" below
@@ -57,7 +58,7 @@ lazily on first use.
 | `:Git {args}` | output routed by command type: pager commands → float, others → notification, network commands → overseer task, `add -p` & co. → terminal; only significant commands notify on success |
 | Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
 | `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
-| `fugitive://` objects | blobs, trees and commits with navigation |
+| `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |
 | Diffs & conflicts | `:Gdiffsplit` family, upstream 3-way `:Gdiffsplit!` with `d2o`/`d3o`, conflict-marker maps `]x [x co ct cb c0` |
 | `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
 | `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
@@ -203,15 +204,20 @@ require("nvim-fugitive").setup({
       ["U"] = "unstage_all",
     },
     object = {
+      ["~"] = "ancestor",
       ["gq"] = "close",
+      ["."] = "cmdline",
+      ["C"] = "containing_commit",
       ["dq"] = "diff_close",
       ["g?"] = "help",
+      ["-"] = "navigate_up",
       ["]c"] = "next_hunk",
       [")"] = "next_item",
       ["<CR>"] = "open",
       ["o"] = "open_split",
       ["O"] = "open_tab",
       ["gO"] = "open_vsplit",
+      ["P"] = "parent",
       ["[c"] = "prev_hunk",
       ["("] = "prev_item",
     },

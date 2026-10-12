@@ -117,6 +117,21 @@ maps). Maps inside fugitive's own buffers are always set.
 :FugitiveRestore [path] Pick a discarded change from the journal and
                         restore it.
 
+                                                           *:Gedit* *:Ge*
+:Gedit [object]         |:edit| a |fugitive-object|. Without an argument a
+                        work-tree file opens its index version, anything
+                        else opens the work-tree file.
+                                                                  *:Gsplit*
+:Gsplit [object]        |:split| a |fugitive-object|.
+                                                                 *:Gvsplit*
+:Gvsplit [object]       |:vsplit| a |fugitive-object|.
+                                                                *:Gtabedit*
+:Gtabedit [object]      |:tabedit| a |fugitive-object|.
+                                                                  *:Gpedit*
+:Gpedit [object]        |:pedit| a |fugitive-object|.
+                                                                   *:Gdrop*
+:Gdrop [object]         |:drop| a |fugitive-object|.
+
                                          *:Gdiffsplit* *:Gvdiffsplit* *:Ghdiffsplit*
 :Gdiffsplit [object]    Diff the current file against [object]. A commit
                         means the current file in that commit. Without an
@@ -295,11 +310,26 @@ objects. <commit> is a full object id or a stage number: 0 is the index,
 is `fugitive://<git dir>//`.
 
 Object names accepted by commands:
-  rev:path     a blob or tree at a revision     HEAD~2:lua/init.lua
-  :N:path      index stage N                     :2:conflicted.c
-  :path        index stage 0                     :README
-  rev          a commit                          v1.0
-  rev:         the root tree                     main:
+  @               the commit HEAD points to
+  main^           the parent of main
+  main...other    the merge base of main and other
+  main:           the root tree of main
+  @^:Makefile     Makefile in the parent of HEAD
+  :Makefile       Makefile in the index (stage 0)
+  :2:file         stage 2 (ours) of a conflicted file
+  :/message       the newest commit whose message matches
+  rev^{tree}      the tree of rev (any `rev-parse` peel works)
+  Makefile        the work-tree file (when it is not a revision)
+  ./file  ../file a file relative to the current directory
+  :(top)file      the work-tree file, relative to the top
+  .git/config     a file in the git directory
+  :               the summary buffer
+  -               the output of the latest |:Git| command
+Expansions, as in |cmdline-special|:
+  %  #  #N        the current, alternate or Nth buffer
+  :%  @~2:%       the current file in the index / in HEAD~2
+  !  !N           the commit owning the current (or Nth) buffer
+  !:Makefile !^   a file in that commit, its parent
 
 Commit buffers show the raw commit followed by its diff, with one fold per
 file. Maps in commit, tree and pager buffers:
@@ -310,6 +340,11 @@ file. Maps in commit, tree and pager buffers:
   [c ]c       Previous or next hunk (in diff mode: Vim's own).
   dq          Close diff windows.
   gq          Close the buffer.
+  ~           The same file in the [count]th ancestor of the commit.
+  P           The same file in the [count]th parent.
+  C           The commit owning the object.
+  -           Go up: blob -> tree -> parent tree -> root tree -> commit.
+  .           Start a command line with the object's name.
 
 ==============================================================================
 7. DIFFS AND CONFLICTS                                     *fugitive-conflicts*
@@ -542,9 +577,8 @@ Deliberate changes:
 - `X` journals every discard and can undo it.
 
 Not implemented yet (backlog): `:Git blame` in a side window (blame output
-shows in the float for now), `:Gedit`/`:Gsplit`/`:Gread`/`:Gwrite` and
-editing the index side of a diff, the full object syntax (`!`, `@`,
-`:/message`), `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
+shows in the float for now), `:Gread`/`:Gwrite` and
+editing the index side of a diff, `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
 `gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
 helpers, push error parsing into quickfix, bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without

@@ -25,8 +25,12 @@ parity: deps
 lint:
 	stylua --check lua plugin tests
 	selene lua plugin
+	@mkdir -p .tests
+	# lua-language-server exits 0 even when it finds problems: check its report
 	VIMRUNTIME=$$($(NVIM) --headless --clean -c 'lua io.stdout:write(vim.env.VIMRUNTIME)' -c 'qa!') \
-		lua-language-server --check lua --configpath=$(CURDIR)/.luarc.json --checklevel=Warning
+		lua-language-server --check lua --configpath=$(CURDIR)/.luarc.json --checklevel=Warning \
+		--logpath=$(CURDIR)/.tests/luals > .tests/luals.out 2>&1; cat .tests/luals.out
+	@grep -q "no problems found" .tests/luals.out
 
 format:
 	stylua lua plugin tests

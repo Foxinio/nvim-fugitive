@@ -37,6 +37,26 @@ cmd("FugitiveRestore", function(c)
   require("nvim-fugitive.discard").pick(c.args ~= "" and c.args or nil)
 end, { nargs = "?", complete = complete("discarded"), desc = "Restore a discarded change" })
 
+for name, how in pairs({
+  Gedit = "edit",
+  Ge = "edit",
+  Gsplit = "split",
+  Gvsplit = "vsplit",
+  Gtabedit = "tabedit",
+  Gpedit = "pedit",
+  Gdrop = "drop",
+}) do
+  cmd(name, function(c)
+    require("nvim-fugitive.cmd.edit").command(how, c)
+  end, {
+    nargs = "?",
+    bang = true,
+    bar = true,
+    complete = complete("object"),
+    desc = "Open a fugitive object (" .. how .. ")",
+  })
+end
+
 for name, layout in pairs({
   Gdiffsplit = "auto",
   Gvdiffsplit = "vertical",

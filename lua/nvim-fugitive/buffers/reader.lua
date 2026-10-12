@@ -378,7 +378,89 @@ function M.actions(buf, repo)
     help = function()
       require("nvim-fugitive.buffers.summary").show_help("object")
     end,
+    ancestor = function()
+      M.navigate(buf, "ancestor", vim.v.count1)
+    end,
+    parent = function()
+      if vim.v.count == 0 then
+        notify.warn("Use ~ (or provide a count)")
+        return
+      end
+      M.navigate(buf, "parent", vim.v.count1)
+    end,
+    containing_commit = function()
+      M.navigate(buf, "commit")
+    end,
+    navigate_up = function()
+      M.navigate(buf, "up", vim.v.count1)
+    end,
+    cmdline = function()
+      local obj = object.parse(vim.api.nvim_buf_get_name(buf))
+      local word = obj and (obj.path and object.git_name(obj) or obj.commit) or ""
+      vim.api.nvim_feedkeys(
+        vim.api.nvim_replace_termcodes(
+          ": " .. vim.fn.fnameescape(word) .. "<Home>",
+          true,
+          false,
+          true
+        ),
+        "n",
+        false
+      )
+    end,
   }
+end
+
+---Object-buffer navigation (upstream `~`, `P`, `C`, `-`).
+---@param buf integer
+---@param how "ancestor"|"parent"|"commit"|"up"
+---@param count? integer
+function M.navigate(buf, how, count)
+  local obj = object.parse(vim.api.nvim_buf_get_name(buf))
+  if not obj or not obj.commit:match("^%x+$") or #obj.commit < 40 then
+    notify.warn("not a commit, tree or blob at a commit")
+    return
+  end
+  local repo = repo_mod.new(obj.git_dir)
+  local suffix = obj.path and (":" .. obj.path) or ""
+  local spec
+  if how == "ancestor" then
+    spec = obj.commit .. "~" .. (count or 1) .. suffix
+  elseif how == "parent" then
+    spec = obj.commit .. "^" .. (count or 1) .. suffix
+  elseif how == "commit" then
+    spec = obj.commit
+  else
+    -- blob -> its tree -> parent tree -> root tree -> commit
+    local path = obj.path
+    for _ = 1, count or 1 do
+      if path == nil then
+        break
+      elseif path == "" then
+        path = nil
+      else
+        local parent = path:gsub("/$", ""):match("^(.*)/[^/]*$")
+        path = parent and (parent .. "/") or ""
+      end
+    end
+    if path == nil then
+      spec = obj.commit
+    else
+      local url = object.format(repo.git_dir, obj.commit, path)
+      local child = obj.path and obj.path:gsub("/$", ""):match("([^/]+)$")
+      M.open(url, "edit")
+      if child then
+        vim.fn.search("^" .. vim.fn.escape(child, "\\.*$^~[]") .. "/\\=$", "wc")
+      end
+      return
+    end
+  end
+  local url, err = object.resolve(repo, spec)
+  if not url then
+    notify.error(err or ("no such object: " .. spec))
+    return
+  end
+  M.open(url, "edit")
 end
 
 ---Folding of diffs in commit/pager buffers (F26): one fold per file.
@@ -422,8 +504,17 @@ function M.setup_object(buf, repo)
   local ftype = vim.b[buf].fugitive_type
   local actions = M.actions(buf, repo)
   if ftype == "blob" then
-    -- blob buffers keep the user's normal editing maps except dq/gq/g?
-    actions = { diff_close = actions.diff_close, close = actions.close, help = actions.help }
+    -- blob buffers keep the user's normal editing maps; navigation only
+    actions = {
+      diff_close = actions.diff_close,
+      close = actions.close,
+      help = actions.help,
+      ancestor = actions.ancestor,
+      parent = actions.parent,
+      containing_commit = actions.containing_commit,
+      navigate_up = actions.navigate_up,
+      cmdline = actions.cmdline,
+    }
   end
   require("nvim-fugitive.maps").apply(buf, "object", actions)
   if ftype == "commit" then
