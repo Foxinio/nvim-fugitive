@@ -1,0 +1,98 @@
+local H = require("helpers")
+local output = require("nvim-fugitive.ui.output")
+
+local function run(cmd)
+  local before = output.get(1)
+  vim.cmd(cmd)
+  H.wait(function()
+    local e = output.get(1)
+    return e and e ~= before and not e.running
+  end, cmd, 10000)
+end
+
+local function floats()
+  return vim.tbl_filter(function(w)
+    return vim.api.nvim_win_get_config(w).relative ~= ""
+  end, vim.api.nvim_list_wins())
+end
+
+describe("configurable output targets", function()
+  local repo
+  before_each(function()
+    H.reset_ui()
+    repo = H.repo({ files = { ["a"] = "a\n" } })
+    repo:commit("second", { ["b"] = "b\n" })
+    vim.cmd("cd " .. repo.root)
+  end)
+  after_each(function()
+    require("nvim-fugitive").setup({})
+  end)
+
+  it("vert, split and tab open the pager buffer in those windows", function()
+    require("nvim-fugitive").setup({
+      routes = { log = "vert", show = "tab", ["stash list"] = "split" },
+    })
+    run("Git log --oneline")
+    assert.equals(0, #floats())
+    assert.equals(2, #vim.api.nvim_tabpage_list_wins(0))
+    assert.equals("git", vim.bo.filetype)
+    assert.truthy(H.find_line("second$"))
+    H.reset_ui()
+    run("Git show")
+    assert.equals(2, #vim.api.nvim_list_tabpages())
+    H.reset_ui()
+    repo:write("a", "changed\n")
+    repo:git("stash", "-q")
+    run("Git stash list")
+    assert.equals(2, #vim.api.nvim_tabpage_list_wins(0))
+    assert.truthy(H.find_line("^stash@{0}"))
+  end)
+
+  it("inplace uses the current window and q returns to the previous buffer", function()
+    require("nvim-fugitive").setup({ routes = { log = "inplace" } })
+    vim.cmd("edit a")
+    local file_buf = vim.api.nvim_get_current_buf()
+    run("Git log --oneline")
+    assert.equals(1, #vim.api.nvim_tabpage_list_wins(0))
+    assert.truthy(H.find_line("second$"))
+    H.feed("q")
+    assert.equals(file_buf, vim.api.nvim_get_current_buf())
+  end)
+
+  it("an explicit notification route always shows the output", function()
+    require("nvim-fugitive").setup({ routes = { ["rev-parse"] = "notification" } })
+    local log, restore = H.capture_notify()
+    run("Git rev-parse --abbrev-ref HEAD")
+    restore()
+    assert.equals(1, #log)
+    assert.equals("main", log[1].msg)
+  end)
+
+  it("term runs any command in a terminal", function()
+    require("nvim-fugitive").setup({ routes = { status = "term" } })
+    vim.cmd("Git status")
+    assert.equals("terminal", vim.bo.buftype)
+  end)
+
+  it("styles the float from config", function()
+    require("nvim-fugitive").setup({
+      float = { width = 40, height = 10, border = "single", title = false, zindex = 77 },
+    })
+    run("Git log --oneline")
+    local win = assert(floats()[1])
+    local c = vim.api.nvim_win_get_config(win)
+    assert.equals(40, c.width)
+    assert.equals(10, c.height)
+    assert.equals(77, c.zindex)
+    assert.is_nil(c.title)
+  end)
+
+  it("rejects unknown targets", function()
+    assert.has_error(function()
+      require("nvim-fugitive").setup({ routes = { log = "printer" } })
+    end)
+    assert.has_error(function()
+      require("nvim-fugitive").setup({ routes = { ["a b c"] = "float" } })
+    end)
+  end)
+end)

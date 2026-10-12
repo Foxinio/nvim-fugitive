@@ -77,7 +77,7 @@ Each feature gets a status: **MVP**, **M2** (second milestone), **Backlog**, or 
 | F29 | Push/fetch with quickfix error parsing | :Git push | Backlog (overseer covers output) |
 | F30 | `.git/info/exclude` / `.gitignore` helpers (`gI`, `gi`) | Maps | MVP (part of the summary maps) |
 | F31 | Stash entries in the summary expand inline with `=` (like files) | — | Done |
-| F32 | Unified output configuration (§5.2.3) | — | Backlog (user request) |
+| F32 | Unified output configuration (§5.2.3) | — | Done |
 
 ### 4.1 Repository layouts
 - **MVP**

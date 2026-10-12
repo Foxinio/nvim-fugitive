@@ -114,9 +114,40 @@ describe("routes.classify", function()
   }
   for _, case in ipairs(cases) do
     it(case[1] .. " -> " .. case[2], function()
-      assert.equals(case[2], route(case[1]))
+      -- the table uses the old names; classify returns the new targets
+      local expected = routes.normalize(case[2])
+      if expected == "editor" then
+        expected = "editor"
+      end
+      assert.equals(expected, route(case[1]))
     end)
   end
+
+  it("routes a bare blame to the side window", function()
+    assert.equals("blame", route("blame"))
+    assert.equals("blame", route("blame -w"))
+    assert.equals("float", route("blame -L 1,2"))
+  end)
+
+  it("matches overrides by subcommand or 'subcommand word', most specific first", function()
+    local function r(cmdline, overrides)
+      return routes.classify(vim.split(cmdline, " ", { trimempty = true }), {
+        overrides = overrides,
+        long_running = {},
+      })
+    end
+    local o =
+      { stash = "notification", ["stash list"] = "tab", ["log --graph"] = "vert", status = "float" }
+    assert.equals("tab", r("stash list", o).route)
+    assert.equals("notification", r("stash show", o).route)
+    assert.equals("vert", r("log --oneline --graph", o).route)
+    assert.equals("float", r("log", o).route)
+    assert.equals("float", r("status", o).route)
+    assert.is_true(r("status", o).explicit)
+    -- old names are aliases
+    assert.equals("overseer", r("status", { status = "task" }).route)
+    assert.equals("term", r("status", { status = "terminal" }).route)
+  end)
 
   it("honours config overrides", function()
     local r = routes.classify({ "status" }, { overrides = { status = "float" }, long_running = {} })

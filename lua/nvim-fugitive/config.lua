@@ -9,7 +9,7 @@ local M = {}
 ---@field routes table<string, fugitive.Route> per-subcommand route overrides
 ---@field notify {max_lines: integer, significant: string[]}
 ---@field output {ring_size: integer}
----@field float {width: number, height: number, border: string|string[]}
+---@field float {width: number, height: number, border: string|string[], style: string, title: boolean, title_pos: string, zindex: integer, winblend: integer}
 ---@field editor {window: "split"|"vsplit"|"tab"|"current"}
 ---@field discard {journal_size: integer}
 ---@field watch {enabled: boolean, debounce: integer}
@@ -225,7 +225,17 @@ M.defaults = {
     },
   },
   output = { ring_size = 20 },
-  float = { width = 0.9, height = 0.85, border = "rounded" },
+  float = {
+    -- fractions of the editor (<= 1) or absolute cells (> 1)
+    width = 0.9,
+    height = 0.85,
+    border = "rounded",
+    style = "minimal", -- "" for Neovim's default window style
+    title = true, -- show the command as the float title
+    title_pos = "center",
+    zindex = 50,
+    winblend = 0,
+  },
   editor = { window = "split" },
   discard = { journal_size = 200 },
   watch = { enabled = true, debounce = 150 },
@@ -256,10 +266,15 @@ local function validate(opts)
   }) do
     vim.validate("opts." .. key, opts[key], spec, true)
   end
-  local valid_routes = { float = true, notify = true, task = true, terminal = true, editor = true }
-  for sub, route in pairs(opts.routes or {}) do
-    if not valid_routes[route] then
-      error(string.format("fugitive: invalid route %q for subcommand %q", tostring(route), sub))
+  local routes = require("nvim-fugitive.cmd.routes")
+  for key, target in pairs(opts.routes or {}) do
+    if type(key) ~= "string" or not key:match("^%S+%s*%S*$") then
+      error(
+        string.format('fugitive: invalid routes key %q (use "sub" or "sub word")', tostring(key))
+      )
+    end
+    if type(target) ~= "string" or not routes.targets[routes.normalize(target)] then
+      error(string.format("fugitive: invalid output target %q for %q", tostring(target), key))
     end
   end
   for buftype, maps in pairs(opts.maps or {}) do

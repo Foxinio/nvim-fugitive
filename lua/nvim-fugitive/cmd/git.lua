@@ -113,13 +113,13 @@ end
 ---Run a foreground command and notify its output (notify + editor routes).
 ---@param repo fugitive.Repo
 ---@param args string[]
----@param opts {mods?: string, on_done?: fun(res: fugitive.ExecResult)}
+---@param opts {mods?: string, on_done?: fun(res: fugitive.ExecResult), significant?: boolean}
 ---@return fugitive.Job
 function M.run_notify(repo, args, opts)
   local job
   local entry
   -- `--no-pager` explicitly asks for the output as a notification
-  local significant = routes.is_significant(args) or routes.parse(args).no_pager
+  local significant = opts.significant or routes.is_significant(args) or routes.parse(args).no_pager
   job = repo:run(args, { editor = true, mods = opts.mods }, function(res)
     finish_notify(repo, res, entry, significant)
     if opts.on_done then
@@ -164,7 +164,7 @@ local pager_filetypes = {
 ---with window modifiers). `<C-c>` in the pager cancels it.
 ---@param repo fugitive.Repo
 ---@param args string[]
----@param opts {mods?: string, sub?: string}
+---@param opts {mods?: string, sub?: string, window?: string}
 ---@return fugitive.Job
 function M.run_float(repo, args, opts)
   local float = require("nvim-fugitive.ui.float")
@@ -230,9 +230,7 @@ function M.run_float(repo, args, opts)
         float.set(buf, vim.list_extend({ "# exit code " .. res.code }, lines))
       else
         if empty and buf and vim.api.nvim_buf_is_valid(buf) then
-          for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-            pcall(vim.api.nvim_win_close, win, true)
-          end
+          float.dismiss(buf)
         end
         notify.result(res)
       end
@@ -242,15 +240,14 @@ function M.run_float(repo, args, opts)
       and vim.trim(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "")) == ""
     then
       -- nothing to page: just close the empty float
-      for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-        pcall(vim.api.nvim_win_close, win, true)
-      end
+      float.dismiss(buf)
     end
   end)
   entry = output.start(job.cmd, repo.worktree)
   buf = float.show({}, {
     title = "git " .. table.concat(args, " "),
     mods = opts.mods,
+    window = opts.window,
     filetype = pager_filetypes[opts.sub or ""],
     on_cancel = function()
       if job.editor_id then
@@ -307,15 +304,15 @@ function M.run(args, opts)
       mods = opts.mods,
       repo = repo,
     })
-  elseif cls.route == "float" then
-    return M.run_float(repo, args, { mods = opts.mods, sub = cls.sub })
-  elseif cls.route == "task" then
+  elseif routes.is_pager(cls.route) then
+    return M.run_float(repo, args, { mods = opts.mods, sub = cls.sub, window = cls.route })
+  elseif cls.route == "overseer" then
     return require("nvim-fugitive.integrations.overseer").run(
       repo,
       args,
       { mods = opts.mods, on_done = opts.on_done }
     )
-  elseif cls.route == "terminal" then
+  elseif cls.route == "term" then
     return require("nvim-fugitive.ui.terminal").run(repo, args, {
       mods = opts.mods,
       on_exit = function()
@@ -323,9 +320,14 @@ function M.run(args, opts)
       end,
     })
   else
-    -- "notify" and "editor": both run in the foreground with the editor
-    -- service; editor-first commands simply report once the editor closed
-    return M.run_notify(repo, args, { mods = opts.mods, on_done = opts.on_done })
+    -- "notification" and "editor": both run in the foreground with the
+    -- editor service; editor-first commands report once the editor closed.
+    -- A command the user routed here explicitly always shows its output.
+    return M.run_notify(
+      repo,
+      args,
+      { mods = opts.mods, on_done = opts.on_done, significant = cls.explicit }
+    )
   end
 end
 

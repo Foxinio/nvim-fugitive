@@ -85,7 +85,11 @@ require("nvim-fugitive").setup({
       ["<leader>s"] = "stage", -- add a map for any action name
     },
   },
-  routes = { status = "float" },          -- show `:Git status` in the float
+  routes = {
+    status = "float",                     -- show `:Git status` in the float
+    ["log --graph"] = "vert",             -- graphs in a vertical split
+    pull = "term",                        -- watch pulls in a terminal
+  },
   notify = { max_lines = 5 },
   float = { width = 0.8, height = 0.8, border = "single" },
   integrations = { overseer = false },    -- run pull/push as plain jobs
@@ -257,9 +261,12 @@ require("nvim-fugitive").setup({
       ["q"] = "close",
     },
   },
-  -- Per-subcommand output route overrides: "float", "notify", "task",
-  -- "terminal" or "editor". The built-in table routes by command type
-  -- (:help fugitive-output).
+  -- Where each command's output goes, by "subcommand" or "subcommand word"
+  -- (e.g. ["stash list"], ["log --graph"]). Targets: "float", "inplace",
+  -- "split", "vert", "tab" (output in a buffer), "notification", "overseer",
+  -- "term". Unlisted commands use the built-in table: pager commands ->
+  -- float, network commands -> overseer, `add -p` & co. -> term, everything
+  -- else -> notification (:help fugitive-output).
   routes = {},
   notify = {
     -- notifications are cut after this many lines (:FugitiveOutput has all)
@@ -274,8 +281,17 @@ require("nvim-fugitive").setup({
   },
   -- how many commands :FugitiveOutput remembers
   output = { ring_size = 20 },
-  -- the pager float: fractions of the editor size and the border style
-  float = { width = 0.9, height = 0.85, border = "rounded" },
+  -- the pager float
+  float = {
+    width = 0.9, -- fraction of the editor (<= 1) or columns (> 1)
+    height = 0.85, -- fraction of the editor (<= 1) or lines (> 1)
+    border = "rounded", -- any 'winborder' value or a list of 8 chars
+    style = "minimal", -- "" for Neovim's default window style
+    title = true, -- show the command as the float title
+    title_pos = "center",
+    zindex = 50,
+    winblend = 0,
+  },
   -- where commit messages and rebase todo lists open:
   -- "split", "vsplit", "tab" or "current"
   editor = { window = "split" },

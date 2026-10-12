@@ -37,19 +37,75 @@ end
 local function float_config(title)
   local cfg = require("nvim-fugitive.config").get().float
   local cols, rows = vim.o.columns, vim.o.lines - vim.o.cmdheight
-  local width = math.max(20, math.floor(cols * cfg.width))
-  local height = math.max(5, math.floor(rows * cfg.height))
+  local function size(v, total, min)
+    -- fractions of the editor, or absolute cells when > 1
+    local n = v <= 1 and math.floor(total * v) or math.floor(v)
+    return math.max(min, math.min(n, total))
+  end
+  local width = size(cfg.width, cols, 20)
+  local height = size(cfg.height, rows, 5)
+  local show_title = cfg.title ~= false and title
   return {
     relative = "editor",
     width = width,
     height = height,
     col = math.floor((cols - width) / 2),
     row = math.floor((rows - height) / 2) - 1,
-    style = "minimal",
+    style = cfg.style ~= "" and cfg.style or nil,
     border = cfg.border,
-    title = title and (" " .. title .. " ") or nil,
-    title_pos = title and "center" or nil,
+    zindex = cfg.zindex,
+    title = show_title and (" " .. title .. " ") or nil,
+    title_pos = show_title and cfg.title_pos or nil,
   }
+end
+
+---Open a window for a pager buffer: the float, the current window, or a
+---split/vertical split/tab. Command modifiers win over `window`.
+---@param buf integer
+---@param opts fugitive.ShowOpts
+---@return integer win
+local function open_window(buf, opts)
+  if M.wants_window(opts.mods) then
+    vim.cmd(opts.mods .. " split")
+  elseif opts.window == "inplace" then
+    vim.b[buf].fugitive_inplace_alt = vim.api.nvim_get_current_buf()
+  elseif opts.window == "split" then
+    vim.cmd("split")
+  elseif opts.window == "vert" then
+    vim.cmd("vertical split")
+  elseif opts.window == "tab" then
+    vim.cmd("tab split")
+  else
+    local win = vim.api.nvim_open_win(buf, opts.enter ~= false, float_config(opts.title))
+    local blend = require("nvim-fugitive.config").get().float.winblend
+    if blend and blend > 0 then
+      vim.wo[win].winblend = blend
+    end
+    vim.wo[win].wrap = false
+    vim.wo[win].cursorline = true
+    return win
+  end
+  local win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(win, buf)
+  return win
+end
+
+---Close a pager buffer's windows; a pager shown in place gives the window
+---back to the buffer it replaced.
+---@param buf integer
+function M.dismiss(buf)
+  for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+    local floating = vim.api.nvim_win_get_config(win).relative ~= ""
+    local alt = vim.b[buf].fugitive_inplace_alt
+    if not floating and alt and vim.api.nvim_buf_is_valid(alt) then
+      vim.api.nvim_win_set_buf(win, alt)
+    elseif floating or #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win)) > 1 then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
+  end
+  if vim.api.nvim_buf_is_valid(buf) and #vim.fn.win_findbuf(buf) == 0 then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end
 end
 
 ---@class fugitive.ShowOpts
@@ -59,19 +115,13 @@ end
 ---@field name? string buffer name
 ---@field on_cancel? fun() called by the pager `cancel` map (<C-c>) while running
 ---@field enter? boolean default true
+---@field window? "float"|"inplace"|"split"|"vert"|"tab" default "float"
 
 local function set_maps(buf, opts)
   local maps = require("nvim-fugitive.config").get().maps.pager
   local actions = {
     close = function()
-      local win = vim.api.nvim_get_current_win()
-      if vim.api.nvim_win_get_config(win).relative ~= "" then
-        pcall(vim.api.nvim_win_close, win, true)
-      elseif #vim.api.nvim_list_wins() > 1 then
-        pcall(vim.api.nvim_win_close, win, false)
-      else
-        pcall(vim.api.nvim_buf_delete, buf, { force = true })
-      end
+      M.dismiss(buf)
     end,
     cancel = function()
       local cancel = vim.b[buf].fugitive_running and opts.on_cancel
@@ -113,16 +163,7 @@ function M.show(lines, opts)
   if opts.name then
     pcall(vim.api.nvim_buf_set_name, buf, opts.name)
   end
-  local win
-  if M.wants_window(opts.mods) then
-    vim.cmd(opts.mods .. " split")
-    win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(win, buf)
-  else
-    win = vim.api.nvim_open_win(buf, opts.enter ~= false, float_config(opts.title))
-    vim.wo[win].wrap = false
-    vim.wo[win].cursorline = true
-  end
+  local win = open_window(buf, opts)
   vim.wo[win].foldmethod = "manual"
   if opts.filetype then
     vim.bo[buf].filetype = opts.filetype

@@ -439,12 +439,7 @@ function M.is_significant(args, list)
     return false
   end
   for _, entry in ipairs(list) do
-    local name, flag = entry:match("^(%S+)%s+(%S+)$")
-    if name then
-      if name == parsed.sub and M.has_flag(parsed.rest, { flag }) then
-        return true
-      end
-    elseif entry == parsed.sub then
+    if M.match_entry(entry, parsed.sub, parsed.rest) then
       return true
     end
   end
@@ -467,10 +462,81 @@ function M.is_long_running(sub, rest, list)
   return false
 end
 
+---Output targets a command can be routed to (§5.2.3). The pager kinds
+---show output in a buffer: `float` (the big float), `inplace` (the current
+---window), `split`, `vert` and `tab`.
+M.targets = {
+  float = "pager",
+  inplace = "pager",
+  split = "pager",
+  vert = "pager",
+  tab = "pager",
+  notification = "notification",
+  overseer = "overseer",
+  term = "term",
+  -- internal: commands that always edit, and the blame side window
+  editor = "notification",
+  blame = "blame",
+}
+
+---Old route names, still accepted in `routes`.
+M.target_aliases = { notify = "notification", task = "overseer", terminal = "term" }
+
+---@param target string
+---@return string
+function M.normalize(target)
+  return M.target_aliases[target] or target
+end
+
+---Is `target` a pager kind (output in a buffer)?
+function M.is_pager(target)
+  return M.targets[target] == "pager"
+end
+
+---Does a config key ("sub" or "sub word") match a parsed command? The
+---second word matches a flag present in the arguments or the first
+---positional argument ("stash list", "reset --hard").
+---@param entry string
+---@param sub string
+---@param rest string[]
+---@return boolean
+function M.match_entry(entry, sub, rest)
+  local name, word = entry:match("^(%S+)%s+(%S+)$")
+  if not name then
+    return entry == sub
+  end
+  if name ~= sub then
+    return false
+  end
+  if word:sub(1, 1) == "-" then
+    return M.has_flag(rest, { word })
+  end
+  return first_sub(rest) == word
+end
+
+---The user's route override for a command, most specific key first.
+---@param overrides table<string, string>
+---@param sub string
+---@param rest string[]
+---@return string?
+function M.override(overrides, sub, rest)
+  local fallback
+  for key, target in pairs(overrides) do
+    if M.match_entry(key, sub, rest) then
+      if key:find(" ", 1, true) then
+        return M.normalize(target)
+      end
+      fallback = M.normalize(target)
+    end
+  end
+  return fallback
+end
+
 ---@class fugitive.Classification
----@field route fugitive.RouteName
+---@field route string an output target (see M.targets)
 ---@field sub string?
 ---@field parsed fugitive.ParsedArgs
+---@field explicit boolean? the user's `routes` chose the target
 
 ---Classify a `:Git` argument list.
 ---@param args string[]
@@ -495,28 +561,31 @@ function M.classify(args, opts)
   end
   local result = { sub = sub, parsed = parsed }
   if not sub then
-    result.route = "notify"
+    result.route = "notification"
     return result
   end
-  if overrides[sub] then
-    result.route = overrides[sub]
+  local chosen = M.override(overrides, sub, rest)
+  if chosen then
+    result.route = chosen
+    result.explicit = true
     return result
   end
-  if M.is_long_running(sub, rest, opts.long_running) then
-    result.route = "task"
-    return result
-  end
-  local spec = M.subcommands[sub]
   local route
-  if spec then
-    route = type(spec.route) == "function" and spec.route(rest, spec) or spec.route
+  if M.is_long_running(sub, rest, opts.long_running) then
+    route = "overseer"
   else
-    route = "notify"
+    local spec = M.subcommands[sub]
+    if spec then
+      route = type(spec.route) == "function" and spec.route(rest, spec) or spec.route
+    else
+      route = "notify"
+    end
+    route = M.normalize(route --[[@as string]])
   end
-  if parsed.paginate and route == "notify" then
+  if parsed.paginate and route == "notification" then
     route = "float"
-  elseif parsed.no_pager and route == "float" then
-    route = "notify"
+  elseif parsed.no_pager and M.is_pager(route) then
+    route = "notification"
   end
   result.route = route
   return result

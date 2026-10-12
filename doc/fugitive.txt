@@ -440,8 +440,35 @@ goes to a large float; otherwise to a notification.
 
 Flags are classified per subcommand: `-e` means --edit for commit, merge,
 tag, revert, cherry-pick, config and notes, but it is a pattern for grep.
-Override the route of a subcommand with `routes = { name = "float" }`.
 
+                                                        *fugitive-routes*
+Choose the target per command with `routes`. Keys are a subcommand or a
+subcommand plus a word (a flag or the first argument); the most specific
+key wins: >lua
+  require("nvim-fugitive").setup({
+    routes = {
+      status = "float",
+      ["stash list"] = "tab",
+      ["log --graph"] = "vert",
+      pull = "term",
+    },
+  })
+<
+Targets:
+  float         the big pager float (|fugitive-float|)
+  inplace       a pager buffer in the current window; `q` goes back
+  split  vert   a pager buffer in a split / vertical split
+  tab           a pager buffer in a new tab
+  notification  run, then notify the output; a command you route here
+                yourself always shows its output
+  overseer      an overseer task (|fugitive-overseer|)
+  term          a terminal split
+The old names "notify", "task" and "terminal" are accepted too.
+
+                                                          *fugitive-float*
+The float is configured with `float = { width, height, border, style,
+title, title_pos, zindex, winblend }`: sizes up to 1 are fractions of the
+editor, larger values are cells; `title = false` hides the command title.
 The float closes with `q` or <Esc>; <C-c> cancels a running command.
 Window modifiers (`:vert Git log`, `:tab Git show`, `:horizontal`,
 `:topleft`, `:botright`, ...) open the output in a regular window instead.
