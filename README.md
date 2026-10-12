@@ -109,6 +109,10 @@ require("nvim-fugitive").setup({
   -- `g?` in a buffer lists its maps. :help fugitive-summary-maps
   maps = {
     summary = {
+      ["bb"] = "bisect_bad",
+      ["bg"] = "bisect_good",
+      ["br"] = "bisect_reset",
+      ["bs"] = "bisect_skip",
       ["cb<CR>"] = "branch_bare",
       ["cb<Space>"] = "branch_prompt",
       ["gf"] = "cfile_edit",

@@ -345,6 +345,13 @@ Commit maps ~
   c<Space> cr<Space> cm<Space> cz<Space> co<Space> cb<Space> r<Space>
        put the matching :Git command on the command line
 
+Bisect maps ~
+During `git bisect` the summary shows "Bisect: N left to test" and a
+Bisecting section with the good/bad/skip verdicts so far.
+  bg  bb  bs  `git bisect good` / `bad` / `skip` on the commit under the
+              cursor (HEAD when not on a commit)
+  br          `git bisect reset`
+
 Checkout and branch maps ~
   coo         Check out the commit under the cursor.
   co<CR> cb<CR>  :Git checkout, :Git branch.
@@ -630,6 +637,10 @@ telescope, |vim.ui.select()| is used.
 
                                                           *fugitive-overseer*
 overseer.nvim ~
+When a push, fetch or pull fails, rejected refs, errors and hook messages
+of the form `remote: path:line: message` go to the quickfix list (the
+notification says so).
+
 Long-running commands (`long_running`) run as overseer tasks: they show up
 in the task list, can be stopped, and their output is in the task buffer.
 Without overseer they run as background jobs with a progress and a
@@ -701,7 +712,7 @@ Deliberate changes:
 - Output goes to notifications or a float instead of temporary buffers.
 - `X` journals every discard and can undo it.
 
-Not implemented yet (backlog): bisect helpers, push error parsing into quickfix, bare repositories and
+Not implemented yet (backlog): bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without
 gitsigns.
 

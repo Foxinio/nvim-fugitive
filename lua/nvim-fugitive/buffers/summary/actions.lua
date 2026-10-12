@@ -1263,6 +1263,17 @@ function M.actions(buf)
     rebase_bare = function()
       cmdline("Git rebase\r")
     end,
+    -- bisect: on the commit under the cursor, else on HEAD
+    bisect_good = function()
+      git(buf, vim.list_extend({ "bisect", "good" }, split_words(M.cursor_commit(buf))))
+    end,
+    bisect_bad = function()
+      git(buf, vim.list_extend({ "bisect", "bad" }, split_words(M.cursor_commit(buf))))
+    end,
+    bisect_skip = function()
+      git(buf, vim.list_extend({ "bisect", "skip" }, split_words(M.cursor_commit(buf))))
+    end,
+    bisect_reset = run({ "bisect", "reset" }),
   }
   for name, fn in pairs(require("nvim-fugitive.maps").cfile_actions(buf)) do
     a[name] = fn

@@ -140,6 +140,11 @@ M.defaults = {
       ["rd"] = "rebase_drop",
       ["r<Space>"] = "rebase_prompt",
       ["r<CR>"] = "rebase_bare",
+      -- bisect
+      ["bg"] = "bisect_good",
+      ["bb"] = "bisect_bad",
+      ["bs"] = "bisect_skip",
+      ["br"] = "bisect_reset",
     },
     -- fugitive:// object buffers (commits, trees, blobs)
     object = {

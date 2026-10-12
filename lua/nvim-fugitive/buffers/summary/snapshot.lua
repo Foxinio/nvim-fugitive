@@ -31,6 +31,7 @@ local M = {}
 ---@field headers {key: string, value: string}[]
 ---@field rebasing {label: string, entries: fugitive.RebaseEntry[]}?
 ---@field sequencing {label: string, entries: fugitive.RebaseEntry[]}?
+---@field bisecting {label: string, left: string, entries: fugitive.RebaseEntry[]}?
 ---@field logs fugitive.LogSection[]
 ---@field stashes {ref: string, subject: string}[]
 ---@field stash_diffs table<string, fugitive.FileDiff[]> expanded stash ref -> files
@@ -185,6 +186,39 @@ local function sequencer_state(repo, run)
       end
     end
   end
+end
+
+---Bisect state from `git bisect log` and the refs/bisect refs.
+---@param repo fugitive.Repo
+---@param run fun(args: string[]): fugitive.ExecResult
+---@return {label: string, left: string, entries: fugitive.RebaseEntry[]}?
+function M.bisect_state(repo, run)
+  if not vim.uv.fs_stat(repo.git_dir .. "/BISECT_LOG") then
+    return nil
+  end
+  local entries = {}
+  for _, l in ipairs(lines_of(run({ "bisect", "log" }))) do
+    local status, sha, subject = l:match("^# (%a[%a-]*): %[(%x+)%]%s*(.*)$")
+    if status and status ~= "first" and status ~= "possible" then
+      table.insert(entries, 1, { status = status, commit = sha:sub(1, 7), subject = subject })
+    end
+  end
+  local left = "started"
+  local bad = repo:rev_parse("refs/bisect/bad")
+  if bad then
+    local goods = lines_of(run({ "for-each-ref", "--format=%(refname)", "refs/bisect/good-*" }))
+    if #goods > 0 then
+      local args = { "rev-list", "--count", bad, "--not" }
+      vim.list_extend(args, goods)
+      local n = lines_of(run(args))[1]
+      left = n and (n .. " left to test") or left
+    else
+      left = "needs a good commit"
+    end
+  else
+    left = "needs a bad commit"
+  end
+  return { label = "Bisecting", left = left, entries = entries }
 end
 
 ---Upstream-compatible pull and push refs (s:StatusRetrieve/s:StatusRender).
@@ -389,6 +423,18 @@ function M.gather(repo, run, expanded)
 
   snap.rebasing = rebase_state(repo, short_head and #short_head or nil)
   snap.sequencing = sequencer_state(repo, run)
+  snap.bisecting = M.bisect_state(repo, run)
+  if snap.bisecting then
+    -- "Bisect: 5 left" after the Head/Merge/Push lines, before Help
+    local help
+    if snap.headers[#snap.headers] and snap.headers[#snap.headers].key == "Help" then
+      help = table.remove(snap.headers)
+    end
+    table.insert(snap.headers, { key = "Bisect", value = snap.bisecting.left })
+    if help then
+      table.insert(snap.headers, help)
+    end
+  end
   snap.diffs = inline_diffs(run, st, expanded or {})
 
   -- Unpushed / Unpulled, following upstream's rules

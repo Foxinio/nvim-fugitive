@@ -26,6 +26,52 @@ function M.get()
   return nil
 end
 
+---Parse failed push/fetch/pull output into quickfix items: rejected refs,
+---errors, and `remote: path:line: message` lines from server hooks.
+---@param repo fugitive.Repo
+---@param text string
+---@return table[]
+function M.parse_errors(repo, text)
+  local items = {}
+  for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+    local path, lnum, msg = line:match("^remote:%s+([^%s:]+):(%d+):%d*:?%s*(.*)$")
+    if path and vim.uv.fs_stat(repo:abs(path)) then
+      table.insert(
+        items,
+        { filename = repo:abs(path), lnum = tonumber(lnum), text = msg, type = "E" }
+      )
+    else
+      local rejected = line:match("^%s*!%s+(%[.-%].*)$")
+      if rejected then
+        table.insert(items, { text = rejected, type = "E", valid = 0 })
+      else
+        local err = line:match("^error: (.*)$") or line:match("^fatal: (.*)$")
+        if err then
+          table.insert(items, { text = err, type = "E", valid = 0 })
+        end
+      end
+    end
+  end
+  return items
+end
+
+local quickfix_subcommands = { push = true, fetch = true, pull = true }
+
+---After a failed push/fetch/pull: errors into quickfix.
+---@return boolean filled
+local function errors_to_quickfix(repo, args, text)
+  local sub = require("nvim-fugitive.cmd.routes").parse(args).sub
+  if not sub or not quickfix_subcommands[sub] then
+    return false
+  end
+  local items = M.parse_errors(repo, text)
+  if #items == 0 then
+    return false
+  end
+  vim.fn.setqflist({}, " ", { title = "git " .. table.concat(args, " "), items = items })
+  return true
+end
+
 local function label(args)
   return "git " .. table.concat(args, " ")
 end
@@ -91,9 +137,10 @@ function M.run(repo, args, opts)
       elseif ok then
         notify.info(notify.truncate(label(args) .. ": done\n" .. res.stdout, {}))
       else
+        local qf = errors_to_quickfix(repo, args, res.stdout)
         notify.error(
           notify.truncate(
-            label(args) .. " failed\n" .. res.stdout,
+            label(args) .. " failed" .. (qf and " (errors in :copen)" or "") .. "\n" .. res.stdout,
             { code = res.code, is_error = true }
           )
         )
@@ -129,9 +176,14 @@ function M.run_fallback(repo, args, opts)
     elseif res.signal ~= 0 then
       notify.warn(label(args) .. ": cancelled")
     else
+      local qf = errors_to_quickfix(repo, args, res.stdout .. "\n" .. res.stderr)
       notify.error(
         notify.truncate(
-          label(args) .. " failed\n" .. require("nvim-fugitive.git.exec").error_text(res),
+          label(args)
+            .. " failed"
+            .. (qf and " (errors in :copen)" or "")
+            .. "\n"
+            .. require("nvim-fugitive.git.exec").error_text(res),
           {
             code = res.code,
             is_error = true,

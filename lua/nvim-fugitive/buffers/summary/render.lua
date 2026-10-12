@@ -116,6 +116,7 @@ function M.render(snap, expanded)
   end
   rebase_section("Rebasing", snap.rebasing)
   rebase_section("Sequencing", snap.sequencing)
+  rebase_section("Bisecting", snap.bisecting)
 
   local st = snap.status
   local function file_section(name, list)
