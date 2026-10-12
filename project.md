@@ -76,6 +76,8 @@ Each feature gets a status: **MVP**, **M2** (second milestone), **Backlog**, or 
 | F28 | Public Vimscript API (`FugitiveGitDir`, `FugitiveFind`, `FugitiveExecute`, User autocmds) | plugin/fugitive.vim | Backlog (GBrowse handler compat is covered in §5.4) |
 | F29 | Push/fetch with quickfix error parsing | :Git push | Backlog (overseer covers output) |
 | F30 | `.git/info/exclude` / `.gitignore` helpers (`gI`, `gi`) | Maps | MVP (part of the summary maps) |
+| F31 | Stash entries in the summary expand inline with `=` (like files) | — | Backlog (user request) |
+| F32 | Unified output configuration (§5.2.3) | — | Backlog (user request) |
 
 ### 4.1 Repository layouts
 - **MVP**
@@ -206,6 +208,16 @@ Two output channels, chosen per message:
     `:FugitiveOutput` shows the full text.
 - No direct noice API dependency. Everything goes through `vim.notify` and our own
   float.
+
+### 5.2.3 Configurable output targets (Backlog, user request)
+- Which command produces which kind of output is configurable per subcommand,
+  with the targets `inplace`, `float`, `term`, `vert`, `split`, `tab`,
+  `notification` and `overseer`. The current routing (§5.2) is the default;
+  the old route names stay accepted as aliases.
+- Already configurable and to be documented under the same schema: the
+  overseer integration (on by default, graceful fallback when not
+  installed), the float's size and border (to be extended with style, title
+  and z-index), and the summary-buffer keybindings (`maps.summary`).
 
 ### 5.2.1 Editor service (orthogonal to routes)
 - **Every** foreground git process we spawn, on any route, gets
@@ -410,4 +422,5 @@ pickers; picker input for `:Git checkout|switch|merge|rebase`.
 **Backlog**: blame side window, `:Gedit` family + full object syntax, `:Gread`/
 `:Gwrite`/editable index, `:Gclog`, difftool/mergetool, `:Gcd`, `gf`, statusline/
 Vimscript API, bisect, push quickfix, submodule maintenance, bare/`$GIT_DIR`,
-file-history pickers.
+file-history pickers, `=` on stash entries (F31), configurable output targets
+(F32, §5.2.3).
