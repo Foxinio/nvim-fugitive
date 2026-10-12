@@ -160,7 +160,7 @@ describe("editor service", function()
     assert.equals("gitrebase", vim.bo[buf].filetype)
     focus(buf)
     local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
-    assert.truthy(first:match("^pick %x+ second"))
+    assert.truthy(first:match("^pick %x+ #? ?second"))
     vim.api.nvim_buf_set_lines(buf, 0, 1, false, { (first:gsub("^pick", "drop")) })
     vim.cmd("wq")
     local e = wait_done(before)

@@ -214,7 +214,10 @@ function M.run(args, opts, cb)
   job.pid = handle.pid
   job.handle = handle
   if editor_id then
-    require("nvim-fugitive.buffers.editor").attach(editor_id, { job = job, mods = opts and opts.mods })
+    require("nvim-fugitive.buffers.editor").attach(
+      editor_id,
+      { job = job, mods = opts and opts.mods }
+    )
   end
   function job:kill(signal)
     signal = signal or "sigterm"

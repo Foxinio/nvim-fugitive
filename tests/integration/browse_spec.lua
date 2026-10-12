@@ -56,7 +56,10 @@ describe(":GBrowse", function()
     restore()
     -- the plain call went to the (stubbed) opener, the ! call did not
     assert.equals(before + 1, #_G.fugitive_test_opened)
-    assert.equals("https://github.com/user/repo/blob/main/dir/other.txt", _G.fugitive_test_opened[#_G.fugitive_test_opened])
+    assert.equals(
+      "https://github.com/user/repo/blob/main/dir/other.txt",
+      _G.fugitive_test_opened[#_G.fugitive_test_opened]
+    )
     -- a range pins the URL to a commit
     assert.equals(
       "https://github.com/user/repo/blob/" .. repo:rev("HEAD") .. "/dir/other.txt#L1",

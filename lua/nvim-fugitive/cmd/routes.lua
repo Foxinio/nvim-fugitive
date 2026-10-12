@@ -431,7 +431,8 @@ end
 ---@return fugitive.Classification
 function M.classify(args, opts)
   opts = opts or {}
-  local cfg = package.loaded["nvim-fugitive.config"] and require("nvim-fugitive.config").get() or nil
+  local cfg = package.loaded["nvim-fugitive.config"] and require("nvim-fugitive.config").get()
+    or nil
   local overrides = opts.overrides or (cfg and cfg.routes) or {}
   local parsed = M.parse(args)
   local sub, rest = parsed.sub, parsed.rest

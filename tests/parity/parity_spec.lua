@@ -99,6 +99,13 @@ describe("parity with upstream vim-fugitive", function()
       local repo = sc[2]()
       local upstream = P.upstream_summary(repo)
       local ours = P.our_summary(repo)
+      -- deliberate deviation: newer git writes "pick <oid> # <subject>" in the
+      -- todo list; upstream shows the "# ", we strip it
+      if type(upstream) == "table" then
+        for i, l in ipairs(upstream) do
+          upstream[i] = l:gsub("^(%l+ %x+) # ", "%1 ")
+        end
+      end
       assert.same(upstream, ours)
     end)
   end

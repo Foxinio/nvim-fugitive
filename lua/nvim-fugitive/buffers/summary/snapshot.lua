@@ -104,6 +104,8 @@ local function parse_todo_lines(lines, len)
   local out = {}
   for _, line in ipairs(lines) do
     local cmd, commit, subject = line:match("^(%l+)%s+(%x%x%x%x+)%s+(.*)$")
+    -- git >= 2.5x writes "pick <oid> # <subject>"
+    subject = subject and subject:gsub("^# ", "", 1)
     if cmd and not (cmd:match("exec") or cmd:match("merge") or cmd:match("label")) then
       table.insert(out, {
         status = rebase_abbrevs[cmd] or cmd,
