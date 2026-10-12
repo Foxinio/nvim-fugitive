@@ -378,10 +378,25 @@ end
 local function file_item_at(st, lnum)
   local i = st.info[lnum]
   if
-    i and (i.kind == "file" or i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta")
+    i
+    and (
+      i.kind == "file"
+      or i.kind == "stash"
+      or i.kind == "hunk"
+      or i.kind == "diffline"
+      or i.kind == "diffmeta"
+    )
   then
     return i
   end
+end
+
+---What `=` expands for a line: a file path, or a stash ref.
+local function expand_id(i)
+  if i.section == "Stash" then
+    return i.ref
+  end
+  return i.entry.path
 end
 
 ---@param mode "toggle"|"show"|"hide"
@@ -396,7 +411,7 @@ function M.inline(buf, mode, visual)
   for lnum = l1, l2 do
     local i = file_item_at(st, lnum)
     if i then
-      local key = render.expand_key(i.section, i.entry.path)
+      local key = render.expand_key(i.section, expand_id(i))
       local want
       if mode == "toggle" then
         want = not st.expanded[key]
@@ -406,8 +421,8 @@ function M.inline(buf, mode, visual)
       if (st.expanded[key] or false) ~= want then
         st.expanded[key] = want or nil
         changed = true
-        if not want and i.kind ~= "file" then
-          cursor_to_file = i.entry.path
+        if not want and i.kind ~= "file" and i.kind ~= "stash" then
+          cursor_to_file = expand_id(i)
         end
       end
     end
@@ -416,7 +431,7 @@ function M.inline(buf, mode, visual)
     summary().refresh(buf, function()
       if cursor_to_file then
         for lnum, i in ipairs(st.info) do
-          if i.kind == "file" and i.entry.path == cursor_to_file then
+          if (i.kind == "file" or i.kind == "stash") and expand_id(i) == cursor_to_file then
             pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
             break
           end
@@ -660,6 +675,24 @@ function M.target(buf, lnum)
   local function at_head(path)
     local url = object.resolve(repo, "HEAD:" .. path)
     return url
+  end
+  if i.section == "Stash" and i.file then
+    -- a line of an expanded stash: the stashed file at that line
+    local file = i.file --[[@as fugitive.FileDiff]]
+    local at
+    if i.kind ~= "diffmeta" then
+      local hunk = file.hunks[i.hunk_index]
+      local nums = i.kind == "diffline" and diff_mod.line_numbers(hunk)[i.line_index]
+        or { new = hunk.new_start }
+      at = nums.new or nums.old
+      if nums.new == nil and nums.old then
+        return {
+          target = object.resolve(repo, i.ref .. "^:" .. (file.old_path or file.path)),
+          lnum = at,
+        }
+      end
+    end
+    return { target = object.resolve(repo, i.ref .. ":" .. file.path), lnum = at }
   end
   if i.kind == "file" or i.kind == "diffmeta" then
     local e = i.entry --[[@as fugitive.StatusEntry]]

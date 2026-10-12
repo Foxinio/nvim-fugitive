@@ -33,6 +33,7 @@ local M = {}
 ---@field sequencing {label: string, entries: fugitive.RebaseEntry[]}?
 ---@field logs fugitive.LogSection[]
 ---@field stashes {ref: string, subject: string}[]
+---@field stash_diffs table<string, fugitive.FileDiff[]> expanded stash ref -> files
 ---@field diffs table<string, table<string, fugitive.FileDiff>> section -> path -> diff
 ---@field discarded fugitive.DiscardEntry? latest discard journal entry of this session
 
@@ -344,8 +345,15 @@ end
 function M.gather(repo, run, expanded)
   ---@type fugitive.Snapshot
   ---@type fugitive.Snapshot
-  local snap =
-    { headers = {}, logs = {}, stashes = {}, diffs = {}, status = status_mod.parse(""), head = "" }
+  local snap = {
+    headers = {},
+    logs = {},
+    stashes = {},
+    diffs = {},
+    stash_diffs = {},
+    status = status_mod.parse(""),
+    head = "",
+  }
   local res = run(status_mod.args)
   if res.code ~= 0 then
     snap.error = require("nvim-fugitive.git.exec").error_text(res)
@@ -433,6 +441,18 @@ function M.gather(repo, run, expanded)
       local ref, subject = l:match("^(%S+)\t(.*)$")
       if ref then
         table.insert(snap.stashes, { ref = ref, subject = subject })
+        if expanded and expanded["Stash\0" .. ref] then
+          local diff = run({
+            "stash",
+            "show",
+            "-p",
+            "--include-untracked",
+            "--no-color",
+            "--no-ext-diff",
+            ref,
+          })
+          snap.stash_diffs[ref] = diff_mod.parse(diff.stdout or "")
+        end
       end
     end
   end

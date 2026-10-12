@@ -153,6 +153,40 @@ function M.render(snap, expanded)
         s.ref .. " " .. s.subject,
         { kind = "stash", section = "Stash", ref = s.ref, subject = s.subject }
       )
+      local files = expanded[M.expand_key("Stash", s.ref)]
+        and snap.stash_diffs
+        and snap.stash_diffs[s.ref]
+      for _, f in ipairs(files or {}) do
+        -- read-only: the stash's files with their hunks, keyed by the ref
+        local entry =
+          { path = s.ref, status = "", xy = "", sub = "N...", submodule = false, kind = "stash" }
+        for _, h in ipairs(f.header) do
+          if not (h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ ")) then
+            add(h, { kind = "diffmeta", section = "Stash", entry = entry, file = f, ref = s.ref })
+          end
+        end
+        for hi, hunk in ipairs(f.hunks) do
+          add(hunk.header, {
+            kind = "hunk",
+            section = "Stash",
+            entry = entry,
+            file = f,
+            hunk_index = hi,
+            ref = s.ref,
+          })
+          for li, l in ipairs(hunk.lines) do
+            add(l, {
+              kind = "diffline",
+              section = "Stash",
+              entry = entry,
+              file = f,
+              hunk_index = hi,
+              line_index = li,
+              ref = s.ref,
+            })
+          end
+        end
+      end
     end
   end
 

@@ -266,7 +266,9 @@ Staging maps ~
               |fugitive-discard|). On an unmerged file, 2X takes ours and
               3X takes theirs for the whole file.
   g-          Restore the most recent discard; with a count, pick one.
-  =           Toggle an inline diff of the file under the cursor.
+  =           Toggle an inline diff of the file under the cursor. On a
+              stash entry: show the stash's changes (read only; <CR> on a
+              line opens the stashed file there).
   >  <        Show or hide the inline diff.
   I  P        Stage or unstage interactively (`git add --patch`) in a
               terminal.
