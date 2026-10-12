@@ -62,6 +62,16 @@ make parity       # compare with upstream: UPSTREAM=../vim-fugitive
 make lint         # stylua, selene, lua-language-server
 ```
 
+Run a single test file with the same isolated configuration:
+
+```sh
+nvim --headless --noplugin -u tests/minimal_init.lua -c "PlenaryBustedFile tests/integration/summary_spec.lua"
+```
+
+The test init disables desktop URL opening and isolates Git from inherited
+repository paths and user/system configuration. Child test processes use this
+init too.
+
 Tests build throwaway repositories in a temporary directory and drive real
 git. The parity harness runs the same scenarios against upstream
 vim-fugitive in a child Neovim and compares the summary text, the

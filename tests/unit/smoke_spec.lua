@@ -1,6 +1,22 @@
 local H = require("helpers")
 
 describe("test harness", function()
+  it("isolates Git subprocesses from user configuration and repository paths", function()
+    assert.is_nil(vim.env.GIT_DIR)
+    assert.is_nil(vim.env.GIT_WORK_TREE)
+    assert.is_nil(vim.env.GIT_INDEX_FILE)
+    assert.is_nil(vim.env.GIT_CONFIG_COUNT)
+    local result = vim.system({ "git", "config", "--global", "--list" }, { text = true }):wait()
+    assert.equals(0, result.code)
+    assert.equals("", result.stdout)
+  end)
+
+  it("replaces the desktop URL opener in the test init", function()
+    local source = debug.getinfo(vim.ui.open, "S").source
+    assert.truthy(source:match("tests/minimal_init%.lua$"))
+    assert.is_nil(vim.ui.open("https://example.com"))
+  end)
+
   it("builds fixture repos", function()
     local repo = H.repo({ files = { ["a.txt"] = "a\n" } })
     assert.equals("", repo:status())

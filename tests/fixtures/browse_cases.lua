@@ -74,7 +74,7 @@ function M.upstream_script(root)
     else
       table.insert(lines, "silent enew")
     end
-    table.insert(lines, "silent! exe '" .. range .. "GBrowse " .. arg:gsub("'", "''") .. "'")
+    table.insert(lines, "silent! exe '" .. range .. "GBrowse! " .. arg:gsub("'", "''") .. "'")
     table.insert(lines, "let g:result[" .. vim.fn.string(name) .. "] = get(g:captured, 0, v:null)")
   end
   return lines

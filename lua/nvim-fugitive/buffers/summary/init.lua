@@ -135,6 +135,10 @@ end
 ---rest; extmarks are robust against text that looks like a header).
 function M.highlight(buf, info)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    virt_text = { { "(new)", "Comment" } },
+    virt_text_pos = "eol",
+  })
   for lnum, i in ipairs(info) do
     local group
     if i.kind == "diffline" then
@@ -413,7 +417,10 @@ function M.show_help(buftype)
   for _, n in ipairs(names) do
     table.insert(lines, string.format("  %-28s %s", table.concat(keys[n], " "), n:gsub("_", " ")))
   end
-  require("nvim-fugitive.ui.float").show(lines, { title = "Fugitive help", filetype = "fugitivehelp" })
+  require("nvim-fugitive.ui.float").show(
+    lines,
+    { title = "Fugitive help", filetype = "fugitivehelp" }
+  )
 end
 
 return M

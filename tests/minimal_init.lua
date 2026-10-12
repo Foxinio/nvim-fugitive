@@ -11,9 +11,26 @@ vim.opt.shadafile = "NONE"
 vim.opt.more = false
 package.path = root .. "/tests/?.lua;" .. root .. "/tests/?/init.lua;" .. package.path
 
--- Tests run without a live editor client: make sure we never inherit one.
-vim.env.GIT_EDITOR = nil
-vim.env.GIT_SEQUENCE_EDITOR = nil
+-- Keep inherited Git paths, config, hooks and editors out of fixture repositories.
+for name in pairs(vim.fn.environ()) do
+  if name:match("^GIT_") then
+    vim.env[name] = nil
+  end
+end
+vim.env.GIT_CONFIG_NOSYSTEM = "1"
+vim.env.GIT_CONFIG_GLOBAL = "/dev/null"
+vim.env.GIT_TEMPLATE_DIR = ""
+
+-- URL assertions can replace this stub; no test should launch a real browser.
+vim.ui.open = function() end
 
 vim.cmd("runtime plugin/plenary.vim")
+-- PlenaryBustedFile otherwise starts its child with the user's init.lua.
+vim.api.nvim_create_user_command("PlenaryBustedFile", function(opts)
+  require("plenary.test_harness").test_directory(opts.args, {
+    minimal_init = root .. "/tests/minimal_init.lua",
+    sequential = true,
+    timeout = 60000,
+  })
+end, { nargs = 1, complete = "file", force = true })
 vim.cmd("runtime! plugin/fugitive.lua")
