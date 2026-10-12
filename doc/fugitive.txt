@@ -198,6 +198,23 @@ and `:w` in it stage exactly the lines you chose.
                         fugitive:// blobs.
 :Glgrep[!] {args}       Like :Ggrep but always fills the location list.
 
+                                              *:Git_difftool* *:Git_mergetool*
+:Git[!] difftool [args] `git diff [args]` into the quickfix list, one entry
+                        per hunk (per file with --name-only/--name-status),
+                        on the new side: the work tree, the index with
+                        --cached, or the second revision. Jumps to the
+                        first entry unless ! is given.
+:Git difftool -y [args] Open each changed file in a new tab with
+                        |:Gdiffsplit!| against the old side.
+:Git[!] mergetool [paths]
+                        The conflicted files, each at its first conflict
+                        marker. With -y each opens in a tab with the
+                        three-way diff.
+                                                           *:Gcd* *:Glcd*
+:Gcd [directory]        |:cd| relative to the work tree (the top without an
+                        argument).
+:Glcd [directory]       |:lcd| relative to the work tree.
+
                                                           *:Gclog* *:Gllog*
 :Gclog[!] [args]        Load `git log [args]` into the quickfix list and
                         jump to the first commit (not with !). With a
@@ -659,8 +676,7 @@ Deliberate changes:
 - Output goes to notifications or a float instead of temporary buffers.
 - `X` journals every discard and can undo it.
 
-Not implemented yet (backlog): `:Git difftool`/`mergetool`, `:Gcd`,
-`gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
+Not implemented yet (backlog): `gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
 helpers, push error parsing into quickfix, bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without
 gitsigns.

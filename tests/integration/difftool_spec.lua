@@ -1,0 +1,98 @@
+local H = require("helpers")
+local object = require("nvim-fugitive.object")
+
+local function wait_qf()
+  H.wait(function()
+    return #vim.fn.getqflist() > 0
+  end, "quickfix")
+  return vim.fn.getqflist()
+end
+
+describe(":Git difftool / mergetool", function()
+  before_each(function()
+    H.reset_ui()
+    vim.fn.setqflist({}, "r")
+  end)
+
+  it("lists each changed hunk of the work tree", function()
+    local lines = {}
+    for i = 1, 20 do
+      lines[i] = "l" .. i
+    end
+    local repo = H.repo({ files = { ["f"] = table.concat(lines, "\n") .. "\n", ["g"] = "g\n" } })
+    lines[2], lines[18] = "X", "Y"
+    repo:write("f", table.concat(lines, "\n") .. "\n")
+    repo:write("g", "G\n")
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("Git difftool")
+    local qf = wait_qf()
+    assert.equals(3, #qf)
+    assert.equals(repo:path("f"), vim.api.nvim_buf_get_name(qf[1].bufnr))
+    assert.truthy(qf[1].text:match("^@@"))
+    assert.equals(repo:path("f"), vim.api.nvim_buf_get_name(0))
+  end)
+
+  it("--cached targets the index, --name-only lists files", function()
+    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+    repo:write("a", "A\n")
+    repo:git("add", "a")
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("Git! difftool --cached")
+    local qf = wait_qf()
+    assert.equals(1, #qf)
+    assert.equals(
+      object.format(repo.root .. "/.git", "0", "a"),
+      vim.api.nvim_buf_get_name(qf[1].bufnr)
+    )
+    vim.fn.setqflist({}, "r")
+    repo:write("b", "B\n")
+    vim.cmd("Git! difftool --name-only")
+    qf = wait_qf()
+    assert.equals(1, #qf)
+    assert.equals(repo:path("b"), vim.api.nvim_buf_get_name(qf[1].bufnr))
+  end)
+
+  it("-y opens each changed file in a tab with a diff", function()
+    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+    local first = repo:rev("HEAD")
+    repo:commit("change", { ["a"] = "A\n", ["b"] = "B\n" })
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("Git difftool -y " .. first)
+    H.wait(function()
+      return #vim.api.nvim_list_tabpages() == 3
+    end, "tabs")
+    vim.cmd("tabnext 2")
+    local diffs = vim.tbl_filter(function(w)
+      return vim.wo[w].diff
+    end, vim.api.nvim_tabpage_list_wins(0))
+    assert.equals(2, #diffs)
+  end)
+
+  it("mergetool lists conflicts at their first marker", function()
+    local repo = H.repo({ files = { ["c"] = "top\nbase\n" } })
+    repo:git("checkout", "-q", "-b", "topic")
+    repo:commit("topic", { ["c"] = "top\ntheirs\n" })
+    repo:git("checkout", "-q", "main")
+    repo:commit("main", { ["c"] = "top\nours\n" })
+    repo:git("merge", "topic", { allow_fail = true })
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("Git mergetool")
+    local qf = wait_qf()
+    assert.equals(1, #qf)
+    assert.equals(2, qf[1].lnum)
+  end)
+end)
+
+describe(":Gcd / :Glcd", function()
+  it("change directory relative to the work tree", function()
+    H.reset_ui()
+    local repo = H.repo({ files = { ["sub/dir/f"] = "x\n" } })
+    vim.cmd("cd " .. repo:path("sub/dir"))
+    vim.cmd("Gcd")
+    assert.equals(repo.root, vim.fn.getcwd())
+    vim.cmd("Glcd sub")
+    assert.equals(repo:path("sub"), vim.fn.getcwd(0))
+    assert.equals(repo.root, vim.fn.getcwd(-1))
+    assert.same({ "sub/", "sub/dir/" }, require("nvim-fugitive.cmd.complete").dir("s"))
+  end)
+end)

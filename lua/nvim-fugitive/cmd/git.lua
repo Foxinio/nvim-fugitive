@@ -278,6 +278,11 @@ function M.run(args, opts)
   end
   args = M.expand(args, repo)
 
+  -- subcommands fugitive implements itself (! = do not jump, like upstream)
+  if args[1] == "difftool" or args[1] == "mergetool" then
+    local dt = require("nvim-fugitive.cmd.difftool")
+    return dt[args[1]](repo, vim.list_slice(args, 2), { bang = opts.bang })
+  end
   -- fugitive's own pseudo subcommands
   if args[1] == "restore-discard" then
     return require("nvim-fugitive.discard").restore_latest(repo, args[2])

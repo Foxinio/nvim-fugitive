@@ -230,6 +230,27 @@ function M.path(lead)
   return r and M.paths(r, (lead:gsub("^/", ""))) or {}
 end
 
+---Directories of the work tree (for :Gcd).
+function M.dir(lead)
+  local r = repo()
+  if not r then
+    return {}
+  end
+  local out, seen = {}, {}
+  for _, f in ipairs(r:lines({ "ls-files", "--cached", "--deduplicate" }) or {}) do
+    local d = f:match("^(.*)/[^/]*$")
+    while d do
+      if not seen[d] and d:sub(1, #lead) == lead then
+        seen[d] = true
+        table.insert(out, d .. "/")
+      end
+      d = d:match("^(.*)/[^/]*$")
+    end
+  end
+  table.sort(out)
+  return out
+end
+
 ---:GRename: relative to the current file's directory.
 function M.sibling(lead)
   local r = repo()

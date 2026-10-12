@@ -57,6 +57,17 @@ for name, how in pairs({
   })
 end
 
+for name, cd in pairs({ Gcd = "cd", Glcd = "lcd" }) do
+  cmd(name, function(c)
+    require("nvim-fugitive.cmd.difftool").cd(c, cd)
+  end, {
+    nargs = "?",
+    bar = true,
+    complete = complete("dir"),
+    desc = ":" .. cd .. " relative to the work tree",
+  })
+end
+
 for name, loclist in pairs({ Gclog = false, Gllog = true }) do
   cmd(name, function(c)
     require("nvim-fugitive.cmd.log").command(c, loclist)

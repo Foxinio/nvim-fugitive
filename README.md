@@ -25,7 +25,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
   "Foxinio/nvim-fugitive",
   dependencies = { "nvim-lua/plenary.nvim" },
   cmd = { "Git", "G", "Gedit", "Gsplit", "Gvsplit", "Gtabedit", "Gpedit", "Gdrop",
-          "Gread", "Gwrite", "Gwq", "Gclog", "Gllog",
+          "Gread", "Gwrite", "Gwq", "Gclog", "Gllog", "Gcd", "Glcd",
           "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",
           "GMove", "GRename", "GDelete", "GRemove", "GUnlink", "GBrowse",
           "FugitiveOutput", "FugitiveRestore" },
@@ -63,6 +63,7 @@ lazily on first use.
 | `:Git blame` | upstream's scroll-bound side window; `<CR>` jumps to the commit's hunk, `-`/`~`/`P` reblame; `<CR>` in a blob opens the line's commit |
 | Editable index | `:w` in an index buffer stages it; `:Gread`, `:Gwrite`, `:Gwq`; `do`/`dp` + `:w` in a `:Gdiffsplit` stage single hunks |
 | Diffs & conflicts | `:Gdiffsplit` family, upstream 3-way `:Gdiffsplit!` with `d2o`/`d3o`, conflict-marker maps `]x [x co ct cb c0` |
+| `:Git difftool`/`mergetool` | changed hunks or conflicts in quickfix; `-y` opens a diff per file in tabs; plus `:Gcd`/`:Glcd` |
 | `:Gclog`/`:Gllog` | commit history in quickfix/loclist; `:{range}Gclog` follows lines with `git log -L` |
 | `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
 | `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
