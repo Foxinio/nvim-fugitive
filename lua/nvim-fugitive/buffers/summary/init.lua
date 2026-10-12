@@ -160,6 +160,12 @@ function M.highlight(buf, info)
         { line_hl_group = group, priority = 100 }
       )
     end
+    if i.note then
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, 0, {
+        virt_text = { { "(" .. i.note .. ")", "Comment" } },
+        virt_text_pos = "eol",
+      })
+    end
   end
 end
 

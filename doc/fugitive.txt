@@ -39,6 +39,10 @@ exist. Features that are not implemented yet are listed in
 - plenary.nvim.
 - Linux or macOS. Windows and WSL are not supported for now.
 
+Repositories are found from the buffer's file: work trees, linked
+worktrees, submodules, bare repositories, git dirs with `core.worktree`,
+and external git dirs given by $GIT_DIR/$GIT_WORK_TREE (dotfiles setups).
+
 Optional: telescope.nvim, overseer.nvim, gitsigns.nvim, and any plugin
 that renders |vim.notify| (noice.nvim, nvim-notify, ...).
 
@@ -344,6 +348,15 @@ Commit maps ~
   crn  revert --no-commit
   c<Space> cr<Space> cm<Space> cz<Space> co<Space> cb<Space> r<Space>
        put the matching :Git command on the command line
+
+Submodule maps ~
+Submodule entries note their state after the line ("new commits, modified
+content, untracked content"); `=` shows the commits and the submodule's
+own short status. Submodules that are not checked out are listed under
+"Uninitialized submodules".
+  cu          `git submodule update --init` for the submodule under the
+              cursor (every submodule elsewhere)
+  cU          the same with --recursive
 
 Bisect maps ~
 During `git bisect` the summary shows "Bisect: N left to test" and a
@@ -712,8 +725,6 @@ Deliberate changes:
 - Output goes to notifications or a float instead of temporary buffers.
 - `X` journals every discard and can undo it.
 
-Not implemented yet (backlog): bare repositories and
-$GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without
-gitsigns.
+Not implemented yet (backlog): work-tree hunk staging without gitsigns.
 
  vim:tw=78:ts=8:noet:ft=help:norl:

@@ -472,7 +472,8 @@ local function jump_kind(buf, kinds, dir, count)
   return found
 end
 
-local item_kinds = { file = true, commit = true, rebase = true, stash = true, hunk = true }
+local item_kinds =
+  { file = true, commit = true, rebase = true, stash = true, hunk = true, submodule = true }
 
 function M.next_item(buf)
   jump_kind(buf, item_kinds, 1)
@@ -832,6 +833,21 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Commands on the cursor commit
+
+---`-- <path>` of the submodule under the cursor, or {} when not on one.
+---@param buf integer
+---@return string[]
+function M.cursor_submodule(buf)
+  local st = state(buf)
+  local i = st.info[vim.fn.line(".")]
+  if i and i.kind == "submodule" and i.path then
+    return { "--", i.path }
+  end
+  if i and i.entry and i.entry.submodule then
+    return { "--", i.entry.path }
+  end
+  return {}
+end
 
 ---Commit under the cursor (upstream's s:SquashArgument).
 function M.cursor_commit(buf)
@@ -1262,6 +1278,16 @@ function M.actions(buf)
     end,
     rebase_bare = function()
       cmdline("Git rebase\r")
+    end,
+    -- submodules: init/update the one under the cursor (all elsewhere)
+    submodule_update = function()
+      git(buf, vim.list_extend({ "submodule", "update", "--init" }, M.cursor_submodule(buf)))
+    end,
+    submodule_update_recursive = function()
+      git(
+        buf,
+        vim.list_extend({ "submodule", "update", "--init", "--recursive" }, M.cursor_submodule(buf))
+      )
     end,
     -- bisect: on the commit under the cursor, else on HEAD
     bisect_good = function()

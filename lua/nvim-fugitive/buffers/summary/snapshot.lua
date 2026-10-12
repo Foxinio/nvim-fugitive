@@ -32,6 +32,7 @@ local M = {}
 ---@field rebasing {label: string, entries: fugitive.RebaseEntry[]}?
 ---@field sequencing {label: string, entries: fugitive.RebaseEntry[]}?
 ---@field bisecting {label: string, left: string, entries: fugitive.RebaseEntry[]}?
+---@field uninitialized string[]? submodule paths that are not checked out
 ---@field logs fugitive.LogSection[]
 ---@field stashes {ref: string, subject: string}[]
 ---@field stash_diffs table<string, fugitive.FileDiff[]> expanded stash ref -> files
@@ -342,6 +343,22 @@ local function inline_diffs(run, st, expanded)
     for _, p in ipairs(subs) do
       local args = vim.list_extend(vim.deepcopy(base), { "--submodule=log", "--", p })
       local text = run(args).stdout
+      -- dirty content inside the submodule: its own short status
+      local e = entries[section][p]
+      if
+        section == "Unstaged"
+        and e
+        and e.sub
+        and (e.sub:sub(3, 3) == "M" or e.sub:sub(4, 4) == "U")
+      then
+        local inner = run({ "-C", p, "status", "--short" }).stdout or ""
+        if inner ~= "" then
+          text = text
+            .. inner:gsub("[^\n]+", function(l)
+              return "  " .. l
+            end)
+        end
+      end
       diffs[section][p] = {
         path = p,
         header = {},
@@ -378,7 +395,6 @@ end
 ---@return fugitive.Snapshot
 function M.gather(repo, run, expanded)
   ---@type fugitive.Snapshot
-  ---@type fugitive.Snapshot
   local snap = {
     headers = {},
     logs = {},
@@ -388,14 +404,22 @@ function M.gather(repo, run, expanded)
     status = status_mod.parse(""),
     head = "",
   }
-  local res = run(status_mod.args)
-  if res.code ~= 0 then
-    snap.error = require("nvim-fugitive.git.exec").error_text(res)
-    snap.status = status_mod.parse("")
-    snap.head = "?"
-    return snap
+  local st
+  if repo.worktree then
+    local res = run(status_mod.args)
+    if res.code ~= 0 then
+      snap.error = require("nvim-fugitive.git.exec").error_text(res)
+      snap.status = status_mod.parse("")
+      snap.head = "?"
+      return snap
+    end
+    st = status_mod.parse(res.stdout)
+  else
+    -- bare repository: no work tree, no index status (upstream "Bare: yes")
+    st = status_mod.parse("")
+    st.head = repo:head()
+    st.oid = repo:rev_parse("HEAD")
   end
-  local st = status_mod.parse(res.stdout)
   snap.status = st
 
   local branch = st.head
@@ -416,6 +440,9 @@ function M.gather(repo, run, expanded)
   if push_ref ~= pull_ref then
     header("Push", push_short)
   end
+  if not repo.worktree then
+    header("Bare", "yes")
+  end
   local hints = repo:config("advice.statusHints")
   if not (hints and (falsy(hints:lower()) or hints == "no|off")) then
     header("Help", "g?")
@@ -423,6 +450,16 @@ function M.gather(repo, run, expanded)
 
   snap.rebasing = rebase_state(repo, short_head and #short_head or nil)
   snap.sequencing = sequencer_state(repo, run)
+  snap.uninitialized = {}
+  if repo.worktree and vim.uv.fs_stat(repo.worktree .. "/.gitmodules") then
+    for _, l in ipairs(lines_of(run({ "submodule", "status" }))) do
+      -- "-<sha> <path>" for submodules that are not initialized
+      local path = l:match("^%-%x+%s+(%S+)")
+      if path then
+        table.insert(snap.uninitialized, vim.trim(path))
+      end
+    end
+  end
   snap.bisecting = M.bisect_state(repo, run)
   if snap.bisecting then
     -- "Bisect: 5 left" after the Head/Merge/Push lines, before Help

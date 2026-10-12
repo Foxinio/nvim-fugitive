@@ -140,6 +140,9 @@ M.defaults = {
       ["rd"] = "rebase_drop",
       ["r<Space>"] = "rebase_prompt",
       ["r<CR>"] = "rebase_bare",
+      -- submodules
+      ["cu"] = "submodule_update",
+      ["cU"] = "submodule_update_recursive",
       -- bisect
       ["bg"] = "bisect_good",
       ["bb"] = "bisect_bad",

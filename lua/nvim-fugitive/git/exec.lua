@@ -87,9 +87,25 @@ function M.build(args, opts)
   if repo then
     if repo.worktree then
       cwd = cwd or repo.worktree
+      if repo.explicit then
+        -- external git dir (dotfiles, core.worktree): name both
+        vim.list_extend(cmd, { "--git-dir=" .. repo.git_dir, "--work-tree=" .. repo.worktree })
+      end
     else
       table.insert(cmd, "--git-dir=" .. repo.git_dir)
       cwd = cwd or repo.git_dir
+    end
+  end
+  -- never let an inherited repository selection leak into our children
+  for _, var in ipairs({
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+  }) do
+    if env[var] == nil then
+      env[var] = false
     end
   end
   -- translate -c sequence.editor=… etc. into env, keep everything else

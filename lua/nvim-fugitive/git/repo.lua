@@ -16,6 +16,8 @@ local M = {}
 ---@field common_dir string canonical common dir (refs, objects, config)
 ---@field worktree string? canonical work tree (nil for bare repos)
 ---@field is_submodule boolean
+---@field explicit boolean git must be told --git-dir/--work-tree (external git dir)
+---@field bare boolean
 ---@field _config table<string, string[]>?
 local Repo = {}
 Repo.__index = Repo
@@ -109,16 +111,44 @@ function M.new(git_dir, worktree)
   if cd then
     common = realpath(join(git_dir, vim.trim(cd))) or git_dir
   end
+  local bare = false
   if not worktree then
     -- linked worktrees record their checkout in <git_dir>/gitdir
     local gd = read_file(git_dir .. "/gitdir")
+    local core_wt = exec.chomp(
+      { "config", "-f", git_dir .. "/config", "core.worktree" },
+      { raw = true, cwd = git_dir }
+    )
     if gd then
       worktree = realpath(dirname(vim.trim(gd)))
+    elseif core_wt and core_wt ~= "" then
+      worktree = realpath(join(git_dir, core_wt))
     elseif basename(git_dir) == ".git" then
       worktree = realpath(dirname(git_dir))
     else
-      local wt = exec.chomp({ "rev-parse", "--show-toplevel" }, { cwd = git_dir })
-      worktree = wt and wt ~= "" and realpath(wt) or nil
+      local is_bare = exec.chomp(
+        { "config", "-f", git_dir .. "/config", "--bool", "core.bare" },
+        { raw = true, cwd = git_dir }
+      )
+      if is_bare == "true" then
+        bare = true
+      else
+        local wt = exec.chomp({ "rev-parse", "--show-toplevel" }, { cwd = git_dir })
+        worktree = wt and wt ~= "" and realpath(wt) or nil
+      end
+    end
+  end
+  -- git finds the repo from the work tree only through <worktree>/.git
+  local explicit = false
+  if worktree then
+    local dotgit = worktree .. "/.git"
+    local st = uv.fs_stat(dotgit)
+    if not st then
+      explicit = true
+    elseif st.type == "directory" then
+      explicit = realpath(dotgit) ~= git_dir
+    else
+      explicit = resolve_dot_git(worktree) ~= git_dir
     end
   end
   local repo = setmetatable({
@@ -126,6 +156,8 @@ function M.new(git_dir, worktree)
     common_dir = common,
     worktree = worktree,
     is_submodule = git_dir:find("/modules/", 1, true) ~= nil,
+    explicit = explicit,
+    bare = bare,
   }, Repo)
   M._cache[git_dir] = repo
   return repo
@@ -167,12 +199,43 @@ function M.find(path)
     if gd then
       return M.new(gd, dir)
     end
+    if looks_like_git_dir(dir) and uv.fs_stat(dir .. "/refs") then
+      -- a bare repository (or any git dir) entered directly
+      return M.new(realpath(dir) or dir)
+    end
     if dir == "/" then
       break
     end
     dir = dirname(dir)
   end
-  return nil
+  return M.from_env(path)
+end
+
+---An external git dir from $GIT_DIR (+ $GIT_WORK_TREE or core.worktree),
+---e.g. a dotfiles repository, when `path` lies in its work tree.
+---@param path string
+---@return fugitive.Repo?
+function M.from_env(path)
+  local env_dir = vim.env.GIT_DIR
+  if not env_dir or env_dir == "" then
+    return nil
+  end
+  local gd = realpath(env_dir)
+  if not gd or not looks_like_git_dir(gd) then
+    return nil
+  end
+  local wt = vim.env.GIT_WORK_TREE
+      and vim.env.GIT_WORK_TREE ~= ""
+      and realpath(vim.env.GIT_WORK_TREE)
+    or nil
+  local repo = M.new(gd, wt)
+  if repo.worktree then
+    local p = realpath(path) or path
+    if p ~= repo.worktree and p:sub(1, #repo.worktree + 1) ~= repo.worktree .. "/" then
+      return nil
+    end
+  end
+  return repo
 end
 
 ---Repository for a buffer: fugitive:// buffers, regular files, or the cwd for

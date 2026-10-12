@@ -217,6 +217,8 @@ require("nvim-fugitive").setup({
       ["czw"] = "stash_push_keep_index",
       ["czs"] = "stash_push_staged",
       ["czv"] = "stash_view",
+      ["cu"] = "submodule_update",
+      ["cU"] = "submodule_update_recursive",
       ["-"] = "toggle",
       ["u"] = "unstage",
       ["U"] = "unstage_all",

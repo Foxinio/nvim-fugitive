@@ -22,6 +22,8 @@ local M = {}
 ---@field subject? string
 ---@field ref? string stash ref
 ---@field label? string section heading text
+---@field note? string virtual text shown after the line (submodule state)
+---@field path? string submodule path (uninitialized section)
 
 ---Key of an expandable file.
 ---@param section string
@@ -29,6 +31,29 @@ local M = {}
 ---@return string
 function M.expand_key(section, path)
   return section .. "\0" .. path
+end
+
+---State of a submodule entry from its "S<c><m><u>" field, like git status.
+---@param e fugitive.StatusEntry
+---@return string?
+function M.submodule_note(e)
+  if not e.submodule or not e.sub then
+    return nil
+  end
+  local parts = {}
+  if e.sub:sub(2, 2) == "C" then
+    table.insert(parts, "new commits")
+  end
+  if e.sub:sub(3, 3) == "M" then
+    table.insert(parts, "modified content")
+  end
+  if e.sub:sub(4, 4) == "U" then
+    table.insert(parts, "untracked content")
+  end
+  if #parts == 0 then
+    return nil
+  end
+  return table.concat(parts, ", ")
 end
 
 ---@param snap fugitive.Snapshot
@@ -125,7 +150,10 @@ function M.render(snap, expanded)
     end
     section(name, name, #list)
     for _, e in ipairs(list) do
-      add(status_mod.format(e), { kind = "file", section = name, entry = e })
+      add(
+        status_mod.format(e),
+        { kind = "file", section = name, entry = e, note = M.submodule_note(e) }
+      )
       add_diff(name, e)
     end
   end
@@ -133,6 +161,13 @@ function M.render(snap, expanded)
   file_section("Untracked", st.untracked)
   file_section("Unstaged", st.unstaged)
   file_section("Staged", st.staged)
+
+  if snap.uninitialized and #snap.uninitialized > 0 then
+    section("Uninitialized", "Uninitialized submodules", #snap.uninitialized)
+    for _, p in ipairs(snap.uninitialized) do
+      add("- " .. p, { kind = "submodule", section = "Uninitialized", path = p, note = "cu: init" })
+    end
+  end
 
   for _, log in ipairs(snap.logs) do
     section(log.key, log.label, #log.entries, log.overflow and "+" or "")
