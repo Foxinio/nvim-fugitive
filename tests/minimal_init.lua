@@ -20,9 +20,24 @@ end
 vim.env.GIT_CONFIG_NOSYSTEM = "1"
 vim.env.GIT_CONFIG_GLOBAL = "/dev/null"
 vim.env.GIT_TEMPLATE_DIR = ""
+-- never prompt for credentials or start helpers that talk to the desktop
+vim.env.GIT_TERMINAL_PROMPT = "0"
+vim.env.GIT_ASKPASS = "true"
+vim.env.SSH_ASKPASS = "true"
+vim.env.BROWSER = "true"
+
+-- A private HOME/XDG tree: no user git config, credential store or pager.
+local home = vim.fn.tempname() .. "-home"
+vim.fn.mkdir(home .. "/config", "p")
+vim.env.HOME = home
+vim.env.XDG_CONFIG_HOME = home .. "/config"
 
 -- URL assertions can replace this stub; no test should launch a real browser.
-vim.ui.open = function() end
+-- Every attempt is recorded so tests can assert on it.
+_G.fugitive_test_opened = {}
+vim.ui.open = function(url)
+  table.insert(_G.fugitive_test_opened, url)
+end
 
 vim.cmd("runtime plugin/plenary.vim")
 -- PlenaryBustedFile otherwise starts its child with the user's init.lua.

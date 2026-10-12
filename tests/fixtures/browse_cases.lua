@@ -104,7 +104,8 @@ function M.ours(root)
     else
       vim.cmd("enew")
     end
-    pcall(vim.cmd, range .. "GBrowse " .. arg)
+    -- ! copies instead of opening: the dict passed to handlers is identical
+    pcall(vim.cmd, range .. "GBrowse! " .. arg)
     captured[name] = vim.g.fugitive_test_captured[1] or vim.NIL
   end
   vim.notify = orig

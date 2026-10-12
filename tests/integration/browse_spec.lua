@@ -49,17 +49,14 @@ describe(":GBrowse", function()
     local repo = B.setup()
     vim.cmd("cd " .. repo.root)
     vim.cmd("edit " .. vim.fn.fnameescape(repo:path("dir/other.txt")))
-    local orig_open = vim.ui.open
-    local opened
-    vim.ui.open = function(url)
-      opened = url
-    end
+    local before = #_G.fugitive_test_opened
     local log, restore = H.capture_notify()
     vim.cmd("GBrowse")
     vim.cmd("1GBrowse!")
     restore()
-    vim.ui.open = orig_open
-    assert.equals("https://github.com/user/repo/blob/main/dir/other.txt", opened)
+    -- the plain call went to the (stubbed) opener, the ! call did not
+    assert.equals(before + 1, #_G.fugitive_test_opened)
+    assert.equals("https://github.com/user/repo/blob/main/dir/other.txt", _G.fugitive_test_opened[#_G.fugitive_test_opened])
     -- a range pins the URL to a commit
     assert.equals(
       "https://github.com/user/repo/blob/" .. repo:rev("HEAD") .. "/dir/other.txt#L1",

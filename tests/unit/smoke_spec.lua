@@ -14,7 +14,16 @@ describe("test harness", function()
   it("replaces the desktop URL opener in the test init", function()
     local source = debug.getinfo(vim.ui.open, "S").source
     assert.truthy(source:match("tests/minimal_init%.lua$"))
+    local before = #_G.fugitive_test_opened
     assert.is_nil(vim.ui.open("https://example.com"))
+    assert.equals(before + 1, #_G.fugitive_test_opened)
+  end)
+
+  it("runs with a private HOME and no askpass or browser helpers", function()
+    assert.truthy(vim.env.HOME:match("%-home$"))
+    assert.equals("true", vim.env.BROWSER)
+    assert.equals("true", vim.env.GIT_ASKPASS)
+    assert.equals("0", vim.env.GIT_TERMINAL_PROMPT)
   end)
 
   it("builds fixture repos", function()

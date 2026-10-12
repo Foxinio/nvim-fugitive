@@ -45,6 +45,11 @@ function M.run_upstream(cwd, lines)
       "-n",
       "-i",
       "NONE",
+      -- upstream must never reach a real browser either
+      "--cmd",
+      "lua vim.ui.open = function() end",
+      "--cmd",
+      "let g:netrw_browsex_viewer = 'true' | command! -nargs=* Browse echo <q-args>",
       "--cmd",
       "set rtp^=" .. M.upstream(),
       "--cmd",
@@ -54,7 +59,8 @@ function M.run_upstream(cwd, lines)
     }, {
       cwd = cwd,
       text = true,
-      env = { GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1" },
+      -- inherits the hermetic HOME/BROWSER/askpass environment of the test init
+      env = { GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1", BROWSER = "true" },
     })
     :wait(30000)
   local f = io.open(out)
