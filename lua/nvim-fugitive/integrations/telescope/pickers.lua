@@ -58,7 +58,7 @@ local function map_actions(map, list)
   end
 end
 
----@param opts? {repo?: fugitive.Repo, args?: string[], prompt_title?: string, on_select?: fun(c: table), origin_buf?: integer}
+---@param opts? {repo?: fugitive.Repo, args?: string[], prompt_title?: string, on_select?: fun(c: table), origin_buf?: integer, path?: string, lnum?: integer}
 function M.log(opts)
   opts = opts or {}
   local repo = base.get_repo(opts.repo)
@@ -93,7 +93,11 @@ function M.log(opts)
       }),
       sorter = conf.generic_sorter(opts),
       previewer = command_previewer(repo, "git show", function(e)
-        return { "show", "--stat", "-p", "--no-color", e.value.sha }
+        local args = { "show", "--stat", "-p", "--no-color", e.value.sha }
+        if opts.path then
+          vim.list_extend(args, { "--", opts.path })
+        end
+        return args
       end),
       attach_mappings = function(prompt_bufnr, map)
         actions.select_default:replace(function()
@@ -103,6 +107,15 @@ function M.log(opts)
           end
           if opts.on_select then
             return opts.on_select(c)
+          end
+          if opts.path then
+            -- history pickers: the file as it was in that commit
+            require("nvim-fugitive.buffers.reader").open(
+              object.format(repo.git_dir, c.sha, opts.path),
+              "edit",
+              opts.lnum
+            )
+            return
           end
           require("nvim-fugitive.buffers.reader").open(object.format(repo.git_dir, c.sha), "edit")
         end)
@@ -384,6 +397,47 @@ function M.stash(opts)
       end,
     })
     :find()
+end
+
+---History of the current file (`git log --follow`).
+---@param opts? table
+function M.file_history(opts)
+  opts = vim.tbl_extend("force", {}, opts or {})
+  local ctx = require("nvim-fugitive.integrations.telescope").history_context(opts)
+  if not ctx then
+    return
+  end
+  opts.repo, opts.path = ctx.repo, ctx.path
+  opts.args = { "--follow", "--", ctx.path }
+  opts.prompt_title = opts.prompt_title or ("History of " .. ctx.path)
+  return M.log(opts)
+end
+
+---History of a line range of the current file (`git log -L`); the range
+---is the Visual selection or the cursor line.
+---@param opts? table
+function M.line_history(opts)
+  opts = vim.tbl_extend("force", {}, opts or {})
+  local ctx = require("nvim-fugitive.integrations.telescope").history_context(opts)
+  if not ctx then
+    return
+  end
+  opts.repo, opts.path, opts.lnum = ctx.repo, ctx.path, ctx.line1
+  opts.args = { "-s", "-L", ctx.line1 .. "," .. ctx.line2 .. ":" .. ctx.path }
+  vim.list_extend(opts.args, ctx.rev and { ctx.rev } or {})
+  opts.prompt_title = opts.prompt_title
+    or string.format("History of %s:%d-%d", ctx.path, ctx.line1, ctx.line2)
+  return M.log(opts)
+end
+
+---The commits of the cursor line, newest (the blamed one) first.
+---@param opts? table
+function M.blame_line(opts)
+  opts = vim.tbl_extend("force", {}, opts or {})
+  local line = vim.fn.line(".")
+  opts.line1, opts.line2 = line, line
+  opts.prompt_title = opts.prompt_title or ("Blame line " .. line)
+  return M.line_history(opts)
 end
 
 ---:Ggrep results.

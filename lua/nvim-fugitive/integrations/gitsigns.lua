@@ -2,8 +2,7 @@
 ---
 ---When gitsigns is present we reuse its hunk data for work-tree hunk
 ---navigation/staging and refresh it after our mutating operations. Without
----it, work-tree hunk maps say "requires gitsigns.nvim"; staging still works
----fully from the summary buffer.
+---it the same actions use our own hunks (nvim-fugitive.hunks).
 
 local M = {}
 
@@ -33,45 +32,44 @@ function M.refresh()
   end
 end
 
-local function unavailable(what)
-  require("nvim-fugitive.ui.notify").warn(what .. " requires gitsigns.nvim")
-end
+-- Without gitsigns the built-in hunks (lua/nvim-fugitive/hunks.lua) take
+-- over: same actions, computed against the index on demand.
 
 ---Delegated work-tree hunk actions.
 M.actions = {
   next_hunk = function()
-    local gs = M.get()
-    if not gs then
-      return unavailable("]c")
-    end
     if vim.wo.diff then
-      return vim.cmd("normal! ]c")
+      return vim.cmd("normal! " .. vim.v.count1 .. "]c")
     end
-    gs.nav_hunk("next")
+    local gs = M.get()
+    if gs and gs.nav_hunk then
+      return gs.nav_hunk("next")
+    end
+    require("nvim-fugitive.hunks").jump(1)
   end,
   prev_hunk = function()
-    local gs = M.get()
-    if not gs then
-      return unavailable("[c")
-    end
     if vim.wo.diff then
-      return vim.cmd("normal! [c")
+      return vim.cmd("normal! " .. vim.v.count1 .. "[c")
     end
-    gs.nav_hunk("prev")
+    local gs = M.get()
+    if gs and gs.nav_hunk then
+      return gs.nav_hunk("prev")
+    end
+    require("nvim-fugitive.hunks").jump(-1)
   end,
   stage_hunk = function()
     local gs = M.get()
-    if not gs then
-      return unavailable("stage hunk")
+    if gs and gs.stage_hunk then
+      return gs.stage_hunk()
     end
-    gs.stage_hunk()
+    require("nvim-fugitive.hunks").stage()
   end,
   reset_hunk = function()
     local gs = M.get()
-    if not gs then
-      return unavailable("reset hunk")
+    if gs and gs.reset_hunk then
+      return gs.reset_hunk()
     end
-    gs.reset_hunk()
+    require("nvim-fugitive.hunks").reset()
   end,
 }
 

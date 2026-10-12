@@ -155,6 +155,109 @@ function M.ref_argument(trigger, r)
   return r.name
 end
 
+---Repo, path, line range and revision of the current buffer for the
+---history pickers.
+---@param opts? {line1?: integer, line2?: integer}
+---@return {repo: fugitive.Repo, path: string, line1: integer, line2: integer, rev?: string}?
+function M.history_context(opts)
+  opts = opts or {}
+  local buf = vim.api.nvim_get_current_buf()
+  local repo = require("nvim-fugitive.git.repo").for_buf(buf)
+  if not repo then
+    require("nvim-fugitive.ui.notify").error("not a git repository")
+    return nil
+  end
+  local object = require("nvim-fugitive.object")
+  local path = object.buf_rel(buf, repo)
+  if not path or path == "" then
+    require("nvim-fugitive.ui.notify").error("not a file in the repository")
+    return nil
+  end
+  local line1, line2 = opts.line1, opts.line2
+  if not line1 then
+    local mode = vim.api.nvim_get_mode().mode
+    if mode:match("^[vV\22]") then
+      line1, line2 = vim.fn.line("v"), vim.fn.line(".")
+      if line1 > line2 then
+        line1, line2 = line2, line1
+      end
+    else
+      line1 = vim.fn.line(".")
+      line2 = line1
+    end
+  end
+  local obj = object.parse(vim.api.nvim_buf_get_name(buf))
+  local rev = obj and obj.commit:match("^%x+$") and #obj.commit >= 40 and obj.commit or nil
+  return { repo = repo, path = path, line1 = line1, line2 = line2 or line1, rev = rev }
+end
+
+---Run a picker by name: telescope when available, vim.ui.select otherwise.
+---@param name "log"|"refs"|"stash"|"file_history"|"line_history"|"blame_line"
+---@param opts? table
+function M.pick(name, opts)
+  opts = opts or {}
+  if M.available() then
+    return require("nvim-fugitive.integrations.telescope.pickers")[name](opts)
+  end
+  local reader = require("nvim-fugitive.buffers.reader")
+  local object = require("nvim-fugitive.object")
+  if name == "refs" then
+    local repo = get_repo(opts.repo)
+    if not repo then
+      return
+    end
+    return M.input(repo, { picker = "refs", sub = "checkout", args = { "checkout" } }, function(ref)
+      require("nvim-fugitive.cmd.git").run({ "checkout", ref }, { repo = repo, skip_picker = true })
+    end)
+  elseif name == "stash" then
+    local repo = get_repo(opts.repo)
+    if not repo then
+      return
+    end
+    return vim.ui.select(M.list_stash(repo), {
+      prompt = "Apply stash",
+      format_item = function(s)
+        return s.ref .. " " .. s.subject
+      end,
+    }, function(s)
+      if s then
+        require("nvim-fugitive.cmd.git").run({ "stash", "apply", s.ref }, { repo = repo })
+      end
+    end)
+  end
+  local repo, args, path, lnum
+  if name == "log" then
+    repo = get_repo(opts.repo)
+    args = {}
+  else
+    local ctx = M.history_context(
+      name == "blame_line" and { line1 = vim.fn.line("."), line2 = vim.fn.line(".") } or opts
+    )
+    if not ctx then
+      return
+    end
+    repo, path, lnum = ctx.repo, ctx.path, ctx.line1
+    if name == "file_history" then
+      args = { "--follow", "--", path }
+    else
+      args = { "-s", "-L", ctx.line1 .. "," .. ctx.line2 .. ":" .. path }
+    end
+  end
+  if not repo then
+    return
+  end
+  vim.ui.select(M.list_log(repo, args), {
+    prompt = name:gsub("_", " "),
+    format_item = function(c)
+      return c.short .. " " .. c.date .. " " .. c.subject
+    end,
+  }, function(c)
+    if c then
+      reader.open(object.format(repo.git_dir, c.sha, path), "edit", lnum)
+    end
+  end)
+end
+
 ---:Ggrep results picker. `<C-q>` (telescope default) sends to quickfix.
 ---@param items table[] quickfix items
 ---@param opts {title: string}

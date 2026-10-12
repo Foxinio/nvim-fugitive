@@ -29,6 +29,24 @@ for _, name in ipairs({ "Git", "G" }) do
   )
 end
 
+cmd("FugitivePick", function(c)
+  local name = c.args ~= "" and c.args or "log"
+  local opts = {}
+  if c.range > 0 then
+    opts.line1, opts.line2 = c.line1, c.line2
+  end
+  require("nvim-fugitive.integrations.telescope").pick(name, opts)
+end, {
+  nargs = "?",
+  range = true,
+  complete = function(lead)
+    return vim.tbl_filter(function(n)
+      return n:sub(1, #lead) == lead
+    end, { "log", "refs", "stash", "file_history", "line_history", "blame_line" })
+  end,
+  desc = "Pick from git history (telescope or vim.ui.select)",
+})
+
 cmd("FugitiveOutput", function(c)
   require("nvim-fugitive.ui.output").show(tonumber(c.args), c.mods)
 end, { nargs = "?", desc = "Show the full output of a recent git command" })

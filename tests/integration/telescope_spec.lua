@@ -208,6 +208,103 @@ describe("picker fallbacks without telescope", function()
   end)
 end)
 
+describe("history pickers", function()
+  before_each(function()
+    H.reset_ui()
+  end)
+
+  local function history_repo()
+    local repo = H.repo({ files = { ["f"] = "1\n2\n3\n" } })
+    repo:commit("change line 2", { ["f"] = "1\nTWO\n3\n" })
+    repo:commit("other file", { ["g"] = "g\n" })
+    vim.cmd("cd " .. repo.root)
+    return repo
+  end
+
+  it("file_history and line_history list the right commits", function()
+    if not has_telescope then
+      return
+    end
+    local repo = history_repo()
+    vim.cmd("edit f")
+    vim.cmd("Telescope fugitive file_history")
+    local p, bufnr = picker()
+    assert.equals(2, #p.finder.results)
+    require("telescope.actions").close(bufnr)
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.cmd("Telescope fugitive blame_line")
+    p, bufnr = picker()
+    assert.equals("change line 2", p.finder.results[1].value.subject)
+    select(p, bufnr, function(v)
+      return v.subject == "change line 2"
+    end, require("telescope.actions").select_default)
+    H.wait(function()
+      return vim.api.nvim_buf_get_name(0):match("//%x+/f$") ~= nil
+    end, "blob at commit")
+    assert.equals(2, vim.fn.line("."))
+    local _ = repo
+  end)
+
+  it(":FugitivePick falls back to vim.ui.select", function()
+    require("nvim-fugitive").setup({ integrations = { telescope = false } })
+    local repo = history_repo()
+    vim.cmd("edit f")
+    local orig = vim.ui.select
+    local offered
+    vim.ui.select = function(items, opts, cb)
+      offered = vim.tbl_map(opts.format_item, items)
+      cb(items[#items])
+    end
+    vim.cmd("FugitivePick file_history")
+    vim.ui.select = orig
+    require("nvim-fugitive").setup({})
+    assert.equals(2, #offered)
+    assert.truthy(vim.api.nvim_buf_get_name(0):match("//" .. repo:rev("HEAD~2") .. "/f$"))
+  end)
+end)
+
+describe("work-tree hunks without gitsigns", function()
+  before_each(function()
+    H.reset_ui()
+    package.preload.gitsigns = function()
+      error("not installed")
+    end
+  end)
+  after_each(function()
+    package.preload.gitsigns = nil
+  end)
+
+  it("jumps, stages and resets hunks of the buffer against the index", function()
+    local lines = {}
+    for i = 1, 20 do
+      lines[i] = "l" .. i
+    end
+    local repo = H.repo({ files = { ["f"] = table.concat(lines, "\n") .. "\n" } })
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("edit f")
+    vim.api.nvim_buf_set_lines(0, 2, 3, false, { "THREE" })
+    vim.api.nvim_buf_set_lines(0, 15, 16, false, { "SIXTEEN", "extra" })
+    local actions = require("nvim-fugitive.integrations.gitsigns").actions
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    actions.next_hunk()
+    assert.equals(3, vim.fn.line("."))
+    actions.next_hunk()
+    assert.equals(16, vim.fn.line("."))
+    actions.prev_hunk()
+    assert.equals(3, vim.fn.line("."))
+    -- stage the first hunk: the unsaved buffer's version goes to the index
+    actions.stage_hunk()
+    local staged = repo:git("diff", "--cached")
+    assert.truthy(staged:match("%+THREE"))
+    assert.falsy(staged:match("SIXTEEN"))
+    -- reset the second hunk in the buffer
+    vim.api.nvim_win_set_cursor(0, { 16, 0 })
+    actions.reset_hunk()
+    assert.equals("l16", vim.api.nvim_buf_get_lines(0, 15, 16, false)[1])
+    assert.equals(20, vim.api.nvim_buf_line_count(0))
+  end)
+end)
+
 describe("gitsigns integration", function()
   before_each(function()
     H.reset_ui()
@@ -236,7 +333,7 @@ describe("gitsigns integration", function()
     local _ = log
   end)
 
-  it("delegates work-tree hunk actions, or says it requires gitsigns", function()
+  it("delegates work-tree hunk actions to gitsigns when present", function()
     local staged = false
     package.loaded.gitsigns = {
       stage_hunk = function()
@@ -246,16 +343,6 @@ describe("gitsigns integration", function()
     local gs = require("nvim-fugitive.integrations.gitsigns")
     gs.actions.stage_hunk()
     assert.is_true(staged)
-    package.loaded.gitsigns = nil
-    package.preload.gitsigns = function()
-      error("not installed")
-    end
-    local log, restore = H.capture_notify()
-    gs.actions.stage_hunk()
-    gs.actions.next_hunk()
-    restore()
-    assert.equals(2, #log)
-    assert.truthy(log[1].msg:match("requires gitsigns%.nvim"))
   end)
 
   it("work-tree maps are opt-in and honour g:fugitive_no_maps", function()
