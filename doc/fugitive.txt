@@ -666,6 +666,31 @@ Lua: >lua
 <
 `b:git_dir` is set in every buffer fugitive has resolved a repository for.
 
+                                        *fugitive-vimscript-api* *FugitiveHead()*
+Upstream's Vimscript functions exist for plugins written against
+vim-fugitive: FugitiveGitDir(), FugitiveWorkTree(), FugitiveCommonDir(),
+FugitiveHead([len]), FugitiveStatusline(), FugitiveFind(), FugitiveParse(),
+FugitiveReal(), FugitivePath(), FugitiveExtractGitDir(),
+FugitiveConfigGet(), FugitiveConfigGetAll(), FugitiveRemoteUrl(),
+FugitiveExecute(args [, dir] [, callback]), FugitiveResult(),
+FugitiveShellCommand(), FugitiveGitVersion(), FugitiveDidChange(), and
+fugitive#Head(), fugitive#Statusline(), fugitive#Find(), fugitive#Real().
+
+                                                     *FugitiveStatusline()*
+For a statusline: `%{FugitiveStatusline()}` shows `[Git(main)]`, or
+`[Git:1a2b3c4(main)]` in an object buffer.
+
+User events, like upstream: FugitiveIndex (summary loaded), FugitiveObject
+(any fugitive:// buffer read), FugitiveCommit, FugitiveTree, FugitiveBlob,
+FugitiveTag (by object type), FugitivePager (pager output), FugitiveEditor
+and FugitiveChanged.
+
+                                                              *fugitive-gf*
+In the summary and in commit, tree and pager buffers, `gf`, `<C-W>f`,
+`<C-W><C-F>` and `<C-W>gf` open the object under the cursor (in place, in a
+split, in a tab), and <C-R><C-F> on the command line inserts its name.
+Disabled with |g:fugitive_no_maps|.
+
 ==============================================================================
 14. DIFFERENCES FROM VIM-FUGITIVE                         *fugitive-differences*
 
@@ -676,8 +701,7 @@ Deliberate changes:
 - Output goes to notifications or a float instead of temporary buffers.
 - `X` journals every discard and can undo it.
 
-Not implemented yet (backlog): `gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
-helpers, push error parsing into quickfix, bare repositories and
+Not implemented yet (backlog): bisect helpers, push error parsing into quickfix, bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without
 gitsigns.
 

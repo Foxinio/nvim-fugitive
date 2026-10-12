@@ -166,6 +166,95 @@ end, {
   desc = "Open the current object on the hosting provider",
 })
 
+-- Upstream's Vimscript API (FugitiveGitDir(), FugitiveHead(), …), backed by
+-- lua/nvim-fugitive/api.lua, so plugins written for vim-fugitive work.
+vim.cmd([[
+  function! FugitiveGitDir(...) abort
+    return v:lua.require'nvim-fugitive.api'.git_dir(get(a:, 1, v:null))
+  endfunction
+  function! FugitiveWorkTree(...) abort
+    return v:lua.require'nvim-fugitive.api'.work_tree(get(a:, 1, v:null))
+  endfunction
+  function! FugitiveCommonDir(...) abort
+    return v:lua.require'nvim-fugitive.api'.common_dir(get(a:, 1, v:null))
+  endfunction
+  function! FugitiveActualDir(...) abort
+    return v:lua.require'nvim-fugitive.api'.git_dir(get(a:, 1, v:null))
+  endfunction
+  function! FugitiveIsGitDir(...) abort
+    return v:lua.require'nvim-fugitive.api'.is_git_dir(get(a:, 1, ''))
+  endfunction
+  function! FugitiveExtractGitDir(path) abort
+    return v:lua.require'nvim-fugitive.api'.extract_git_dir(a:path)
+  endfunction
+  function! FugitiveHead(...) abort
+    if a:0 && (type(a:1) ==# type({}) || type(a:1) ==# type('') && a:1 !~# '^\d\+$')
+      return v:lua.require'nvim-fugitive.api'.head(get(a:, 2, 0), a:1)
+    elseif a:0 > 1
+      return v:lua.require'nvim-fugitive.api'.head(a:1, a:2)
+    endif
+    return v:lua.require'nvim-fugitive.api'.head(get(a:, 1, 0), v:null)
+  endfunction
+  function! FugitiveStatusline(...) abort
+    return v:lua.require'nvim-fugitive.api'.statusline()
+  endfunction
+  function! FugitiveFind(...) abort
+    return v:lua.require'nvim-fugitive.api'.find(get(a:, 1, ''), get(a:, 2, v:null))
+  endfunction
+  function! FugitiveParse(...) abort
+    return v:lua.require'nvim-fugitive.api'.parse(get(a:, 1, bufname('')))
+  endfunction
+  function! FugitiveReal(...) abort
+    return v:lua.require'nvim-fugitive.api'.real(get(a:, 1, bufname('')))
+  endfunction
+  function! FugitivePath(...) abort
+    return v:lua.require'nvim-fugitive.api'.path(get(a:, 1, bufname('')), get(a:, 2, v:null), get(a:, 3, v:null))
+  endfunction
+  function! FugitiveConfigGet(name, ...) abort
+    return v:lua.require'nvim-fugitive.api'.config_get(a:name, get(a:, 1, v:null))
+  endfunction
+  function! FugitiveConfigGetAll(name, ...) abort
+    return v:lua.require'nvim-fugitive.api'.config_get_all(a:name, get(a:, 1, v:null))
+  endfunction
+  function! FugitiveRemoteUrl(...) abort
+    return v:lua.require'nvim-fugitive.api'.remote_url(get(a:, 1, ''), get(a:, 2, v:null))
+  endfunction
+  let g:fugitive_execute_callbacks = {}
+  let s:execute_id = 0
+  function! FugitiveExecute(args, ...) abort
+    let rest = copy(a:000)
+    let id = v:null
+    if len(rest) && type(rest[-1]) == type(function('tr'))
+      let s:execute_id += 1
+      let id = s:execute_id
+      let g:fugitive_execute_callbacks[id] = remove(rest, -1)
+    endif
+    return v:lua.require'nvim-fugitive.api'.execute(a:args, get(rest, 0, v:null), id)
+  endfunction
+  function! FugitiveExecuteDone(id, result) abort
+    let Cb = remove(g:fugitive_execute_callbacks, a:id)
+    return call(Cb, [a:result])
+  endfunction
+  function! FugitiveResult(...) abort
+    return v:lua.require'nvim-fugitive.api'.result()
+  endfunction
+  function! FugitiveShellCommand(...) abort
+    return v:lua.require'nvim-fugitive.api'.shell_command(get(a:, 1, []), get(a:, 2, v:null))
+  endfunction
+  function! FugitiveGitVersion(...) abort
+    return v:lua.require'nvim-fugitive.api'.git_version(a:000)
+  endfunction
+  function! FugitiveDidChange(...) abort
+    return v:lua.require'nvim-fugitive.api'.did_change(get(a:, 1, v:null))
+  endfunction
+  function! FugitiveDetect(...) abort
+    return v:lua.require'nvim-fugitive.api'.git_dir(get(a:, 1, v:null))
+  endfunction
+  function! FugitiveGitPath(path) abort
+    return a:path
+  endfunction
+]])
+
 local group = vim.api.nvim_create_augroup("fugitive", { clear = true })
 
 vim.api.nvim_create_autocmd("BufReadCmd", {

@@ -338,6 +338,7 @@ function M.setup_buffer(buf, repo)
     end,
   })
   require("nvim-fugitive.watch").watch(repo)
+  require("nvim-fugitive.api").event("FugitiveIndex", buf)
   for _, win in ipairs(vim.fn.win_findbuf(buf)) do
     M.setup_window(win)
   end

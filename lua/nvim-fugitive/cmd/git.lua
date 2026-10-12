@@ -260,6 +260,7 @@ function M.run_float(repo, args, opts)
   vim.b[buf].fugitive_running = true
   vim.b[buf].git_dir = repo.git_dir
   require("nvim-fugitive.buffers.reader").setup_pager(buf, repo)
+  require("nvim-fugitive.api").event("FugitivePager", buf)
   return job
 end
 

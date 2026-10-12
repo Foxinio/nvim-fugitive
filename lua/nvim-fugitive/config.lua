@@ -70,6 +70,10 @@ M.defaults = {
       ["g?"] = "help",
       ["<F1>"] = "help",
       ["R"] = "reload",
+      ["gf"] = "cfile_edit",
+      ["<C-W>f"] = "cfile_split",
+      ["<C-W><C-F>"] = "cfile_split",
+      ["<C-W>gf"] = "cfile_tab",
       ["."] = "cmdline",
       -- diff
       ["dd"] = "diff",
@@ -156,6 +160,10 @@ M.defaults = {
       ["C"] = "containing_commit",
       ["-"] = "navigate_up",
       ["."] = "cmdline",
+      ["gf"] = "cfile_edit",
+      ["<C-W>f"] = "cfile_split",
+      ["<C-W><C-F>"] = "cfile_split",
+      ["<C-W>gf"] = "cfile_tab",
     },
     -- the :Git blame side window
     blame = {

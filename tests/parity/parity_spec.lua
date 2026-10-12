@@ -200,6 +200,48 @@ describe("parity with upstream vim-fugitive", function()
     end
   end)
 
+  it("the Vimscript API answers like upstream", function()
+    if skip() then
+      return
+    end
+    local repo = P.repo({ ["dir/f.txt"] = "1\n" })
+    P.commit(repo, "second", { ["dir/f.txt"] = "2\n" })
+    repo:git("remote", "add", "origin", "https://example.com/r.git")
+    local sha = repo:rev("HEAD")
+    local blob = "fugitive://" .. repo.root .. "/.git//" .. sha .. "/dir/f.txt"
+    local exprs = {
+      "FugitiveGitDir()",
+      "FugitiveWorkTree()",
+      "FugitiveHead()",
+      "FugitiveHead(7)",
+      "FugitiveHead(-1)",
+      "FugitiveStatusline()",
+      "FugitiveConfigGet('user.name')",
+      "FugitiveRemoteUrl('origin')",
+      "FugitiveFind(':0:dir/f.txt')",
+      "FugitiveFind('@:dir/f.txt')",
+      "FugitiveReal()",
+      "FugitiveExtractGitDir(expand('%:p'))",
+      "fugitive#Head(7)",
+    }
+    local function script(file)
+      local lines = { "edit " .. vim.fn.fnameescape(file), "let g:result = {}" }
+      for _, e in ipairs(exprs) do
+        table.insert(lines, "let g:result[" .. vim.fn.string(e) .. "] = " .. e)
+      end
+      return lines
+    end
+    for _, file in ipairs({ "dir/f.txt", blob }) do
+      local upstream = P.run_upstream(repo.root, script(file))
+      H.reset_ui()
+      vim.cmd("cd " .. repo.root)
+      vim.cmd("edit " .. vim.fn.fnameescape(file))
+      for _, e in ipairs(exprs) do
+        assert.equals(upstream[e], vim.fn.eval(e), file .. ": " .. e)
+      end
+    end
+  end)
+
   it(":Git blame window text", function()
     if skip() then
       return

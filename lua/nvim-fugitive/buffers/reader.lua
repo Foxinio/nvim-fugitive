@@ -182,6 +182,14 @@ function M.read(buf)
       notify.warn("filetype " .. filetype .. ": " .. tostring(ft_err))
     end
   end
+  -- upstream's User events for extensions
+  local api = require("nvim-fugitive.api")
+  api.event("FugitiveObject", buf)
+  local per_type =
+    { commit = "FugitiveCommit", tree = "FugitiveTree", blob = "FugitiveBlob", tag = "FugitiveTag" }
+  if per_type[ftype] then
+    api.event(per_type[ftype], buf)
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -352,6 +360,7 @@ local item_pattern = [[\v^(diff |commit \x|\x{7,} |\@\@)]]
 ---@param buf integer
 ---@param repo fugitive.Repo
 function M.actions(buf, repo)
+  local cfile = require("nvim-fugitive.maps").cfile_actions(buf)
   local function open(how)
     return function()
       local target, lnum = M.target_under_cursor(buf, repo)
@@ -363,6 +372,9 @@ function M.actions(buf, repo)
     end
   end
   return {
+    cfile_edit = cfile.cfile_edit,
+    cfile_split = cfile.cfile_split,
+    cfile_tab = cfile.cfile_tab,
     open = open("edit"),
     open_split = open("split"),
     open_vsplit = open("vsplit"),

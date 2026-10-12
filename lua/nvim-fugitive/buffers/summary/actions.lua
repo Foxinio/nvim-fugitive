@@ -1264,6 +1264,9 @@ function M.actions(buf)
       cmdline("Git rebase\r")
     end,
   }
+  for name, fn in pairs(require("nvim-fugitive.maps").cfile_actions(buf)) do
+    a[name] = fn
+  end
   return a
 end
 

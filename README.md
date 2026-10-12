@@ -69,6 +69,7 @@ lazily on first use.
 | `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
 | `:GBrowse` | upstream-identical handler dict (vim-rhubarb, fugitive-gitlab keep working), built-in GitHub/GitLab/Bitbucket/Gitea/Forgejo/Codeberg/sourcehut providers, custom hosts |
 | Pickers | `:Telescope fugitive log` / `refs` / `stash`; picker input for a bare `:Git checkout`, `switch`, `merge` or `rebase` |
+| Vimscript API | `FugitiveHead()`, `FugitiveStatusline()`, `FugitiveGitDir()`, `FugitiveFind()`, `FugitiveExecute()`, … and upstream's `User` events, so plugins written for vim-fugitive keep working; `gf` on objects |
 | `:FugitiveOutput` | full output of recent commands; notifications are truncated and point here |
 
 See `:help fugitive-differences` for what is not implemented yet.
@@ -110,6 +111,10 @@ require("nvim-fugitive").setup({
     summary = {
       ["cb<CR>"] = "branch_bare",
       ["cb<Space>"] = "branch_prompt",
+      ["gf"] = "cfile_edit",
+      ["<C-W><C-F>"] = "cfile_split",
+      ["<C-W>f"] = "cfile_split",
+      ["<C-W>gf"] = "cfile_tab",
       ["coo"] = "checkout",
       ["co<CR>"] = "checkout_bare",
       ["co<Space>"] = "checkout_prompt",
@@ -214,6 +219,10 @@ require("nvim-fugitive").setup({
     },
     object = {
       ["~"] = "ancestor",
+      ["gf"] = "cfile_edit",
+      ["<C-W><C-F>"] = "cfile_split",
+      ["<C-W>f"] = "cfile_split",
+      ["<C-W>gf"] = "cfile_tab",
       ["gq"] = "close",
       ["."] = "cmdline",
       ["C"] = "containing_commit",
