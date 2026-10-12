@@ -136,7 +136,7 @@ describe("parity with upstream vim-fugitive", function()
       })
       P.our_summary(ours)
       local buf = vim.api.nvim_get_current_buf()
-      local st = require("fugitive.buffers.summary").state(buf)
+      local st = require("nvim-fugitive.buffers.summary").state(buf)
       vim.api.nvim_win_set_cursor(0, { assert(H.find_line(lua_pattern)), 0 })
       local tick = st.tick
       H.feed(ms[3])

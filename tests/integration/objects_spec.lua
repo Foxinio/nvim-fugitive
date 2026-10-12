@@ -1,5 +1,5 @@
 local H = require("helpers")
-local object = require("fugitive.object")
+local object = require("nvim-fugitive.object")
 
 describe("fugitive:// reader", function()
   before_each(function()
@@ -195,7 +195,7 @@ describe("conflict markers", function()
       { "top", "theirs", "m1", "m2", "m3", "m4", "m5", "ours2", "theirs2", "end" },
       H.lines(0)
     )
-    assert.equals(0, #require("fugitive.conflict").conflicts(0))
+    assert.equals(0, #require("nvim-fugitive.conflict").conflicts(0))
   end)
 
   it("chooses ours and none, and supports diff3 markers", function()
@@ -231,7 +231,7 @@ describe(":Ggrep / :Glgrep", function()
   it("fills quickfix without telescope and jumps to the first match", function()
     local repo = H.repo({ files = { ["a.txt"] = "foo\nbar\n", ["dir/b.txt"] = "xx foo\n" } })
     vim.cmd("cd " .. repo.root .. "/dir")
-    require("fugitive").setup({ integrations = { telescope = false } })
+    require("nvim-fugitive").setup({ integrations = { telescope = false } })
     vim.cmd("Ggrep foo")
     H.wait(function()
       return #vim.fn.getqflist() == 2
@@ -240,7 +240,7 @@ describe(":Ggrep / :Glgrep", function()
     assert.equals(repo:path("a.txt"), vim.api.nvim_buf_get_name(qf[1].bufnr))
     assert.equals(4, qf[2].col)
     assert.equals(repo:path("a.txt"), vim.api.nvim_buf_get_name(0))
-    require("fugitive").setup({})
+    require("nvim-fugitive").setup({})
   end)
 
   it(":Glgrep! fills the location list without jumping; tree greps open blobs", function()

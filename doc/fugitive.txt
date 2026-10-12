@@ -47,7 +47,7 @@ that renders |vim.notify| (noice.nvim, nvim-notify, ...).
 
 Calling setup is optional; without it the defaults below apply. >lua
 
-  require("fugitive").setup({
+  require("nvim-fugitive").setup({
     -- Map tables per buffer type. `false` disables a map, any key can be
     -- pointed at an action name (see the lists in this help file).
     maps = {
@@ -436,7 +436,7 @@ If no handler answers, built-in providers handle github.com, gitlab.com,
 bitbucket.org, codeberg.org, gitea.com and git.sr.ht. Self-hosted
 instances and custom providers are configured in setup: >lua
 
-  require("fugitive").setup({
+  require("nvim-fugitive").setup({
     browse = {
       hosts = { ["git.corp.example"] = "gitlab" },
       providers = {
@@ -509,7 +509,7 @@ User FugitiveSummaryRendered
                           A summary buffer was redrawn (`data.buf`).
 
 Lua: >lua
-  local fugitive = require("fugitive")
+  local fugitive = require("nvim-fugitive")
   fugitive.setup(opts)
   fugitive.git("log --oneline -5")      -- like :Git
   fugitive.git({ "commit", "-m", "x" }, { bang = true })

@@ -1,4 +1,4 @@
-local config = require("fugitive.config")
+local config = require("nvim-fugitive.config")
 
 describe("config.merge", function()
   it("returns defaults without options", function()

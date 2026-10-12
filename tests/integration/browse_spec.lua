@@ -71,13 +71,13 @@ describe(":GBrowse", function()
   it("supports custom hosts and providers through setup()", function()
     local repo = B.setup()
     repo:git("remote", "set-url", "origin", "git@git.corp:team/proj.git")
-    require("fugitive").setup({ browse = { hosts = { ["git.corp"] = "gitlab" } } })
+    require("nvim-fugitive").setup({ browse = { hosts = { ["git.corp"] = "gitlab" } } })
     vim.cmd("cd " .. repo.root)
     vim.cmd("edit " .. vim.fn.fnameescape(repo:path("dir/other.txt")))
     local log, restore = H.capture_notify()
     vim.cmd("GBrowse!")
     assert.equals("https://git.corp/team/proj/-/blob/main/dir/other.txt", vim.fn.getreg('"'))
-    require("fugitive").setup({
+    require("nvim-fugitive").setup({
       browse = {
         hosts = { ["git.corp"] = "mine" },
         providers = {
@@ -89,7 +89,7 @@ describe(":GBrowse", function()
     })
     vim.cmd("GBrowse!")
     restore()
-    require("fugitive").setup({})
+    require("nvim-fugitive").setup({})
     assert.equals("https://git.corp/team/proj/view/main/dir/other.txt", vim.fn.getreg('"'))
     local _ = log
   end)
@@ -109,7 +109,7 @@ describe(":GBrowse", function()
 end)
 
 describe("browse providers", function()
-  local providers = require("fugitive.integrations.browse")
+  local providers = require("nvim-fugitive.integrations.browse")
 
   it("parses remote URLs", function()
     assert.same(

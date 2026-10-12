@@ -1,4 +1,4 @@
-local diff = require("fugitive.git.diff")
+local diff = require("nvim-fugitive.git.diff")
 
 local sample = table.concat({
   "diff --git a/f.txt b/f.txt",

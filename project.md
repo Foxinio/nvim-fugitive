@@ -34,7 +34,7 @@
 | Blame | Backlog. When implemented: the upstream side window                     |
 | Output routing | By **command type**, not length (§5.2)                  |
 | git          | ≥ 2.40 only                                               |
-| Config       | `require("fugitive").setup(opts)`, optional; per-buffer-type remappable maps (`false` disables a map); honour `g:fugitive_no_maps` |
+| Config       | `require("nvim-fugitive").setup(opts)`, optional; per-buffer-type remappable maps (`false` disables a map); honour `g:fugitive_no_maps` |
 | Refresh      | Filesystem watcher (`vim.uv` fs_event on index/HEAD/refs, debounced) + FocusGained/BufEnter |
 | Docs         | Handwritten `doc/fugitive.txt`, **not** copied from upstream |
 | Long-running ops | Run as **overseer.nvim** tasks (pull, fetch, push, submodule update, …) |
@@ -215,7 +215,7 @@ Two output channels, chosen per message:
 - **Shim protocol** (POSIX sh, modelled on upstream's sentinel script):
   1. git runs `shim <file>`. The shim calls back into the running Neovim via
      `$NVIM` (`nvim --server "$NVIM" --remote-expr
-     'v:lua.require"fugitive.editor".request(<id>, <file>)'`) and then blocks
+     'v:lua.require"nvim-fugitive.editor".request(<id>, <file>)'`) and then blocks
      waiting on `<state>.done` or `<state>.abort`.
   2. Neovim opens `<file>` in a buffer (commit/rebase-todo filetype) in the
      configured window style, in the foreground, even if the command came from an
@@ -321,7 +321,7 @@ Deferred: file-history picker, line-range (`log -L`) picker, blame-line picker.
 
 ```
 plugin/fugitive.lua          -- commands, autocmds (BufReadCmd fugitive://*), lazy entry
-lua/fugitive/
+lua/nvim-fugitive/
   init.lua                   -- setup(), public Lua API
   config.lua                 -- defaults, validation, merge; keymap tables
   git/

@@ -1,4 +1,4 @@
-local object = require("fugitive.object")
+local object = require("nvim-fugitive.object")
 
 describe("object URLs", function()
   it("round-trips commit, stage and path", function()

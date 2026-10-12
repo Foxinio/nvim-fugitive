@@ -1,6 +1,6 @@
 local H = require("helpers")
-local summary = require("fugitive.buffers.summary")
-local output = require("fugitive.ui.output")
+local summary = require("nvim-fugitive.buffers.summary")
+local output = require("nvim-fugitive.ui.output")
 
 local function open(repo)
   vim.cmd("cd " .. vim.fn.fnameescape(repo.root))

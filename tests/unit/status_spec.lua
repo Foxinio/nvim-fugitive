@@ -1,4 +1,4 @@
-local status = require("fugitive.git.status")
+local status = require("nvim-fugitive.git.status")
 
 local function z(...)
   return table.concat({ ... }, "\0") .. "\0"

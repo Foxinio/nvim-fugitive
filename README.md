@@ -21,7 +21,7 @@ With lazy.nvim:
 
 ```lua
 {
-  "you/nvim-fugitive",
+  "Foxinio/nvim-fugitive",
   dependencies = { "nvim-lua/plenary.nvim" },
   cmd = { "Git", "G", "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",
           "GMove", "GRename", "GDelete", "GRemove", "GUnlink", "GBrowse",
@@ -30,7 +30,7 @@ With lazy.nvim:
 }
 ```
 
-`setup()` is optional. Everything loads lazily on first use.
+`require("nvim-fugitive").setup()` is optional. Everything loads lazily on first use.
 
 ## What's in it
 
@@ -73,7 +73,7 @@ Layout:
 
 ```
 plugin/fugitive.lua        commands and autocommands
-lua/fugitive/
+lua/nvim-fugitive/
   config.lua               defaults, validation, map tables
   git/{exec,repo,status,diff}.lua
   object.lua               fugitive:// URLs and object names

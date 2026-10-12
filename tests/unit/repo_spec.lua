@@ -1,5 +1,5 @@
 local H = require("helpers")
-local repo_mod = require("fugitive.git.repo")
+local repo_mod = require("nvim-fugitive.git.repo")
 
 describe("repo detection", function()
   before_each(function()

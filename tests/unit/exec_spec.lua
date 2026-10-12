@@ -1,4 +1,4 @@
-local exec = require("fugitive.git.exec")
+local exec = require("nvim-fugitive.git.exec")
 
 describe("exec.build", function()
   it("adds the common flags and a non-interactive env", function()

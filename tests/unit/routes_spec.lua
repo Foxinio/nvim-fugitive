@@ -1,4 +1,4 @@
-local routes = require("fugitive.cmd.routes")
+local routes = require("nvim-fugitive.cmd.routes")
 
 local function route(cmdline)
   local args = vim.split(cmdline, " ", { trimempty = true })
