@@ -60,6 +60,7 @@ lazily on first use.
 | Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
 | `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
 | `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |
+| `:Git blame` | upstream's scroll-bound side window; `<CR>` jumps to the commit's hunk, `-`/`~`/`P` reblame; `<CR>` in a blob opens the line's commit |
 | Editable index | `:w` in an index buffer stages it; `:Gread`, `:Gwrite`, `:Gwq`; `do`/`dp` + `:w` in a `:Gdiffsplit` stage single hunks |
 | Diffs & conflicts | `:Gdiffsplit` family, upstream 3-way `:Gdiffsplit!` with `d2o`/`d3o`, conflict-marker maps `]x [x co ct cb c0` |
 | `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
@@ -216,12 +217,30 @@ require("nvim-fugitive").setup({
       ["]c"] = "next_hunk",
       [")"] = "next_item",
       ["<CR>"] = "open",
+      ["p"] = "open_preview",
       ["o"] = "open_split",
       ["O"] = "open_tab",
       ["gO"] = "open_vsplit",
       ["P"] = "parent",
       ["[c"] = "prev_hunk",
       ["("] = "prev_item",
+    },
+    blame = {
+      ["gq"] = "close",
+      ["."] = "cmdline",
+      ["<F1>"] = "help",
+      ["g?"] = "help",
+      ["<2-LeftMouse>"] = "open",
+      ["<CR>"] = "open",
+      ["p"] = "open_preview",
+      ["o"] = "open_split",
+      ["O"] = "open_tab",
+      ["-"] = "reblame",
+      ["~"] = "reblame_ancestor",
+      ["P"] = "reblame_parent",
+      ["A"] = "resize_author",
+      ["C"] = "resize_commit",
+      ["D"] = "resize_date",
     },
     conflict = {
       ["cb"] = "choose_both",

@@ -200,6 +200,25 @@ describe("parity with upstream vim-fugitive", function()
     end
   end)
 
+  it(":Git blame window text", function()
+    if skip() then
+      return
+    end
+    local repo = P.repo({ ["f.txt"] = "one\ntwo\nthree\n" })
+    P.commit(repo, "second", { ["f.txt"] = "one\nTWO\nthree\n" })
+    local upstream = P.run_upstream(repo.root, {
+      "edit f.txt",
+      "Git blame",
+      "let g:result = getline(1, '$')",
+    })
+    H.reset_ui()
+    vim.cmd("cd " .. repo.root)
+    vim.cmd("edit f.txt")
+    vim.cmd("Git blame")
+    assert.equals("fugitiveblame", vim.bo.filetype)
+    assert.same(upstream, H.lines(0))
+  end)
+
   it(":GBrowse handler dicts are identical (and refresh the fixture)", function()
     if skip() then
       return

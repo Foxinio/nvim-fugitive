@@ -301,7 +301,13 @@ function M.run(args, opts)
   end
 
   local cls = routes.classify(args, { aliases = M.alias_resolver(repo) })
-  if cls.route == "float" then
+  if cls.route == "blame" then
+    return require("nvim-fugitive.buffers.blame").open({
+      flags = cls.parsed.rest,
+      mods = opts.mods,
+      repo = repo,
+    })
+  elseif cls.route == "float" then
     return M.run_float(repo, args, { mods = opts.mods, sub = cls.sub })
   elseif cls.route == "task" then
     return require("nvim-fugitive.integrations.overseer").run(

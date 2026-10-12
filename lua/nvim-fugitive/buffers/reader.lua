@@ -594,8 +594,20 @@ function M.setup_object(buf, repo)
     -- the editable index keeps every editing key
     actions = { diff_close = actions.diff_close, close = actions.close, help = actions.help }
   elseif ftype == "blob" then
-    -- blob buffers keep the user's normal editing maps; navigation only
+    -- blob buffers keep the user's normal editing maps; navigation only.
+    -- <CR>/o/gO/O/p open the commit that introduced the cursor line.
+    local blame = require("nvim-fugitive.buffers.blame")
+    local function line_commit(how)
+      return function()
+        blame.line_commit(how)
+      end
+    end
     actions = {
+      open = line_commit("edit"),
+      open_split = line_commit("split"),
+      open_vsplit = line_commit("vsplit"),
+      open_tab = line_commit("tab"),
+      open_preview = line_commit("pedit"),
       diff_close = actions.diff_close,
       close = actions.close,
       help = actions.help,

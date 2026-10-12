@@ -451,7 +451,7 @@ function M.open(repo, opts)
 end
 
 ---Help float for a buffer type: map table grouped by action.
----@param buftype "summary"|"object"
+---@param buftype string a key of config.maps
 function M.show_help(buftype)
   local keys = require("nvim-fugitive.maps").keys_for(buftype)
   local names = vim.tbl_keys(keys)

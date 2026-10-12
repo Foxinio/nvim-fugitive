@@ -11,7 +11,7 @@
 
 local M = {}
 
----@alias fugitive.RouteName "float"|"notify"|"task"|"terminal"|"editor"
+---@alias fugitive.RouteName "float"|"notify"|"task"|"terminal"|"editor"|"blame"
 
 ---Global git options that take a separate argument.
 local global_with_arg = {
@@ -169,7 +169,30 @@ M.subcommands = {
       return M.has_flag(rest, { "--quiet", "--exit-code" }) and "notify" or "float"
     end,
   },
-  blame = { route = "float", pager = true },
+  -- a bare `:Git blame` (flags only) opens the side window like upstream;
+  -- with paths, revisions or line ranges the output goes to the float
+  blame = {
+    pager = true,
+    route = function(rest)
+      if
+        #M.positionals(
+          rest,
+          { ["-L"] = true, ["-S"] = true, ["--contents"] = true, ["--date"] = true }
+        ) > 0
+      then
+        return "float"
+      end
+      if
+        M.has_flag(
+          rest,
+          { "-L", "-p", "--porcelain", "--line-porcelain", "--incremental", "--", "--contents" }
+        )
+      then
+        return "float"
+      end
+      return "blame"
+    end,
+  },
   shortlog = { route = "float", pager = true },
   reflog = {
     pager = true,

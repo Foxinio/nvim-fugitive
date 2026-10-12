@@ -157,8 +157,15 @@ function H.reset_ui()
       pcall(vim.api.nvim_win_close, w, true)
     end
   end
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    pcall(function()
+      vim.wo[w].winfixbuf = false
+    end)
+  end
   pcall(vim.cmd, "silent! tabonly!")
   pcall(vim.cmd, "silent! only!")
+  -- let WinClosed/scheduled cleanups (e.g. the blame window) run now
+  vim.wait(20)
   pcall(vim.cmd, "silent! enew!")
   local keep = vim.api.nvim_get_current_buf()
   for _, b in ipairs(vim.api.nvim_list_bufs()) do

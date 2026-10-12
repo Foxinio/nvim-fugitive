@@ -108,6 +108,28 @@ maps). Maps inside fugitive's own buffers are always set.
                         Restore the most recent discarded change (of
                         [path]). See |fugitive-discard|.
 
+                                                              *:Git_blame*
+:Git blame [flags]      Blame the current file in a scroll-bound vertical
+                        split on its left, sized to the commit/author/date
+                        column. Modified buffers are blamed with their
+                        unsaved contents; blobs at a commit are blamed at
+                        that commit. With a path, a revision or -L the
+                        output goes to the pager float instead. Maps (table
+                        `blame`):
+                          <CR>  close blame and open the commit at the
+                                hunk that added the line (a boundary
+                                commit opens the blob instead)
+                          o O p the same in a split, a tab, the preview
+                          -     reblame at the line's commit
+                          ~ P   reblame at its [count]th ancestor/parent
+                          A C D resize to the author, commit or date column
+                          .     command line with the commit
+                          gq    close blame (back to the work-tree file)
+                          g?    list these maps
+                        Closing the file window closes its blame window.
+                        In a blob at a commit, <CR> o O p open the commit
+                        that introduced the line under the cursor.
+
                                                              *:FugitiveOutput*
 :FugitiveOutput [n]     Show the complete stdout and stderr of a recent
                         command, newest first ([n] = 1 is the latest).
@@ -598,8 +620,7 @@ Deliberate changes:
 - Output goes to notifications or a float instead of temporary buffers.
 - `X` journals every discard and can undo it.
 
-Not implemented yet (backlog): `:Git blame` in a side window (blame output
-shows in the float for now), `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
+Not implemented yet (backlog): `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
 `gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
 helpers, push error parsing into quickfix, bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without
