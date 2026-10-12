@@ -57,6 +57,18 @@ for name, how in pairs({
   })
 end
 
+for name, loclist in pairs({ Gclog = false, Gllog = true }) do
+  cmd(name, function(c)
+    require("nvim-fugitive.cmd.log").command(c, loclist)
+  end, {
+    nargs = "*",
+    bang = true,
+    range = -1,
+    complete = complete("git_grep"),
+    desc = "git log into the " .. (loclist and "location list" or "quickfix list"),
+  })
+end
+
 cmd("Gread", function(c)
   require("nvim-fugitive.cmd.edit").read(vim.trim(c.args), { range = c.range, line2 = c.line2 })
 end, {

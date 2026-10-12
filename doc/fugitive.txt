@@ -198,6 +198,16 @@ and `:w` in it stage exactly the lines you chose.
                         fugitive:// blobs.
 :Glgrep[!] {args}       Like :Ggrep but always fills the location list.
 
+                                                          *:Gclog* *:Gllog*
+:Gclog[!] [args]        Load `git log [args]` into the quickfix list and
+                        jump to the first commit (not with !). With a
+                        single path (`:Gclog -- %`), entries are that file
+                        at each commit.
+:{range}Gclog[!] [args] The history of {range} of the current file
+                        (`git log -L`), each entry on its hunk. `:0Gclog`
+                        is the history of the whole file.
+:Gllog[!] [args]        Like :Gclog, with the location list.
+
                                                                     *:GMove*
 :GMove {destination}    `git mv` the current file and rename the buffer.
                         A relative destination is relative to the work tree
@@ -649,7 +659,7 @@ Deliberate changes:
 - Output goes to notifications or a float instead of temporary buffers.
 - `X` journals every discard and can undo it.
 
-Not implemented yet (backlog): `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
+Not implemented yet (backlog): `:Git difftool`/`mergetool`, `:Gcd`,
 `gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
 helpers, push error parsing into quickfix, bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without

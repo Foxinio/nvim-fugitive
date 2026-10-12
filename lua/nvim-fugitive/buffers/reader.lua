@@ -9,10 +9,22 @@ local notify = require("nvim-fugitive.ui.notify")
 
 local M = {}
 
+local pending_lines
+
+---Internal: the set_lines body, run under :lockmarks.
+---@param buf integer
+function M._apply_pending(buf)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, pending_lines or {})
+  pending_lines = nil
+end
+
 local function set_lines(buf, lines)
   vim.bo[buf].modifiable = true
   vim.bo[buf].readonly = false
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  -- :lockmarks like upstream's read: filling a fresh buffer must not shift
+  -- marks or quickfix entries that already point into it (:Gclog, :Ggrep)
+  pending_lines = lines
+  vim.cmd(("lockmarks lua require('nvim-fugitive.buffers.reader')._apply_pending(%d)"):format(buf))
   vim.bo[buf].modifiable = false
   vim.bo[buf].readonly = true
   vim.bo[buf].modified = false
