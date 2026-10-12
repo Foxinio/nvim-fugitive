@@ -57,6 +57,34 @@ for name, how in pairs({
   })
 end
 
+cmd("Gread", function(c)
+  require("nvim-fugitive.cmd.edit").read(vim.trim(c.args), { range = c.range, line2 = c.line2 })
+end, {
+  nargs = "?",
+  bar = true,
+  range = true,
+  complete = complete("object"),
+  desc = "Read a fugitive object into the buffer",
+})
+cmd("Gwrite", function(c)
+  require("nvim-fugitive.cmd.edit").write(vim.trim(c.args), c.bang)
+end, {
+  nargs = "?",
+  bang = true,
+  bar = true,
+  complete = complete("object"),
+  desc = "Write and stage the buffer",
+})
+cmd("Gwq", function(c)
+  require("nvim-fugitive.cmd.edit").wq(vim.trim(c.args), c.bang)
+end, {
+  nargs = "?",
+  bang = true,
+  bar = true,
+  complete = complete("object"),
+  desc = ":Gwrite, then :quit",
+})
+
 for name, layout in pairs({
   Gdiffsplit = "auto",
   Gvdiffsplit = "vertical",
@@ -126,12 +154,19 @@ vim.api.nvim_create_autocmd("BufReadCmd", {
   end,
 })
 
-vim.api.nvim_create_autocmd({ "BufWriteCmd", "FileWriteCmd", "FileAppendCmd" }, {
+vim.api.nvim_create_autocmd("BufWriteCmd", {
+  group = group,
+  pattern = "fugitive://*",
+  callback = function(ev)
+    require("nvim-fugitive.buffers.reader").write(ev.buf)
+  end,
+})
+vim.api.nvim_create_autocmd({ "FileWriteCmd", "FileAppendCmd" }, {
   group = group,
   pattern = "fugitive://*",
   callback = function()
     require("nvim-fugitive.ui.notify").error(
-      "fugitive:// buffers are read-only (editable index: backlog)"
+      "cannot write part of a buffer to a fugitive:// object"
     )
   end,
 })

@@ -93,7 +93,7 @@ function M.read(buf)
   vim.bo[buf].buftype = "nowrite"
   vim.bo[buf].bufhidden = vim.bo[buf].bufhidden ~= "" and vim.bo[buf].bufhidden or "hide"
 
-  local lines, err, ftype, filetype
+  local lines, err, ftype, filetype, noeol
   local stage = obj.commit:match("^[0-3]$")
   if stage and (obj.path == nil or obj.path == "") then
     local ls = repo:sync({ "ls-files", "--stage" })
@@ -128,6 +128,7 @@ function M.read(buf)
         err = require("nvim-fugitive.git.exec").error_text(res)
       else
         lines, ftype = split(res.stdout), "blob"
+        noeol = res.stdout ~= "" and res.stdout:sub(-1) ~= "\n"
       end
     elseif kind == "commit" then
       -- a submodule entry
@@ -145,6 +146,16 @@ function M.read(buf)
   end
   set_lines(buf, lines or {})
   vim.b[buf].fugitive_type = ftype
+  if noeol then
+    vim.bo[buf].eol = false
+    vim.bo[buf].fixeol = false
+  end
+  if ftype == "blob" and obj.commit == "0" then
+    -- the index is writable: :w stages the buffer (BufWriteCmd)
+    vim.bo[buf].buftype = "acwrite"
+    vim.bo[buf].readonly = false
+    vim.bo[buf].modifiable = true
+  end
   if ftype == "blob" then
     filetype = obj.path and vim.filetype.match({ filename = obj.path, buf = buf }) or nil
   end
@@ -493,6 +504,82 @@ local function setup_folds(buf)
   })
 end
 
+---Bytes of a buffer as they would be written to a file.
+---@param buf integer
+---@return string
+function M.buffer_bytes(buf)
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local text = table.concat(lines, "\n")
+  if
+    #lines > 0
+    and (vim.bo[buf].eol or vim.bo[buf].fixeol)
+    and not (#lines == 1 and lines[1] == "")
+  then
+    text = text .. "\n"
+  end
+  return text
+end
+
+---Write `content` as the stage-0 index entry of `rel` (resolving any
+---conflict stages). Keeps the existing mode.
+---@param repo fugitive.Repo
+---@param rel string
+---@param content string
+---@return boolean ok, string? err
+function M.write_index(repo, rel, content)
+  local hash = repo:sync({ "hash-object", "-w", "--stdin", "--no-filters" }, { stdin = content })
+  if hash.code ~= 0 then
+    return false, require("nvim-fugitive.git.exec").error_text(hash)
+  end
+  local sha = vim.trim(hash.stdout)
+  local mode = "100644"
+  local ls = repo:sync({ "ls-files", "-s", "-z", "--", rel })
+  for rec in ls.stdout:gmatch("([^%z]+)") do
+    local m, _, stage = rec:match("^(%d+) (%x+) (%d)\t")
+    if m and (stage == "0" or stage == "2") then
+      mode = m
+    end
+  end
+  if mode == "160000" or mode == "120000" and content:find("\n") then
+    return false, "refusing to write " .. rel .. " (mode " .. mode .. ")"
+  end
+  local info = "0 "
+    .. string.rep("0", 40)
+    .. "\t"
+    .. rel
+    .. "\n"
+    .. mode
+    .. " "
+    .. sha
+    .. " 0\t"
+    .. rel
+    .. "\n"
+  local res = repo:sync({ "update-index", "--index-info" }, { stdin = info })
+  if res.code ~= 0 then
+    return false, require("nvim-fugitive.git.exec").error_text(res)
+  end
+  return true
+end
+
+---BufWriteCmd for fugitive:// buffers: stage-0 blobs write to the index,
+---everything else is read-only.
+---@param buf integer
+function M.write(buf)
+  local obj = object.parse(vim.api.nvim_buf_get_name(buf))
+  if not obj or obj.commit ~= "0" or not obj.path or obj.path == "" then
+    notify.error("this fugitive:// buffer is read-only; only the index (//0/) is writable")
+    return
+  end
+  local repo = repo_mod.new(obj.git_dir)
+  local ok, err = M.write_index(repo, obj.path, M.buffer_bytes(buf))
+  if not ok then
+    notify.error(err or "could not write the index")
+    return
+  end
+  vim.bo[buf].modified = false
+  require("nvim-fugitive").changed(repo)
+end
+
 ---Maps and folds for fugitive:// object buffers.
 ---@param buf integer
 ---@param repo fugitive.Repo
@@ -503,7 +590,10 @@ function M.setup_object(buf, repo)
   vim.b[buf].fugitive_object_setup = true
   local ftype = vim.b[buf].fugitive_type
   local actions = M.actions(buf, repo)
-  if ftype == "blob" then
+  if ftype == "blob" and vim.bo[buf].modifiable then
+    -- the editable index keeps every editing key
+    actions = { diff_close = actions.diff_close, close = actions.close, help = actions.help }
+  elseif ftype == "blob" then
     -- blob buffers keep the user's normal editing maps; navigation only
     actions = {
       diff_close = actions.diff_close,

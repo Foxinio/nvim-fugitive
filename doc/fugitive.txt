@@ -132,6 +132,26 @@ maps). Maps inside fugitive's own buffers are always set.
                                                                    *:Gdrop*
 :Gdrop [object]         |:drop| a |fugitive-object|.
 
+                                                                   *:Gread*
+:Gread [object]         Replace the buffer with [object] without writing
+                        anything. The default is the index version for a
+                        work-tree file and the work-tree file otherwise, so
+                        :Gread in a work-tree file is like `git checkout` of
+                        the index, in an index buffer like `git add`.
+:{range}Gread [object]  Insert [object] after {range} instead.
+                                                                  *:Gwrite*
+:Gwrite                 Write the buffer to its work-tree file and stage
+                        it. In a work-tree file this is `git add`; in a
+                        blob at a commit or a stage it is effectively
+                        `git checkout` of that version (in `//3` during a
+                        conflict: take theirs and mark it resolved). A
+                        modified buffer of the destination file is not
+                        overwritten without !.
+:Gwrite {path}          Write to {path} in the work tree instead, or with
+                        `:0:path` only to the index.
+                                                                     *:Gwq*
+:Gwq[!] [path]          |:Gwrite|, then |:quit| if the write succeeded.
+
                                          *:Gdiffsplit* *:Gvdiffsplit* *:Ghdiffsplit*
 :Gdiffsplit [object]    Diff the current file against [object]. A commit
                         means the current file in that commit. Without an
@@ -144,8 +164,8 @@ maps). Maps inside fugitive's own buffers are always set.
 :Gvdiffsplit [object]   Always split vertically.
 :Ghdiffsplit [object]   Always split horizontally.
 
-The other side of these diffs is read only; editing the index side is not
-implemented yet.
+When the other side is the index (`//0/`) it can be edited: |do|, |dp|
+and `:w` in it stage exactly the lines you chose.
 
                                                           *:Ggrep* *:Glgrep*
 :Ggrep[!] {args}        Run `git grep`. With telescope.nvim installed the
@@ -304,8 +324,10 @@ usual |zc| and |zo|.
 ==============================================================================
 6. OBJECT BUFFERS AND FUGITIVE:// URLS                       *fugitive-objects*
                                                               *fugitive-object*
-Read-only buffers named `fugitive://<git dir>//<commit>/<path>` show git
-objects. <commit> is a full object id or a stage number: 0 is the index,
+Buffers named `fugitive://<git dir>//<commit>/<path>` show git objects.
+Index blobs (`//0/path`) are editable: `:w` writes the buffer into the
+index (keeping the file mode), which is how partial staging works from a
+diff. Everything else is read-only. <commit> is a full object id or a stage number: 0 is the index,
 1 the common ancestor, 2 "ours" and 3 "theirs". The summary buffer itself
 is `fugitive://<git dir>//`.
 
@@ -577,8 +599,7 @@ Deliberate changes:
 - `X` journals every discard and can undo it.
 
 Not implemented yet (backlog): `:Git blame` in a side window (blame output
-shows in the float for now), `:Gread`/`:Gwrite` and
-editing the index side of a diff, `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
+shows in the float for now), `:Gclog`/`:Gllog`, `:Git difftool`/`mergetool`, `:Gcd`,
 `gf` on objects, FugitiveStatusline() and the Vimscript API, bisect
 helpers, push error parsing into quickfix, bare repositories and
 $GIT_DIR/$GIT_WORK_TREE setups, and work-tree hunk staging without

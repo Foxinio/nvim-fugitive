@@ -74,9 +74,11 @@ describe("fugitive:// reader", function()
     assert.equals(object.format(repo.root .. "/.git", parent), vim.api.nvim_buf_get_name(0))
   end)
 
-  it("refuses to write", function()
+  it("refuses to write a commit blob", function()
     local repo = H.repo({ files = { ["f"] = "1\n" } })
-    vim.cmd("edit " .. vim.fn.fnameescape(object.format(repo.root .. "/.git", "0", "f")))
+    vim.cmd(
+      "edit " .. vim.fn.fnameescape(object.format(repo.root .. "/.git", repo:rev("HEAD"), "f"))
+    )
     assert.has_error(function()
       vim.cmd("write!")
     end)
