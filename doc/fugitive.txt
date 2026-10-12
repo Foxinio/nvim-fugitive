@@ -188,6 +188,10 @@ Untracked, Unstaged, Staged, Unpushed, Unpulled and Stashes. The header
 shows Head, Merge or Rebase (the upstream), Push (when it differs) and
 Help. After a discard, a "Discarded:" line offers the undo.
 
+The cursor never rests on the blank lines between sections: a motion that
+lands on one continues to the next line you can act on (Visual mode is
+left alone).
+
 The buffer refreshes by itself: after every command run through fugitive,
 when the repository changes on disk (index, HEAD, refs; watched with
 filesystem events), on |FocusGained| and on |BufEnter|. The cursor stays on

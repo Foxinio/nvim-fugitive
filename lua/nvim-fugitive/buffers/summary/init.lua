@@ -307,6 +307,13 @@ function M.setup_buffer(buf, repo)
       end
     end,
   })
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = group,
+    buffer = buf,
+    callback = function()
+      M.snap_cursor(buf)
+    end,
+  })
   vim.api.nvim_create_autocmd("BufEnter", {
     group = group,
     buffer = buf,
@@ -345,6 +352,43 @@ function M.setup_window(win)
   vim.wo[win][0].relativenumber = false
   vim.wo[win][0].list = false
   vim.wo[win][0].spell = false
+end
+
+---Keep the cursor on actionable lines: when a motion lands on a blank
+---separator, continue in the direction of travel (or back, at the edge).
+---Visual mode is left alone so selections can span sections.
+---@param buf integer
+function M.snap_cursor(buf)
+  local st = M._state[buf]
+  if not st or vim.api.nvim_get_current_buf() ~= buf then
+    return
+  end
+  if vim.api.nvim_get_mode().mode:match("^[vV\22]") then
+    return
+  end
+  local win = vim.api.nvim_get_current_win()
+  local lnum = vim.api.nvim_win_get_cursor(win)[1]
+  local last = vim.w[win].fugitive_summary_line or lnum
+  local info = st.info
+  local target = lnum
+  local i = info[lnum]
+  if i and i.kind == "blank" then
+    local dir = lnum >= last and 1 or -1
+    local function scan(d)
+      local l = lnum + d
+      while l >= 1 and l <= #info do
+        if info[l].kind ~= "blank" then
+          return l
+        end
+        l = l + d
+      end
+    end
+    target = scan(dir) or scan(-dir) or lnum
+    if target ~= lnum then
+      vim.api.nvim_win_set_cursor(win, { target, 0 })
+    end
+  end
+  vim.w[win].fugitive_summary_line = target
 end
 
 ---Open (or focus) the summary of `repo`.
