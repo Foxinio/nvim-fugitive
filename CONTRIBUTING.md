@@ -74,11 +74,13 @@ lua/nvim-fugitive/
   git/{exec,repo,status,diff}.lua
   object.lua               fugitive:// URLs and object names
   buffers/{reader,editor,diffsplit,blame}.lua, buffers/summary/
-  cmd/{git,routes,grep,move,browse,complete,edit,log}.lua
+  cmd/{git,routes,grep,move,browse,complete,edit,log,difftool}.lua
   ui/{notify,float,output,terminal}.lua
-  discard.lua conflict.lua watch.lua maps.lua api.lua
+  discard.lua conflict.lua hunks.lua watch.lua maps.lua
+  api.lua                  the upstream-compatible Vimscript API
   integrations/{overseer,gitsigns}.lua, integrations/{telescope,browse}/
 lua/telescope/_extensions/fugitive.lua
+autoload/fugitive.vim      fugitive#Head() & co. for statusline plugins
 doc/fugitive.txt           the user manual (handwritten)
 tests/{unit,integration,parity,fixtures}/
 ```

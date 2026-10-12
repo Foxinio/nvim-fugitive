@@ -54,27 +54,27 @@ Each feature gets a status: **MVP**, **M2** (second milestone), **Backlog**, or 
 | F6 | Staging maps: `s u - U X` (X recovery: §4.2), inline diffs `= < >`, partial-hunk staging (visual) | Maps | MVP (summary buffer incl. visual partial staging of inline diffs; work-tree hunk staging → gitsigns) |
 | F7 | Navigation maps: `<CR> o gO O p ( ) [c ]c [[ ]] gu gs gp …` | Maps | MVP |
 | F8 | Commit maps `cc ca ce cw cf cF cs cS cn …`, revert `crc crn` | Maps | MVP |
-| F9 | Checkout/branch maps `coo cb co` | Maps | M2 |
-| F10 | Stash maps `czz czw czs cza czA czp czP` | Maps | M2 |
-| F11 | Rebase maps `ri rf ru rp rr rs ra re rw rm rd` | Maps | M2 |
-| F12 | `fugitive://` object buffers, `:Gedit/:Gsplit/:Gvsplit/:Gtabedit/:Gpedit/:Gdrop` | File API, :Gedit | MVP: internal reader for `fugitive://` (needed by diff/summary `<CR>`). `:Gedit` family → Backlog |
-| F13 | Object syntax (`:0:file`, `HEAD~3:file`, `!`, `@`, `:/` …) | fugitive-object | MVP reduced (`rev:path`, `:N:path`, commit, tree); `!`, `@`, `:/msg` … → Backlog |
-| F14 | `:Gread`, `:Gwrite`, `:Gwq` (write to index/work tree) | :Gwrite | Backlog |
-| F15 | `:Gdiffsplit` / `:Gvdiffsplit` / `:Ghdiffsplit`, 3-way conflict diffs, `dq` | :Gdiff | MVP read-only splits + 3-way conflict; editable index side → Backlog |
-| F16 | `:Git blame` (scroll-bound blame window, maps, reblame) | :Git blame | Backlog (side window when done) |
+| F9 | Checkout/branch maps `coo cb co` | Maps | Done (M2) |
+| F10 | Stash maps `czz czw czs cza czA czp czP` | Maps | Done (M2) |
+| F11 | Rebase maps `ri rf ru rp rr rs ra re rw rm rd` | Maps | Done (M2) |
+| F12 | `fugitive://` object buffers, `:Gedit/:Gsplit/:Gvsplit/:Gtabedit/:Gpedit/:Gdrop` | File API, :Gedit | Done (reader in MVP, `:Gedit` family from the backlog) |
+| F13 | Object syntax (`:0:file`, `HEAD~3:file`, `!`, `@`, `:/` …) | fugitive-object | Done (full syntax incl. `!`, `@`, `:/msg`, `A...B`) |
+| F14 | `:Gread`, `:Gwrite`, `:Gwq` (write to index/work tree) | :Gwrite | Done |
+| F15 | `:Gdiffsplit` / `:Gvdiffsplit` / `:Ghdiffsplit`, 3-way conflict diffs, `dq` | :Gdiff | Done (incl. the editable index side) |
+| F16 | `:Git blame` (scroll-bound blame window, maps, reblame) | :Git blame | Done (side window) |
 | F17 | `:Ggrep` / `:Glgrep` → quickfix/loclist | :Ggrep | MVP (telescope-first, quickfix fallback) |
-| F18 | `:Gclog` / `:Gllog` (commit history → quickfix, ranged line log `:{range}Gclog`) | :Glog | Backlog (low priority) |
-| F19 | `:Git difftool` / `:Git mergetool` → quickfix | difftool | Backlog |
+| F18 | `:Gclog` / `:Gllog` (commit history → quickfix, ranged line log `:{range}Gclog`) | :Glog | Done |
+| F19 | `:Git difftool` / `:Git mergetool` → quickfix | difftool | Done |
 | F20 | `:GMove` / `:GRename` / `:GDelete` / `:GRemove` / `:GUnlink` | :GMove | MVP |
 | F21 | `:GBrowse` + URL provider API (rhubarb, fugitive-gitlab …) | :GBrowse | MVP |
-| F22 | `:Gcd` / `:Glcd` | :Gcd | Backlog |
+| F22 | `:Gcd` / `:Glcd` | :Gcd | Done |
 | F23 | Command-line completion (refs, paths, subcommands, flags) | Completion | MVP |
-| F24 | `gf` / `<Plug><cfile>` on objects in any git buffer | Maps | Backlog |
-| F25 | Statusline `FugitiveStatusline()` / `FugitiveHead()` | Statusline | Backlog |
+| F24 | `gf` / `<Plug><cfile>` on objects in any git buffer | Maps | Done |
+| F25 | Statusline `FugitiveStatusline()` / `FugitiveHead()` | Statusline | Done |
 | F26 | Folding of diffs in commit/status buffers | Folding | MVP |
-| F27 | `:Git bisect` helpers | :Git bisect | Backlog |
-| F28 | Public Vimscript API (`FugitiveGitDir`, `FugitiveFind`, `FugitiveExecute`, User autocmds) | plugin/fugitive.vim | Backlog (GBrowse handler compat is covered in §5.4) |
-| F29 | Push/fetch with quickfix error parsing | :Git push | Backlog (overseer covers output) |
+| F27 | `:Git bisect` helpers | :Git bisect | Done |
+| F28 | Public Vimscript API (`FugitiveGitDir`, `FugitiveFind`, `FugitiveExecute`, User autocmds) | plugin/fugitive.vim | Done |
+| F29 | Push/fetch with quickfix error parsing | :Git push | Done |
 | F30 | `.git/info/exclude` / `.gitignore` helpers (`gI`, `gi`) | Maps | MVP (part of the summary maps) |
 | F31 | Stash entries in the summary expand inline with `=` (like files) | — | Done |
 | F32 | Unified output configuration (§5.2.3) | — | Done |
@@ -100,15 +100,15 @@ Each feature gets a status: **MVP**, **M2** (second milestone), **Backlog**, or 
   - *Submodules*: buffers inside a submodule resolve to the submodule repo, so `:Git`
     there operates on it. The parent's summary buffer shows submodules as entries;
     actions on them are in §4.1.1.
-- **Backlog**: bare repos, and explicit `$GIT_DIR`/`$GIT_WORK_TREE` (dotfile setups).
+- **Done (backlog)**: bare repos, `core.worktree`, and explicit `$GIT_DIR`/`$GIT_WORK_TREE` (dotfile setups).
 
 #### 4.1.1 Submodule behaviour
 - Summary entry `<CR>` → open the submodule's own `:Git` summary (stage/commit
   inside it, then return).
 - `=` → inline `git diff --submodule=log` shortlog (commits between recorded and
   checked-out SHA). `s` → `git add <path>` (stages the new pointer).
-- **Backlog**: dirty/uninitialized indicators, `submodule update --init` maps,
-  recursive status.
+- **Done (backlog)**: dirty/uninitialized indicators, `submodule update --init`
+  maps (`cu`/`cU`), the submodule's own status under `=`.
 
 ### 4.2 Discard (`X`) and recovery (MVP)
 Upstream saves the file with `git hash-object -w` and prints
@@ -399,7 +399,7 @@ Key principles:
 - stylua + selene/luacheck gates.
 - LuaCATS annotations everywhere, checked with `lua-language-server --check`.
 
-## 8. Milestones (proposal — awaiting user review)
+## 8. Milestones
 
 **M0 — Skeleton**: repo layout, CI matrix, stylua/selene/luals, test harness
 (plenary-busted + fixture-repo builder), parity harness against upstream.
@@ -419,8 +419,11 @@ Key principles:
 **M2**: stash, checkout/branch and rebase maps; telescope `log`/`refs`/`stash`
 pickers; picker input for `:Git checkout|switch|merge|rebase`.
 
-**Backlog**: blame side window, `:Gedit` family + full object syntax, `:Gread`/
-`:Gwrite`/editable index, `:Gclog`, difftool/mergetool, `:Gcd`, `gf`, statusline/
-Vimscript API, bisect, push quickfix, submodule maintenance, bare/`$GIT_DIR`,
-file-history pickers, `=` on stash entries (F31), configurable output targets
-(F32, §5.2.3).
+**Backlog** (all done, 2026-10): blame side window, `:Gedit` family + full
+object syntax, `:Gread`/`:Gwrite`/editable index, `:Gclog`, difftool/mergetool,
+`:Gcd`, `gf`, statusline/Vimscript API, bisect, push quickfix, submodule
+maintenance, bare/`$GIT_DIR`, file-history pickers, work-tree hunks without
+gitsigns, `=` on stash entries (F31), configurable output targets (F32, §5.2.3).
+
+**Status**: M0, M1, M2 and the backlog are implemented. Deliberate deviations
+from upstream are listed in `:help fugitive-differences`.

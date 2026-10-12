@@ -28,7 +28,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
           "Gread", "Gwrite", "Gwq", "Gclog", "Gllog", "Gcd", "Glcd",
           "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",
           "GMove", "GRename", "GDelete", "GRemove", "GUnlink", "GBrowse",
-          "FugitiveOutput", "FugitiveRestore" },
+          "FugitiveOutput", "FugitiveRestore", "FugitivePick" },
   opts = {}, -- optional, see "Configuration" below
 }
 ```
@@ -55,8 +55,8 @@ lazily on first use.
 
 | Feature | Notes |
 |---|---|
-| `:Git` summary | Head/Merge/Push header, Rebasing, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled, Stashes; upstream maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
-| `:Git {args}` | output routed by command type: pager commands → float, others → notification, network commands → overseer task, `add -p` & co. → terminal; only significant commands notify on success |
+| `:Git` summary | Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled, Stashes (`=` expands them); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
+| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); only significant commands notify on success; failed pushes put rejected refs and hook errors in quickfix |
 | Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
 | `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
 | `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |
@@ -68,11 +68,14 @@ lazily on first use.
 | `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
 | `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
 | `:GBrowse` | upstream-identical handler dict (vim-rhubarb, fugitive-gitlab keep working), built-in GitHub/GitLab/Bitbucket/Gitea/Forgejo/Codeberg/sourcehut providers, custom hosts |
-| Pickers | `:Telescope fugitive log` / `refs` / `stash`; picker input for a bare `:Git checkout`, `switch`, `merge` or `rebase` |
+| Pickers | `:Telescope fugitive log` / `refs` / `stash` / `file_history` / `line_history` / `blame_line`, or `:FugitivePick` (falls back to `vim.ui.select`); picker input for a bare `:Git checkout`, `switch`, `merge` or `rebase` |
+| Work-tree hunks | opt-in maps for next/prev/stage/reset hunk, using gitsigns when installed and fugitive's own hunks otherwise |
+| Repositories | work trees, linked worktrees, submodules, bare repos, `core.worktree`, `$GIT_DIR`/`$GIT_WORK_TREE` dotfile setups |
 | Vimscript API | `FugitiveHead()`, `FugitiveStatusline()`, `FugitiveGitDir()`, `FugitiveFind()`, `FugitiveExecute()`, … and upstream's `User` events, so plugins written for vim-fugitive keep working; `gf` on objects |
 | `:FugitiveOutput` | full output of recent commands; notifications are truncated and point here |
 
-See `:help fugitive-differences` for what is not implemented yet.
+See `:help fugitive-differences` for the deliberate differences from
+vim-fugitive.
 
 ## Configuration
 

@@ -738,12 +738,16 @@ Disabled with |g:fugitive_no_maps|.
 14. DIFFERENCES FROM VIM-FUGITIVE                         *fugitive-differences*
 
 Deliberate changes:
-- Unmerged files have their own section in the summary, and stashes are
-  listed.
+- Unmerged files have their own section in the summary; stashes,
+  bisect state and uninitialized submodules are listed too.
 - `:Ggrep` opens a telescope picker when telescope is installed.
-- Output goes to notifications or a float instead of temporary buffers.
+- Output goes to notifications or a float instead of temporary buffers,
+  configurable per command (|fugitive-routes|); successful routine
+  commands are silent.
 - `X` journals every discard and can undo it.
-
-Everything in the original backlog is implemented.
+- The rebase todo's "# " before subjects (git 2.5x) is not shown in the
+  summary's Rebasing section.
+- Deprecated commands (`:Gstatus`, `:Gblame`, `:Gcommit`, …) do not
+  exist; Windows is not supported.
 
  vim:tw=78:ts=8:noet:ft=help:norl:
