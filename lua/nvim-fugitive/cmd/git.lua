@@ -175,7 +175,10 @@ end
 ---@param significant boolean notify a success too (errors always notify)
 local function finish_notify(repo, res, entry, significant)
   output.finish(entry, res)
-  notify.result(res, { significant = significant })
+  -- a routine command stays silent, but not when it printed something: the
+  -- output of `:Git status`, `:Git rev-parse HEAD`, an alias, … is the point
+  local printed = vim.trim((res.stdout or "") .. (res.stderr or "")) ~= ""
+  notify.result(res, { significant = significant or printed })
   require("nvim-fugitive").changed(repo)
 end
 

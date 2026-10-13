@@ -154,12 +154,27 @@ describe("routes.classify", function()
     assert.equals("float", r.route)
   end)
 
+  -- common aliases from git guides and dotfiles
   describe("aliases", function()
     local aliases = {
+      st = { "status" },
+      co = { "checkout" },
+      br = { "branch" },
       ci = { "commit" },
-      lg = { "log", "--oneline" },
+      lg = {
+        "log",
+        "--graph",
+        "--pretty=format:%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset",
+        "--abbrev-commit",
+        "--date=relative",
+      },
+      lola = { "log", "--graph", "--decorate", "--oneline", "--all" },
+      ds = { "diff", "--staged" },
+      unstage = { "reset", "HEAD", "--" },
+      aliases = { "config", "--get-regexp", "alias" },
       ap = { "add", "-p" },
-      sh = {},
+      main = {}, -- !git checkout main && git pull
+      ac = {}, -- !git add -A && git commit
     }
     local function classify(args, overrides)
       return routes.classify(args, {
@@ -171,24 +186,43 @@ describe("routes.classify", function()
       })
     end
 
-    it("go to the float by default", function()
-      for _, name in ipairs({ "ci", "lg", "sh" }) do
+    it("are routed like the command they expand to", function()
+      local expect = {
+        st = { "status", "notification" },
+        co = { "checkout", "notification" },
+        br = { "branch", "float" },
+        ci = { "commit", "editor" },
+        lg = { "log", "float" },
+        lola = { "log", "float" },
+        ds = { "diff", "float" },
+        unstage = { "reset", "notification" },
+        aliases = { "config", "notification" },
+        ap = { "add", "term" },
+      }
+      for name, e in pairs(expect) do
         local r = classify({ name })
-        assert.equals("float", r.route, name)
+        assert.equals(e[1], r.sub, name)
+        assert.equals(e[2], r.route, name)
         assert.equals(name, r.alias)
       end
-      assert.equals("commit", classify({ "ci" }).sub)
+      -- arguments after the alias count too
+      assert.equals("notification", classify({ "ci", "-m", "x" }).route)
+      assert.equals("term", classify({ "co", "-p" }).route)
     end)
 
-    it("keep a terminal for interactive expansions", function()
-      assert.equals("term", classify({ "ap" }).route)
+    it("run shell aliases as tasks", function()
+      assert.equals("overseer", classify({ "main" }).route)
+      assert.equals("overseer", classify({ "ac", "-m", "wip" }).route)
+      assert.equals("float", classify({ "-p", "main" }).route)
+      assert.equals("notification", classify({ "--no-pager", "main" }).route)
     end)
 
     it("are routed by their own name first, then by the expansion", function()
       assert.equals("vert", classify({ "lg" }, { lg = "vert", log = "tab" }).route)
       assert.equals("tab", classify({ "lg" }, { log = "tab" }).route)
-      assert.equals("overseer", classify({ "sh" }, { sh = "task" }).route)
-      assert.equals("notification", classify({ "ci", "-m", "x" }, { ["ci -m"] = "notify" }).route)
+      assert.equals("term", classify({ "main" }, { main = "term" }).route)
+      assert.equals("float", classify({ "st" }, { st = "float" }).route)
+      assert.equals("status", classify({ "st" }, { st = "float" }).sub)
     end)
   end)
 end)

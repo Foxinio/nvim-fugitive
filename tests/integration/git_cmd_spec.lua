@@ -151,42 +151,89 @@ describe(":Git routes", function()
     local _ = log
   end)
 
-  it("user-defined aliases go to the float unless routed by name", function()
+  it("user-defined aliases are routed like their expansion; shell ones are tasks", function()
     local repo = H.repo({ files = { ["a"] = "a\n" } })
-    repo:git("config", "alias.last", "log -1 --format=%s")
+    -- common aliases from git guides and dotfiles
+    repo:git("config", "alias.st", "status")
+    repo:git(
+      "config",
+      "alias.lg",
+      "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
+    )
+    repo:git("config", "alias.aliases", "config --get-regexp alias")
+    repo:git("config", "alias.last", "log -1 HEAD")
     repo:git("config", "alias.hello", "!echo hello from a shell alias")
     -- shadowing a builtin is ignored by git, and so by the routing
     repo:git("config", "alias.status", "log")
+    repo:write("a", "A\n")
     vim.cmd("cd " .. repo.root)
+
+    -- a notification command that prints: the output is shown (it used to be
+    -- dropped because `status` is not "significant")
+    local log, restore = H.capture_notify()
     local before = output.get(1)
-    vim.cmd("Git last")
+    vim.cmd("Git st")
+    wait_done(before)
+    assert.equals(0, #float_wins())
+    assert.equals(1, #log)
+    assert.truthy(log[1].msg:match("modified:%s+a"))
+    restore()
+    log, restore = H.capture_notify()
+    before = output.get(1)
+    vim.cmd("Git aliases")
+    wait_done(before)
+    assert.equals(1, #log)
+    assert.truthy(log[1].msg:match("alias%.lg log %-%-graph"))
+    restore()
+
+    -- pager commands: the float
+    before = output.get(1)
+    vim.cmd("Git lg")
     wait_done(before)
     assert.equals(1, #float_wins())
-    assert.equals("initial", H.lines(0)[1])
+    assert.truthy(H.lines(0)[1]:match("^%* %x+ %- %(HEAD %-> main%) initial %(.+%) <Test>$"))
     H.reset_ui()
+
+    -- a shell alias runs as a task (overseer, or a plain job without it)
+    log, restore = H.capture_notify()
     before = output.get(1)
     vim.cmd("Git hello")
     wait_done(before)
-    assert.equals(1, #float_wins())
-    assert.equals("hello from a shell alias", H.lines(0)[1])
-    H.reset_ui()
+    H.wait(function()
+      return #log >= 2
+    end, "task report")
+    restore()
+    assert.equals(0, #float_wins())
+    assert.truthy(log[1].msg:match("running"))
+    assert.truthy(log[2].msg:match("done\nhello from a shell alias"))
+
+    -- routes keyed by the alias name
     local config = require("nvim-fugitive.config")
     local saved = config.get().routes
-    config.get().routes = { hello = "vert" }
+    config.get().routes = { hello = "vert", last = "float" }
     before = output.get(1)
     vim.cmd("Git hello")
     wait_done(before)
-    config.get().routes = saved
     assert.equals(0, #float_wins())
     assert.equals(2, #vim.api.nvim_tabpage_list_wins(0))
     assert.equals("hello from a shell alias", H.lines(0)[1])
     H.reset_ui()
-    local log, restore = H.capture_notify()
+    before = output.get(1)
+    vim.cmd("Git last")
+    wait_done(before)
+    config.get().routes = saved
+    assert.equals(1, #float_wins())
+    assert.truthy(H.lines(0)[1]:match("^commit %x+"))
+    H.reset_ui()
+
+    -- `:Git status` is still git's status, not the alias
+    log, restore = H.capture_notify()
     before = output.get(1)
     vim.cmd("Git status")
     wait_done(before)
     restore()
     assert.equals(0, #float_wins())
+    assert.truthy(log[1].msg:match("modified:%s+a"))
   end)
 
   it("errors clearly on a name that is neither a git command nor an alias", function()

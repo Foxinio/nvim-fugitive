@@ -556,34 +556,28 @@ function M.classify(args, opts)
   if sub and not M.subcommands[sub] and opts.aliases then
     local expansion = opts.aliases(sub)
     if expansion then
-      -- a user-defined alias: `routes` keyed by its name first, else the float
       result.alias = sub
+      -- `routes` keyed by the alias name win over everything else
       local chosen = M.override(overrides, sub, rest)
-      -- simple aliases are classified through their expansion (for the
-      -- subcommand-specific handling and "sub word" route keys)
       local p2 = expansion[1] and M.parse(vim.list_extend(vim.deepcopy(expansion), rest))
-      local expanded = p2 and p2.sub
-      if expanded then
-        chosen = chosen or M.override(overrides, expanded, p2.rest)
-        sub, rest = expanded, p2.rest
-      end
-      result.sub = sub
       if chosen then
+        result.sub = p2 and p2.sub or sub
         result.route = chosen
         result.explicit = true
         return result
       end
-      local spec = M.subcommands[sub]
-      local route = spec
-          and M.normalize(
-            type(spec.route) == "function" and spec.route(rest, spec) or spec.route --[[@as string]]
-          )
-        or nil
-      -- interactive commands still need a terminal
-      result.route = (route == "term" and not parsed.paginate) and "term"
-        or (parsed.no_pager and "notification")
-        or "float"
-      return result
+      if not p2 then
+        -- a shell (`!`) alias: run it as a task, like other long commands
+        result.sub = sub
+        result.route = parsed.paginate and "float"
+          or parsed.no_pager and "notification"
+          or "overseer"
+        return result
+      end
+      -- a simple alias is routed like the command it expands to
+      if p2.sub then
+        sub, rest = p2.sub, p2.rest
+      end
     end
   end
   result.sub = sub

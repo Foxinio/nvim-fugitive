@@ -492,12 +492,12 @@ goes to a large float; otherwise to a notification.
 Flags are classified per subcommand: `-e` means --edit for commit, merge,
 tag, revert, cherry-pick, config and notes, but it is a pattern for grep.
 
-Your git aliases (`alias.*`, shell `!` aliases included) go to the float,
-except an alias of an interactive command (`add -p`, ...), which still gets
-a terminal. Route an alias with `routes` keyed by its name, e.g.
-`routes = { lg = "vert", sync = "overseer" }`. A name that is neither a git
-command (builtin or `git-<name>` on $PATH) nor an alias is an error, and
-nothing is run.
+Your git aliases are routed like the command they expand to (`lg = log
+--graph ...` goes to the float, `ci = commit` to the editor), and shell
+(`!`) aliases run as tasks (|fugitive-overseer|). Route an alias with
+`routes` keyed by its name, e.g. `routes = { lg = "vert", sync = "term" }`.
+A name that is neither a git command (builtin or `git-<name>` on $PATH) nor
+an alias is an error, and nothing is run.
 
                                                         *fugitive-routes*
 Choose the target per command with `routes`. Keys are a subcommand or a
@@ -531,7 +531,8 @@ The float closes with `q` or <Esc>; <C-c> cancels a running command.
 Window modifiers (`:vert Git log`, `:tab Git show`, `:horizontal`,
 `:topleft`, `:botright`, ...) open the output in a regular window instead.
 
-Successful commands only notify when they are significant: by default
+Successful commands that print something notify their output. Commands
+that print nothing only notify when they are significant: by default
 commit, merge, rebase, revert, cherry-pick, pull, push, fetch, clone,
 checkout, switch, stash, am, bisect, tag, branch and `reset --hard`/
 `--keep`/`--merge` (configure `notify.significant`; entries are a

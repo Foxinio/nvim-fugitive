@@ -215,9 +215,10 @@ M.defaults = {
   routes = {},
   notify = {
     max_lines = 10,
-    -- Successful commands notify only when they are significant: a
-    -- subcommand name, or "sub flag" to require a flag. Errors always notify,
-    -- and the full output of every command is in :FugitiveOutput.
+    -- Successful commands that print nothing notify only when they are
+    -- significant: a subcommand name, or "sub flag" to require a flag.
+    -- Output and errors always notify, and the full output of every command
+    -- is in :FugitiveOutput.
     significant = {
       "commit",
       "merge",

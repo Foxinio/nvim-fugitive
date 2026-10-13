@@ -56,7 +56,7 @@ lazily on first use.
 | Feature | Notes |
 |---|---|
 | `:Git` summary | Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled, Stashes (`=` expands them); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
-| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); only significant commands notify on success; failed pushes put rejected refs and hook errors in quickfix |
+| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); successful commands notify their output, or a short note when significant; failed pushes put rejected refs and hook errors in quickfix |
 | Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
 | `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
 | `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |
@@ -286,15 +286,16 @@ require("nvim-fugitive").setup({
   -- (e.g. ["stash list"], ["log --graph"]). Targets: "float", "inplace",
   -- "split", "vert", "tab" (output in a buffer), "notification", "overseer",
   -- "term". Unlisted commands use the built-in table: pager commands ->
-  -- float, network commands -> overseer, `add -p` & co. -> term, your git
-  -- aliases -> float (key them by name here), everything else ->
-  -- notification (:help fugitive-output).
+  -- float, network commands -> overseer, `add -p` & co. -> term, git
+  -- aliases like their expansion and shell `!` aliases -> overseer (key
+  -- them by name here), everything else -> notification
+  -- (:help fugitive-output).
   routes = {},
   notify = {
     -- notifications are cut after this many lines (:FugitiveOutput has all)
     max_lines = 10,
-    -- successful commands notify only when listed here ("sub" or "sub flag");
-    -- errors always notify
+    -- successful commands that print nothing notify only when listed here
+    -- ("sub" or "sub flag"); output and errors always notify
     significant = {
       "commit", "merge", "rebase", "revert", "cherry-pick", "pull", "push",
       "fetch", "clone", "checkout", "switch", "stash", "am", "bisect", "tag",
