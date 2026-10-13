@@ -831,6 +831,9 @@ function M.open(buf, how)
       return
     end
     local mods = ({ split = "", vsplit = "vertical", tab = "tab" })[how]
+    if how == "float" then
+      return summary().open(sub, { mods = "aboveleft" })
+    end
     if how == "edit" then
       vim.cmd("edit " .. vim.fn.fnameescape(summary().bufname(sub)))
       return
@@ -1142,6 +1145,7 @@ function M.actions(buf)
     open_vsplit = n(M.open, "vsplit"),
     open_tab = n(M.open, "tab"),
     open_preview = n(M.open, "pedit"),
+    open_float = n(M.open, "float"),
     prev_item = n(M.prev_item),
     next_item = n(M.next_item),
     prev_hunk = n(M.next_hunk, -1),

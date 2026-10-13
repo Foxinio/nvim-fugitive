@@ -45,6 +45,7 @@ M.defaults = {
       ["gO"] = "open_vsplit",
       ["O"] = "open_tab",
       ["p"] = "open_preview",
+      ["f"] = "open_float",
       ["("] = "prev_item",
       [")"] = "next_item",
       ["[c"] = "prev_hunk",

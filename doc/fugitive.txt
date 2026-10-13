@@ -318,6 +318,8 @@ Navigation maps ~
               line. On a submodule, open the submodule's own summary.
   o  gO  O    Open in a split, a vertical split or a tab.
   p           Open in the preview window.
+  f           Open in the big float (|fugitive-float|); it closes with :q
+              or when you leave it.
   (  )        Previous or next file, hunk or commit.
   [c ]c  K J  Previous or next hunk; ]c expands the file under the cursor.
   i           Next file or hunk, expanding inline diffs on the way.

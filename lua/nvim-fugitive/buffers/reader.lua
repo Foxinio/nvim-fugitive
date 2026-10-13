@@ -200,6 +200,9 @@ end
 ---@param how? "edit"|"split"|"vsplit"|"tab"|"pedit"
 ---@param lnum? integer
 function M.open(target, how, lnum)
+  if how == "float" then
+    return M.open_float(target, lnum)
+  end
   local cmds =
     { edit = "edit", split = "split", vsplit = "vsplit", tab = "tabedit", pedit = "pedit" }
   local cmd = cmds[how or "edit"] or "edit"
@@ -213,6 +216,44 @@ function M.open(target, how, lnum)
     pcall(vim.api.nvim_win_set_cursor, 0, { math.max(1, lnum), 0 })
     vim.cmd("normal! zv")
   end
+end
+
+---Open a file or fugitive object in the big float (`config.float`). It closes
+---with `:q` or when another window is entered, like a preview.
+---@param target string path or fugitive:// URL
+---@param lnum? integer
+---@return integer win
+function M.open_float(target, lnum)
+  local float = require("nvim-fugitive.ui.float")
+  local obj = object.parse(target)
+  local title = obj and object.git_name(obj) or vim.fn.fnamemodify(target, ":~:.")
+  -- a float in a float: replace it
+  local current = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_config(current).relative ~= "" then
+    pcall(vim.api.nvim_win_close, current, false)
+  end
+  local scratch = vim.api.nvim_create_buf(false, true)
+  vim.bo[scratch].bufhidden = "wipe"
+  local win = vim.api.nvim_open_win(scratch, true, float.window_config(title))
+  vim.cmd("edit " .. vim.fn.fnameescape(target))
+  if lnum then
+    pcall(vim.api.nvim_win_set_cursor, win, { math.max(1, lnum), 0 })
+    vim.cmd("normal! zv")
+  end
+  vim.api.nvim_create_autocmd("WinLeave", {
+    callback = function()
+      if vim.api.nvim_get_current_win() ~= win then
+        return
+      end
+      vim.schedule(function()
+        if vim.api.nvim_win_is_valid(win) then
+          pcall(vim.api.nvim_win_close, win, false)
+        end
+      end)
+      return true
+    end,
+  })
+  return win
 end
 
 ---First parent of a commit (or nil for root commits).

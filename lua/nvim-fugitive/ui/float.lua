@@ -34,7 +34,10 @@ function M.wants_window(mods)
   return false
 end
 
-local function float_config(title)
+---Window config of the big float (`config.float`), with an optional title.
+---@param title? string
+---@return vim.api.keyset.win_config
+function M.window_config(title)
   local cfg = require("nvim-fugitive.config").get().float
   local cols, rows = vim.o.columns, vim.o.lines - vim.o.cmdheight
   local function size(v, total, min)
@@ -76,7 +79,7 @@ local function open_window(buf, opts)
   elseif opts.window == "tab" then
     vim.cmd("tab split")
   else
-    local win = vim.api.nvim_open_win(buf, opts.enter ~= false, float_config(opts.title))
+    local win = vim.api.nvim_open_win(buf, opts.enter ~= false, M.window_config(opts.title))
     local blend = require("nvim-fugitive.config").get().float.winblend
     if blend and blend > 0 then
       vim.wo[win].winblend = blend

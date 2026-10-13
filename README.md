@@ -177,6 +177,7 @@ require("nvim-fugitive").setup({
       ["<2-LeftMouse>"] = "open",
       ["<CR>"] = "open",
       ["gi"] = "open_exclude",
+      ["f"] = "open_float",
       ["p"] = "open_preview",
       ["o"] = "open_split",
       ["O"] = "open_tab",
