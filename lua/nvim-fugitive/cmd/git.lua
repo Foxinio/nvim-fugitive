@@ -87,6 +87,57 @@ function M.expand(args, repo)
   return out
 end
 
+-- blame options that take the next argument as their value
+local blame_with_arg = {
+  ["-L"] = true,
+  ["-S"] = true,
+  ["--contents"] = true,
+  ["--date"] = true,
+  ["--encoding"] = true,
+  ["--ignore-rev"] = true,
+  ["--ignore-revs-file"] = true,
+}
+
+---`:Git blame -L 1,5` or a blame routed to a pager names no file: blame the
+---current buffer's like upstream, instead of letting git print its usage.
+---@param repo fugitive.Repo
+---@param args string[] full `:Git` arguments
+---@param rest string[] the arguments after `blame`
+---@return string[]
+function M.blame_file_args(repo, args, rest)
+  if vim.tbl_contains(rest, "--") then
+    return args
+  end
+  local positionals = routes.positionals(rest, blame_with_arg)
+  for _, p in ipairs(positionals) do
+    local abs = p:match("^/") and p or (repo.worktree and repo.worktree .. "/" .. p)
+    if (abs and vim.uv.fs_stat(abs)) or vim.uv.fs_stat(p) then
+      return args
+    end
+  end
+  local buf = vim.api.nvim_get_current_buf()
+  local object = require("nvim-fugitive.object")
+  local obj = object.parse(vim.api.nvim_buf_get_name(buf))
+  local out = vim.deepcopy(args)
+  if obj then
+    if not obj.path or obj.path == "" then
+      return args
+    end
+    -- a blob at a commit: blame at that commit unless a revision was given
+    if #positionals == 0 and obj.commit:match("^%x+$") and #obj.commit >= 40 then
+      table.insert(out, obj.commit)
+    end
+    vim.list_extend(out, { "--", obj.path })
+    return out
+  end
+  local path = M.buf_path(repo, buf)
+  if not path or path == "" then
+    return args
+  end
+  vim.list_extend(out, { "--", path })
+  return out
+end
+
 ---Expansion of a git alias (nil for shell aliases or unknown names).
 ---@param repo fugitive.Repo
 ---@return fun(name: string): string[]?
@@ -311,6 +362,9 @@ function M.run(args, opts)
       repo = repo,
     })
   elseif routes.is_pager(cls.route) then
+    if cls.sub == "blame" then
+      args = M.blame_file_args(repo, args, cls.parsed.rest)
+    end
     return M.run_float(repo, args, { mods = opts.mods, sub = cls.sub, window = cls.route })
   elseif cls.route == "overseer" then
     return require("nvim-fugitive.integrations.overseer").run(
