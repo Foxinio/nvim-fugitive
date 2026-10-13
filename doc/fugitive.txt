@@ -300,8 +300,8 @@ Staging maps ~
               3X takes theirs for the whole file.
   g-          Restore the most recent discard; with a count, pick one.
   =           Toggle an inline diff of the file under the cursor. On a
-              stash entry: show the stash's changes (read only; <CR> on a
-              line opens the stashed file there).
+              stash entry or an Unpushed/Unpulled commit: show its changes
+              (read only; <CR> on a line opens the file there).
   >  <        Show or hide the inline diff.
   I  P        Stage or unstage interactively (`git add --patch`) in a
               terminal.
@@ -656,8 +656,8 @@ telescope.nvim ~
 
 Picker input: exactly `:Git checkout`, `:Git switch`, `:Git merge` and
 `:Git rebase` with no arguments ask for a ref; `:Git rebase -i` asks for
-the base commit; `:Git switch -c {name}` and `:Git checkout -b {name}`
-ask for the start point. Every other invocation runs unchanged. Without
+the base commit. Every other invocation runs unchanged (`:Git checkout -b
+{name}` creates the branch at HEAD). Without
 telescope, |vim.ui.select()| is used.
 
                                                           *fugitive-overseer*

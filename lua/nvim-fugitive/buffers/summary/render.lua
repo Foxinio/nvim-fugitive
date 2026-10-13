@@ -169,6 +169,41 @@ function M.render(snap, expanded)
     end
   end
 
+  ---Read-only diff of a stash or commit expanded with `=`: its files with
+  ---their hunks, keyed by the revision (`ref`).
+  local function add_rev_diff(sec, rev, files)
+    local entry =
+      { path = rev, status = "", xy = "", sub = "N...", submodule = false, kind = "stash" }
+    for _, f in ipairs(files or {}) do
+      for _, h in ipairs(f.header) do
+        if not (h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ ")) then
+          add(h, { kind = "diffmeta", section = sec, entry = entry, file = f, ref = rev })
+        end
+      end
+      for hi, hunk in ipairs(f.hunks) do
+        add(hunk.header, {
+          kind = "hunk",
+          section = sec,
+          entry = entry,
+          file = f,
+          hunk_index = hi,
+          ref = rev,
+        })
+        for li, l in ipairs(hunk.lines) do
+          add(l, {
+            kind = "diffline",
+            section = sec,
+            entry = entry,
+            file = f,
+            hunk_index = hi,
+            line_index = li,
+            ref = rev,
+          })
+        end
+      end
+    end
+  end
+
   for _, log in ipairs(snap.logs) do
     section(log.key, log.label, #log.entries, log.overflow and "+" or "")
     for _, e in ipairs(log.entries) do
@@ -179,6 +214,9 @@ function M.render(snap, expanded)
         subject = e.subject,
         label = log.label,
       })
+      if expanded[M.expand_key(log.key, e.commit)] then
+        add_rev_diff(log.key, e.commit, snap.commit_diffs and snap.commit_diffs[e.commit])
+      end
     end
   end
 
@@ -192,37 +230,7 @@ function M.render(snap, expanded)
       local files = expanded[M.expand_key("Stash", s.ref)]
         and snap.stash_diffs
         and snap.stash_diffs[s.ref]
-      for _, f in ipairs(files or {}) do
-        -- read-only: the stash's files with their hunks, keyed by the ref
-        local entry =
-          { path = s.ref, status = "", xy = "", sub = "N...", submodule = false, kind = "stash" }
-        for _, h in ipairs(f.header) do
-          if not (h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ ")) then
-            add(h, { kind = "diffmeta", section = "Stash", entry = entry, file = f, ref = s.ref })
-          end
-        end
-        for hi, hunk in ipairs(f.hunks) do
-          add(hunk.header, {
-            kind = "hunk",
-            section = "Stash",
-            entry = entry,
-            file = f,
-            hunk_index = hi,
-            ref = s.ref,
-          })
-          for li, l in ipairs(hunk.lines) do
-            add(l, {
-              kind = "diffline",
-              section = "Stash",
-              entry = entry,
-              file = f,
-              hunk_index = hi,
-              line_index = li,
-              ref = s.ref,
-            })
-          end
-        end
-      end
+      add_rev_diff("Stash", s.ref, files)
     end
   end
 

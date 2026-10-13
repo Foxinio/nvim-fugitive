@@ -142,8 +142,8 @@ function M.input(repo, trigger, cb)
 end
 
 ---The argument to append for a chosen ref: checkout/switch of a remote
----branch use the local name so git's DWIM creates a tracking branch; the
----start point of `switch -c`/`checkout -b` and merge/rebase keep it as is.
+---branch use the local name so git's DWIM creates a tracking branch;
+---merge/rebase keep it as is.
 ---@param trigger {picker: string, sub: string, args?: string[]}
 ---@param r {name: string, kind: string}
 ---@return string

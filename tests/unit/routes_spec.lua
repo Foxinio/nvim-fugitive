@@ -250,8 +250,6 @@ describe("routes.picker_trigger", function()
   it("triggers for the allow-listed flag-only forms", function()
     assert.equals("log", trig("rebase -i").picker)
     assert.equals("log", trig("rebase --interactive").picker)
-    assert.equals("refs", trig("switch -c topic").picker)
-    assert.equals("refs", trig("checkout -b topic").picker)
   end)
   it("passes every other invocation through", function()
     for _, s in ipairs({
@@ -263,6 +261,10 @@ describe("routes.picker_trigger", function()
       "checkout main",
       "rebase -i main",
       "switch -c",
+      -- creating a branch: from HEAD, no picker
+      "switch -c topic",
+      "switch --create topic",
+      "checkout -b topic",
       "checkout -b topic main",
       "log",
     }) do

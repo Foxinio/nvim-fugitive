@@ -138,6 +138,26 @@ describe(":Git routes", function()
     end, "staged via add -p", 10000)
   end)
 
+  it("checkout -b / switch -c with a name create the branch, without a picker", function()
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    vim.cmd("cd " .. repo.root)
+    local select = vim.ui.select
+    local picked = false
+    vim.ui.select = function()
+      picked = true
+    end
+    local before = output.get(1)
+    vim.cmd("Git checkout -b topic")
+    wait_done(before)
+    assert.equals("topic", vim.trim(repo:git("branch", "--show-current")))
+    before = output.get(1)
+    vim.cmd("Git switch -c other")
+    wait_done(before)
+    vim.ui.select = select
+    assert.equals("other", vim.trim(repo:git("branch", "--show-current")))
+    assert.is_false(picked)
+  end)
+
   it("chains commands with |", function()
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     repo:write("a", "A\n")

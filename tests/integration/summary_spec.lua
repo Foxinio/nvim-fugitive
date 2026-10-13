@@ -406,6 +406,49 @@ describe("summary buffer", function()
     assert.truthy(H.find_line("^diff %-%-git a/h b/h"))
   end)
 
+  it("shows a commit's diff inline with =", function()
+    local origin = H.repo({ files = { ["f"] = "1\n2\n3\n" } })
+    local clone = H.clone(origin)
+    clone:commit("local change", { ["f"] = "1\nTWO\n3\n", ["new"] = "n\n" })
+    local buf = open(clone)
+    local l = goto_line("local change$")
+    after(buf, function()
+      H.feed("=")
+    end)
+    local lines = H.lines(buf)
+    assert.same({
+      "diff --git a/f b/f",
+      "@@ -1,3 +1,3 @@",
+      " 1",
+      "-2",
+      "+TWO",
+      " 3",
+      "diff --git a/new b/new",
+      "new file mode 100644",
+      "@@ -0,0 +1 @@",
+      "+n",
+    }, vim.list_slice(lines, l + 1, l + 10))
+    -- folded under the commit line
+    assert.equals(2, vim.fn.foldlevel(l + 3))
+    -- <CR> on a diff line opens the file at that commit, at that line
+    vim.api.nvim_win_set_cursor(0, { l + 5, 0 })
+    H.feed("<CR>")
+    local commit = clone:rev("HEAD")
+    assert.equals(
+      "fugitive://" .. clone.root .. "/.git//" .. commit .. "/f",
+      vim.api.nvim_buf_get_name(0)
+    )
+    assert.equals(2, vim.fn.line("."))
+    vim.cmd("buffer " .. buf)
+    -- < from inside the diff hides it, back on the commit line
+    vim.api.nvim_win_set_cursor(0, { l + 4, 0 })
+    after(buf, function()
+      H.feed("<")
+    end)
+    assert.equals(l, vim.fn.line("."))
+    assert.is_nil(H.find_line("^@@"))
+  end)
+
   it("works in an unborn repository", function()
     local repo = H.repo()
     repo:write("first", "1\n")

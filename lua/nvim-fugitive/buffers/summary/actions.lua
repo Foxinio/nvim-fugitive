@@ -457,6 +457,7 @@ local function file_item_at(st, lnum)
     and (
       i.kind == "file"
       or i.kind == "stash"
+      or i.kind == "commit"
       or i.kind == "hunk"
       or i.kind == "diffline"
       or i.kind == "diffmeta"
@@ -466,9 +467,12 @@ local function file_item_at(st, lnum)
   end
 end
 
----What `=` expands for a line: a file path, or a stash ref.
+---What `=` expands for a line: a file path, a stash ref or a commit.
 local function expand_id(i)
-  if i.section == "Stash" then
+  if i.kind == "commit" then
+    return i.commit
+  end
+  if i.ref then
     return i.ref
   end
   return i.entry.path
@@ -496,7 +500,7 @@ function M.inline(buf, mode, visual)
       if (st.expanded[key] or false) ~= want then
         st.expanded[key] = want or nil
         changed = true
-        if not want and i.kind ~= "file" and i.kind ~= "stash" then
+        if not want and i.kind ~= "file" and i.kind ~= "stash" and i.kind ~= "commit" then
           cursor_to_file = expand_id(i)
         end
       end
@@ -506,7 +510,10 @@ function M.inline(buf, mode, visual)
     summary().refresh(buf, function()
       if cursor_to_file then
         for lnum, i in ipairs(st.info) do
-          if (i.kind == "file" or i.kind == "stash") and expand_id(i) == cursor_to_file then
+          if
+            (i.kind == "file" or i.kind == "stash" or i.kind == "commit")
+            and expand_id(i) == cursor_to_file
+          then
             pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
             break
           end
@@ -752,8 +759,8 @@ function M.target(buf, lnum)
     local url = object.resolve(repo, "HEAD:" .. path)
     return url
   end
-  if i.section == "Stash" and i.file then
-    -- a line of an expanded stash: the stashed file at that line
+  if i.ref and i.file then
+    -- a line of an expanded stash or commit: its file at that line
     local file = i.file --[[@as fugitive.FileDiff]]
     local at
     if i.kind ~= "diffmeta" then

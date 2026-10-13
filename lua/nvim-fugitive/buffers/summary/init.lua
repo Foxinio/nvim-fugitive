@@ -297,7 +297,11 @@ function M.foldexpr(lnum)
     return ">1"
   elseif i.kind == "blank" or i.kind == "header" or i.kind == "discarded" then
     return 0
-  elseif i.kind == "file" or i.kind == "stash" then
+  elseif
+    i.kind == "file"
+    or i.kind == "stash"
+    or (i.kind == "commit" and i.section ~= "Rebasing")
+  then
     local nxt = st.info[lnum + 1]
     if nxt and (nxt.kind == "hunk" or nxt.kind == "diffmeta" or nxt.kind == "diffline") then
       return ">2"

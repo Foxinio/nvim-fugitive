@@ -626,13 +626,6 @@ function M.picker_trigger(args)
   if n == 2 and sub == "rebase" and (args[2] == "-i" or args[2] == "--interactive") then
     return { picker = "log", sub = sub, args = args }
   end
-  if
-    n == 3
-    and ((sub == "switch" and (args[2] == "-c" or args[2] == "--create")) or (sub == "checkout" and args[2] == "-b"))
-    and args[3]:sub(1, 1) ~= "-"
-  then
-    return { picker = "refs", sub = sub, args = args }
-  end
   return nil
 end
 

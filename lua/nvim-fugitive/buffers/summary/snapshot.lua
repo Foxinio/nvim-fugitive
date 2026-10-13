@@ -36,6 +36,7 @@ local M = {}
 ---@field logs fugitive.LogSection[]
 ---@field stashes {ref: string, subject: string}[]
 ---@field stash_diffs table<string, fugitive.FileDiff[]> expanded stash ref -> files
+---@field commit_diffs table<string, fugitive.FileDiff[]> expanded Unpushed/Unpulled commit -> files
 ---@field diffs table<string, table<string, fugitive.FileDiff>> section -> path -> diff
 ---@field discarded fugitive.DiscardEntry? latest discard journal entry of this session
 
@@ -401,6 +402,7 @@ function M.gather(repo, run, expanded)
     stashes = {},
     diffs = {},
     stash_diffs = {},
+    commit_diffs = {},
     status = status_mod.parse(""),
     head = "",
   }
@@ -517,6 +519,16 @@ function M.gather(repo, run, expanded)
   add("Unpulled", "Unpulled from " .. push_short, range_log(head_rev, unique_push))
   if pull_ref ~= "" and st.behind ~= 0 then
     add("Unpulled", "Unpulled from " .. pull_short, range_log(head_rev, pull_ref))
+  end
+
+  -- commits expanded with `=`: their own diff
+  for _, log in ipairs(snap.logs) do
+    for _, e in ipairs(log.entries) do
+      if expanded and expanded[log.key .. "\0" .. e.commit] and not snap.commit_diffs[e.commit] then
+        local diff = run({ "show", "--format=", "--no-color", "--no-ext-diff", e.commit })
+        snap.commit_diffs[e.commit] = diff_mod.parse(diff.stdout or "")
+      end
+    end
   end
 
   if st.stash > 0 then
