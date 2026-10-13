@@ -285,8 +285,9 @@ require("nvim-fugitive").setup({
   -- (e.g. ["stash list"], ["log --graph"]). Targets: "float", "inplace",
   -- "split", "vert", "tab" (output in a buffer), "notification", "overseer",
   -- "term". Unlisted commands use the built-in table: pager commands ->
-  -- float, network commands -> overseer, `add -p` & co. -> term, everything
-  -- else -> notification (:help fugitive-output).
+  -- float, network commands -> overseer, `add -p` & co. -> term, your git
+  -- aliases -> float (key them by name here), everything else ->
+  -- notification (:help fugitive-output).
   routes = {},
   notify = {
     -- notifications are cut after this many lines (:FugitiveOutput has all)

@@ -537,9 +537,12 @@ end
 ---@field sub string?
 ---@field parsed fugitive.ParsedArgs
 ---@field explicit boolean? the user's `routes` chose the target
+---@field alias string? the git alias that was run
 
 ---Classify a `:Git` argument list.
 ---@param args string[]
+---`opts.aliases(name)` returns a git alias's expansion, or `{}` for a shell
+---(`!`) alias, and nil when `name` is not an alias.
 ---@param opts? {overrides?: table<string, string>, long_running?: string[], aliases?: fun(name: string): string[]?}
 ---@return fugitive.Classification
 function M.classify(args, opts)
@@ -549,17 +552,41 @@ function M.classify(args, opts)
   local overrides = opts.overrides or (cfg and cfg.routes) or {}
   local parsed = M.parse(args)
   local sub, rest = parsed.sub, parsed.rest
-  -- resolve simple aliases (not shell `!` aliases) for classification only
+  local result = { parsed = parsed }
   if sub and not M.subcommands[sub] and opts.aliases then
     local expansion = opts.aliases(sub)
-    if expansion and expansion[1] then
-      local p2 = M.parse(vim.list_extend(vim.deepcopy(expansion), rest))
-      if p2.sub then
-        sub, rest = p2.sub, p2.rest
+    if expansion then
+      -- a user-defined alias: `routes` keyed by its name first, else the float
+      result.alias = sub
+      local chosen = M.override(overrides, sub, rest)
+      -- simple aliases are classified through their expansion (for the
+      -- subcommand-specific handling and "sub word" route keys)
+      local p2 = expansion[1] and M.parse(vim.list_extend(vim.deepcopy(expansion), rest))
+      local expanded = p2 and p2.sub
+      if expanded then
+        chosen = chosen or M.override(overrides, expanded, p2.rest)
+        sub, rest = expanded, p2.rest
       end
+      result.sub = sub
+      if chosen then
+        result.route = chosen
+        result.explicit = true
+        return result
+      end
+      local spec = M.subcommands[sub]
+      local route = spec
+          and M.normalize(
+            type(spec.route) == "function" and spec.route(rest, spec) or spec.route --[[@as string]]
+          )
+        or nil
+      -- interactive commands still need a terminal
+      result.route = (route == "term" and not parsed.paginate) and "term"
+        or (parsed.no_pager and "notification")
+        or "float"
+      return result
     end
   end
-  local result = { sub = sub, parsed = parsed }
+  result.sub = sub
   if not sub then
     result.route = "notification"
     return result

@@ -23,17 +23,23 @@ local function filter(list, lead)
   return out
 end
 
----All git subcommands and aliases.
----@param r? fugitive.Repo
+---git's own commands: builtins and `git-*` programs on PATH (cached).
 ---@return string[]
-function M.subcommands(r)
+function M.commands()
   if not cache.subcommands then
     local exec = require("nvim-fugitive.git.exec")
     local list = exec.lines({ "--list-cmds=main,others,nohelpers" }, {}) or {}
     table.sort(list)
     cache.subcommands = list
   end
-  local list = vim.deepcopy(cache.subcommands or {})
+  return cache.subcommands
+end
+
+---All git subcommands and aliases.
+---@param r? fugitive.Repo
+---@return string[]
+function M.subcommands(r)
+  local list = vim.deepcopy(M.commands())
   if r then
     for _, l in ipairs(r:lines({ "config", "--get-regexp", "^alias\\." }) or {}) do
       local name = l:match("^alias%.(%S+)")

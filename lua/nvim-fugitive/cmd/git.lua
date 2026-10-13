@@ -138,17 +138,35 @@ function M.blame_file_args(repo, args, rest)
   return out
 end
 
----Expansion of a git alias (nil for shell aliases or unknown names).
+---Expansion of a git alias: its words, `{}` for a shell (`!`) alias, nil
+---when `name` is not an alias.
 ---@param repo fugitive.Repo
 ---@return fun(name: string): string[]?
 function M.alias_resolver(repo)
   return function(name)
     local value = repo:config("alias." .. name)
-    if not value or value:sub(1, 1) == "!" then
+    -- git ignores aliases that would hide one of its own commands
+    if not value or vim.tbl_contains(require("nvim-fugitive.cmd.complete").commands(), name) then
       return nil
+    end
+    if value:sub(1, 1) == "!" then
+      return {}
     end
     return M.split_args(value)
   end
+end
+
+---Is `name` something git can run: a builtin, a `git-<name>` on PATH or an
+---alias? (Unknown when git cannot list its commands.)
+---@param repo fugitive.Repo
+---@param name string
+---@return boolean
+function M.is_command(repo, name)
+  if routes.subcommands[name] or repo:config("alias." .. name) then
+    return true
+  end
+  local commands = require("nvim-fugitive.cmd.complete").commands()
+  return #commands == 0 or vim.tbl_contains(commands, name)
 end
 
 ---Notify-style completion of a finished command.
@@ -348,6 +366,12 @@ function M.run(args, opts)
         M.run(full, vim.tbl_extend("force", opts, { repo = repo, skip_picker = true }))
       end)
     end
+  end
+
+  local sub = routes.parse(args).sub
+  if sub and not M.is_command(repo, sub) then
+    notify.error(string.format("'%s' is not a git command or a defined alias (alias.%s)", sub, sub))
+    return nil
   end
 
   if opts.bang then

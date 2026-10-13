@@ -490,6 +490,13 @@ goes to a large float; otherwise to a notification.
 Flags are classified per subcommand: `-e` means --edit for commit, merge,
 tag, revert, cherry-pick, config and notes, but it is a pattern for grep.
 
+Your git aliases (`alias.*`, shell `!` aliases included) go to the float,
+except an alias of an interactive command (`add -p`, ...), which still gets
+a terminal. Route an alias with `routes` keyed by its name, e.g.
+`routes = { lg = "vert", sync = "overseer" }`. A name that is neither a git
+command (builtin or `git-<name>` on $PATH) nor an alias is an error, and
+nothing is run.
+
                                                         *fugitive-routes*
 Choose the target per command with `routes`. Keys are a subcommand or a
 subcommand plus a word (a flag or the first argument); the most specific

@@ -154,15 +154,42 @@ describe("routes.classify", function()
     assert.equals("float", r.route)
   end)
 
-  it("classifies aliases through their expansion", function()
-    local r = routes.classify({ "ci" }, {
-      overrides = {},
-      long_running = {},
-      aliases = function(name)
-        return name == "ci" and { "commit" } or nil
-      end,
-    })
-    assert.equals("editor", r.route)
+  describe("aliases", function()
+    local aliases = {
+      ci = { "commit" },
+      lg = { "log", "--oneline" },
+      ap = { "add", "-p" },
+      sh = {},
+    }
+    local function classify(args, overrides)
+      return routes.classify(args, {
+        overrides = overrides or {},
+        long_running = {},
+        aliases = function(name)
+          return aliases[name]
+        end,
+      })
+    end
+
+    it("go to the float by default", function()
+      for _, name in ipairs({ "ci", "lg", "sh" }) do
+        local r = classify({ name })
+        assert.equals("float", r.route, name)
+        assert.equals(name, r.alias)
+      end
+      assert.equals("commit", classify({ "ci" }).sub)
+    end)
+
+    it("keep a terminal for interactive expansions", function()
+      assert.equals("term", classify({ "ap" }).route)
+    end)
+
+    it("are routed by their own name first, then by the expansion", function()
+      assert.equals("vert", classify({ "lg" }, { lg = "vert", log = "tab" }).route)
+      assert.equals("tab", classify({ "lg" }, { log = "tab" }).route)
+      assert.equals("overseer", classify({ "sh" }, { sh = "task" }).route)
+      assert.equals("notification", classify({ "ci", "-m", "x" }, { ["ci -m"] = "notify" }).route)
+    end)
   end)
 end)
 
