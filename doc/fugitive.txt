@@ -283,7 +283,9 @@ left alone).
 The buffer refreshes by itself: after every command run through fugitive,
 when the repository changes on disk (index, HEAD, refs; watched with
 filesystem events), on |FocusGained| and on |BufEnter|. The cursor stays on
-the same item.
+the same item, except after staging or unstaging whole files: it moves on to
+the next file of the section they left (or the previous one at its end), and
+the moved files are folded.
 
                                                      *fugitive-summary-maps*
 Staging maps ~

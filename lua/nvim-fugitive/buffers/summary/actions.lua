@@ -317,6 +317,71 @@ local function unstage_cmds(st, items)
   return cmds, nil, unstaged
 end
 
+local file_sections = { "Untracked", "Unstaged", "Staged", "Unmerged" }
+
+---Whole files moved by a stage/unstage: collapse them in every section, so
+---one comes back folded wherever it lands, now or after moving back.
+---@param st fugitive.SummaryState
+---@param items table[] selection items
+---@return table<string, true> paths
+local function fold_moved(st, items)
+  local paths = {}
+  for _, it in ipairs(items) do
+    if it.type == "file" then
+      paths[it.entry.path] = true
+      if it.entry.orig then
+        paths[it.entry.orig] = true
+      end
+    elseif it.type == "section" then
+      for _, e in ipairs(it.entries or {}) do
+        paths[e.path] = true
+      end
+    end
+  end
+  for path in pairs(paths) do
+    for _, sec in ipairs(file_sections) do
+      st.expanded[render.expand_key(sec, path)] = nil
+    end
+  end
+  return paths
+end
+
+---Where the cursor goes once whole files left their section: the next file
+---of that section (else the previous one), not the moved file.
+---@param st fugitive.SummaryState
+---@param items table[]
+---@param l1 integer
+---@param l2 integer
+---@return {section: string, paths: table<string, true>, target: string?}?
+local function cursor_after_move(st, items, l1, l2)
+  local section
+  local moved = {}
+  for _, it in ipairs(items) do
+    if it.type ~= "file" then
+      return nil
+    end
+    section = section or it.section
+    if it.section ~= section then
+      return nil
+    end
+    moved[it.entry.path] = true
+  end
+  if not section then
+    return nil
+  end
+  local before, after
+  for lnum, i in ipairs(st.info) do
+    if i.kind == "file" and i.section == section and not moved[i.entry.path] then
+      if lnum < l1 then
+        before = i.entry.path
+      elseif lnum > l2 and not after then
+        after = i.entry.path
+      end
+    end
+  end
+  return { section = section, paths = moved, target = after or before }
+end
+
 -- Staging is routine: errors notify (from run_chain), success is silent and
 -- shows in the refreshed summary.
 local function do_cmds(buf, builder, visual)
@@ -331,7 +396,17 @@ local function do_cmds(buf, builder, visual)
   if #cmds == 0 then
     return
   end
-  M.run_chain(st.repo, cmds)
+  fold_moved(st, items)
+  st.pending_cursor = cursor_after_move(st, items, l1, l2)
+  local pending = st.pending_cursor
+  M.run_chain(st.repo, cmds, function()
+    -- drop it once the summary shows the result (or the command failed)
+    summary().refresh(buf, function()
+      if st.pending_cursor == pending then
+        st.pending_cursor = nil
+      end
+    end)
+  end)
 end
 
 function M.stage(buf, visual)
