@@ -90,9 +90,11 @@ function Repo:rev(rev)
   return vim.trim(self:git("rev-parse", rev))
 end
 
----Porcelain v1 short status, for asserting repo state.
+---Porcelain v1 short status, for asserting repo state. Without optional
+---locks: tests poll this while git runs, and a status refreshing the index
+---would take index.lock away from it (`git add -p` then fails).
 function Repo:status()
-  return self:git("status", "--porcelain=v1", "--untracked-files=all")
+  return self:git("--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all")
 end
 
 ---Create a fixture repo. `opts.files` seeds an initial commit.

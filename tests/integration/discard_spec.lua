@@ -14,6 +14,10 @@ end
 
 local function after(buf, fn)
   local st = summary.state(buf)
+  -- a refresh still in flight would otherwise count as the render after `fn`
+  H.wait(function()
+    return not st.running
+  end, "summary idle")
   local tick = st.tick
   fn()
   H.wait(function()
@@ -37,9 +41,12 @@ describe("discard (X) and recovery", function()
   before_each(function()
     H.reset_ui()
     log, restore = H.capture_notify()
+    -- a watcher refresh landing mid-action would satisfy `after` too early
+    require("nvim-fugitive.watch").enable(false)
   end)
   after_each(function()
     restore()
+    require("nvim-fugitive.watch").enable(true)
   end)
 
   it("untracked file: deleted, then restored", function()

@@ -37,6 +37,8 @@ function M.compute(buf)
     table.remove(index)
   end
   local current = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  -- vim.text.diff is 0.12+; vim.diff (deprecated there) covers 0.11
+  ---@diagnostic disable-next-line: deprecated
   local diff = vim.text and vim.text.diff or vim.diff
   local a = #index > 0 and (table.concat(index, "\n") .. "\n") or ""
   local b = table.concat(current, "\n") .. "\n"

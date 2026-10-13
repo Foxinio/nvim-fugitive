@@ -15,6 +15,11 @@ end
 ---Wait for the next render after `fn` changes something.
 local function after(buf, fn)
   local st = summary.state(buf)
+  -- a refresh still in flight (from opening the buffer, say) would otherwise
+  -- count as the render after `fn`
+  H.wait(function()
+    return not st.running
+  end, "summary idle")
   local tick = st.tick
   fn()
   H.wait(function()
@@ -33,9 +38,14 @@ describe("summary buffer", function()
   before_each(function()
     H.reset_ui()
     log, restore = H.capture_notify()
+    -- The watcher's debounced refresh can land while an action's git command
+    -- is still running, and `after` would then see a render of the old state.
+    -- Only the watcher test needs it.
+    require("nvim-fugitive.watch").enable(false)
   end)
   after_each(function()
     restore()
+    require("nvim-fugitive.watch").enable(true)
   end)
 
   it("renders the upstream layout", function()
@@ -334,6 +344,7 @@ describe("summary buffer", function()
   end)
 
   it("refreshes when the repository changes outside (watcher)", function()
+    require("nvim-fugitive.watch").enable(true)
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     local buf = open(repo)
     assert.is_nil(H.find_line("^Untracked"))

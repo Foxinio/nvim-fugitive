@@ -47,10 +47,14 @@ describe("submodule maintenance", function()
     assert.equals("(modified content)", notes(buf)[l])
     vim.api.nvim_win_set_cursor(0, { l, 0 })
     local st = summary.state(buf)
+    -- a refresh in flight from opening would render without the expansion
+    H.wait(function()
+      return not st.running
+    end, "summary idle")
     local tick = st.tick
     H.feed("=")
     H.wait(function()
-      return st.tick > tick
+      return st.tick > tick and not st.running
     end)
     assert.truthy(H.find_line("^   M s%.txt$"))
   end)

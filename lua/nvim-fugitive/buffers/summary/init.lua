@@ -110,14 +110,15 @@ local function apply(buf, st, snap)
     cursors[win] =
       { lnum = c[1], col = c[2], id = identity(st.info[c[1]]), topline = vim.fn.line("w0", win) }
   end
+  -- before setting the lines: 'foldexpr' reads st.info as they change
+  st.info = info
+  st.snap = snap
   vim.bo[buf].modifiable = true
   vim.bo[buf].readonly = false
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.bo[buf].readonly = true
   vim.bo[buf].modified = false
-  st.info = info
-  st.snap = snap
   M.highlight(buf, info)
   for win, c in pairs(cursors) do
     local lnum = find_identity(info, c.id) or math.min(c.lnum, #lines)
