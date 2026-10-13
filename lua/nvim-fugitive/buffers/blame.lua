@@ -122,6 +122,33 @@ local function highlight(buf, lines)
   end
 end
 
+---`blame.ignoreRevsFile` is commonly set globally, but git refuses to blame
+---at all when the file is missing from a repository: drop the missing ones.
+---@param repo fugitive.Repo
+---@return string[]
+local function ignore_revs_args(repo)
+  local files = repo:config_all("blame.ignoreRevsFile")
+  local present, missing = {}, false
+  for _, f in ipairs(files) do
+    if f ~= "" then
+      local path = f:gsub("^~/", vim.env.HOME .. "/")
+      if not path:match("^/") then
+        path = (repo.worktree or repo.git_dir) .. "/" .. path
+      end
+      if vim.uv.fs_stat(path) then
+        table.insert(present, "--ignore-revs-file=" .. path)
+      else
+        missing = true
+      end
+    end
+  end
+  if not missing then
+    return {}
+  end
+  -- clears the configured list (`-c blame.ignoreRevsFile=` cannot)
+  return vim.list_extend({ "--no-ignore-revs-file" }, present)
+end
+
 ---Blame arguments for the origin buffer; returns args and an optional temp
 ---file to delete afterwards.
 ---@param repo fugitive.Repo
@@ -140,6 +167,7 @@ local function blame_args(repo, buf, flags)
     "blame",
     "--show-number",
   }
+  vim.list_extend(args, ignore_revs_args(repo))
   vim.list_extend(args, flags)
   local path, commit, tmp
   if obj then
@@ -227,6 +255,15 @@ end
 ---@return integer? blame_buf
 function M.open(opts)
   opts = opts or {}
+  -- from a blame window: blame its file again (like upstream)
+  local current = M._state[vim.api.nvim_get_current_buf()]
+  if current then
+    if not vim.api.nvim_win_is_valid(current.origin_win) then
+      return nil
+    end
+    M.close(vim.api.nvim_get_current_buf())
+    vim.api.nvim_set_current_win(current.origin_win)
+  end
   local origin_buf = vim.api.nvim_get_current_buf()
   local origin_win = vim.api.nvim_get_current_win()
   local repo = opts.repo or require("nvim-fugitive.git.repo").require(origin_buf)
