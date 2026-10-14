@@ -491,14 +491,32 @@ function M.inline(buf, mode, visual)
     local i = file_item_at(st, lnum)
     if i then
       local key = render.expand_key(i.section, expand_id(i))
+      -- an untracked directory also shows its files when it is part of an
+      -- expanded one (git splits it up once some of its files are staged)
+      local dir = i.kind == "file"
+        and i.section == "Untracked"
+        and i.entry.path:match("/$")
+        and i.entry.path
+      local shown = st.expanded[key] or false
+      if dir then
+        shown = (st.snap and st.snap.untracked_children and st.snap.untracked_children[dir]) ~= nil
+      end
       local want
       if mode == "toggle" then
-        want = not st.expanded[key]
+        want = not shown
       else
         want = mode == "show"
       end
-      if (st.expanded[key] or false) ~= want then
+      if shown ~= want then
         st.expanded[key] = want or nil
+        if dir and not want then
+          for k in pairs(st.expanded) do
+            local d = k:match("^Untracked%z(.+/)$")
+            if d and dir:sub(1, #d) == d then
+              st.expanded[k] = nil
+            end
+          end
+        end
         changed = true
         if not want and i.kind ~= "file" and i.kind ~= "stash" and i.kind ~= "commit" then
           cursor_to_file = expand_id(i)

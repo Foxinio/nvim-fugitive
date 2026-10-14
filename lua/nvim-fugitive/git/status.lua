@@ -16,6 +16,7 @@ M.args = { "status", "--porcelain=v2", "-z", "--branch", "--show-stash" }
 ---@field mode_index? string
 ---@field mode_worktree? string
 ---@field kind "ordinary"|"rename"|"unmerged"|"untracked"|"ignored"
+---@field parent? string the untracked directory listing this file (summary)
 
 ---@class fugitive.Status
 ---@field oid string? commit id, nil for an unborn branch

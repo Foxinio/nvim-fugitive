@@ -37,6 +37,7 @@ local M = {}
 ---@field stashes {ref: string, subject: string}[]
 ---@field stash_diffs table<string, fugitive.FileDiff[]> expanded stash ref -> files
 ---@field commit_diffs table<string, fugitive.FileDiff[]> expanded Unpushed/Unpulled commit -> files
+---@field untracked_children table<string, fugitive.StatusEntry[]> expanded untracked directory -> its files
 ---@field diffs table<string, table<string, fugitive.FileDiff>> section -> path -> diff
 ---@field discarded fugitive.DiscardEntry? latest discard journal entry of this session
 
@@ -288,7 +289,52 @@ local function tracking_refs(repo, branch)
 end
 
 ---Diffs of the expanded files, per section.
-local function inline_diffs(run, st, expanded)
+---Untracked files inside the untracked directories expanded with `=`.
+---@param run fun(args: string[]): fugitive.ExecResult
+---@param st fugitive.Status
+---@param expanded table<string, boolean>
+---@return table<string, fugitive.StatusEntry[]> directory -> files
+local function untracked_children(run, st, expanded)
+  local dirs = {}
+  for key in pairs(expanded) do
+    local dir = key:match("^Untracked%z(.+/)$")
+    if dir then
+      table.insert(dirs, dir)
+    end
+  end
+  ---Expanded itself, or inside an expanded directory that git now reports
+  ---in parts (after staging some of its files).
+  local function is_expanded(path)
+    for _, dir in ipairs(dirs) do
+      if path:sub(1, #dir) == dir then
+        return true
+      end
+    end
+    return false
+  end
+  local children = {}
+  for _, e in ipairs(st.untracked) do
+    if e.path:match("/$") and is_expanded(e.path) then
+      local res = run({ "ls-files", "--others", "--exclude-standard", "-z", "--", e.path })
+      local files = {}
+      for path in (res.stdout or ""):gmatch("[^%z]+") do
+        table.insert(files, {
+          status = "?",
+          xy = "??",
+          path = path,
+          sub = "N...",
+          submodule = false,
+          kind = "untracked",
+          parent = e.path,
+        })
+      end
+      children[e.path] = files
+    end
+  end
+  return children
+end
+
+local function inline_diffs(run, st, expanded, children)
   local diffs = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} }
   local want = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} }
   local any = false
@@ -315,6 +361,11 @@ local function inline_diffs(run, st, expanded)
     Untracked = by_path(st.untracked),
     Unmerged = by_path(st.unmerged),
   }
+  for _, files in pairs(children or {}) do
+    for _, e in ipairs(files) do
+      entries.Untracked[e.path] = e
+    end
+  end
   for _, section in ipairs({ "Unstaged", "Staged" }) do
     local paths, subs = {}, {}
     for _, p in ipairs(want[section]) do
@@ -403,6 +454,7 @@ function M.gather(repo, run, expanded)
     diffs = {},
     stash_diffs = {},
     commit_diffs = {},
+    untracked_children = {},
     status = status_mod.parse(""),
     head = "",
   }
@@ -474,7 +526,8 @@ function M.gather(repo, run, expanded)
       table.insert(snap.headers, help)
     end
   end
-  snap.diffs = inline_diffs(run, st, expanded or {})
+  snap.untracked_children = untracked_children(run, st, expanded or {})
+  snap.diffs = inline_diffs(run, st, expanded or {}, snap.untracked_children)
 
   -- Unpushed / Unpulled, following upstream's rules
   local limit = require("nvim-fugitive.config").get().summary.log_limit
