@@ -829,6 +829,29 @@ function M.target(buf, lnum)
   return {}
 end
 
+---Make the window that opening from the summary should use current: the
+---last window visited in this tab, or a new split below the summary when
+---there is none to reuse (only the summary, or a float/blame window).
+---@param buf integer summary buffer
+---@return integer win
+function M.edit_window(buf)
+  local summary_win = vim.api.nvim_get_current_win()
+  local prev = vim.fn.win_getid(vim.fn.winnr("#"))
+  if
+    prev ~= 0
+    and prev ~= summary_win
+    and vim.api.nvim_win_is_valid(prev)
+    and vim.api.nvim_win_get_config(prev).relative == ""
+    and vim.api.nvim_win_get_buf(prev) ~= buf
+    and not vim.wo[prev].winfixbuf
+  then
+    vim.api.nvim_set_current_win(prev)
+    return prev
+  end
+  vim.cmd("belowright split")
+  return vim.api.nvim_get_current_win()
+end
+
 function M.open(buf, how)
   local t = M.target(buf, vim.fn.line("."))
   if t.submodule then
@@ -860,6 +883,12 @@ function M.open(buf, how)
     notify.warn("nothing to open under the cursor")
     return
   end
+  if how == "edit" then
+    M.edit_window(buf)
+  elseif how == "split" then
+    -- below the summary, whatever 'splitbelow' says
+    how = "below"
+  end
   require("nvim-fugitive.buffers.reader").open(t.target, how, t.lnum)
 end
 
@@ -880,6 +909,8 @@ function M.diff(buf, layout)
     notify.warn("nothing to diff for " .. e.path)
     return
   end
+  -- the diff goes where <CR> opens files, the summary stays
+  M.edit_window(buf)
   if i.section == "Unmerged" then
     vim.cmd("edit " .. vim.fn.fnameescape(repo:abs(e.path)))
     return ds.split({ three_way = true, layout = layout })

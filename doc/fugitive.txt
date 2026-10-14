@@ -314,9 +314,11 @@ hunk is staged, unstaged or discarded.
 
 Navigation maps ~
   <CR>        Open the file, the index version, the commit or the ref under
-              the cursor. On a diff line, open the matching version at that
-              line. On a submodule, open the submodule's own summary.
-  o  gO  O    Open in a split, a vertical split or a tab.
+              the cursor, in the window you were in last (a new split
+              below the summary when there is none), so the summary stays.
+              On a diff line, open the matching version at that line. On a
+              submodule, open the submodule's own summary.
+  o  gO  O    Open in a split below, a vertical split or a tab.
   p           Open in the preview window.
   f           Open in the big float (|fugitive-float|); it closes with :q
               or when you leave it.
@@ -334,8 +336,9 @@ Navigation maps ~
   R           Reload synchronously.
 
 Diff maps ~
-  dd  dv  ds  dh  Run |:Gdiffsplit| (vertical or horizontal) on the file.
-                  On an unmerged file this opens the three-way layout.
+  dd  dv  ds  dh  Run |:Gdiffsplit| (vertical or horizontal) on the file,
+                  in the window <CR> would use. On an unmerged file this
+                  opens the three-way layout.
   dp              Show `git diff` of the file in the pager float.
   dq              Close the diff windows.
 

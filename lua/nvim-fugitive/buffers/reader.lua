@@ -197,14 +197,20 @@ end
 
 ---Open a fugitive URL or path.
 ---@param target string
----@param how? "edit"|"split"|"vsplit"|"tab"|"pedit"
+---@param how? "edit"|"split"|"below"|"vsplit"|"tab"|"pedit"|"float"
 ---@param lnum? integer
 function M.open(target, how, lnum)
   if how == "float" then
     return M.open_float(target, lnum)
   end
-  local cmds =
-    { edit = "edit", split = "split", vsplit = "vsplit", tab = "tabedit", pedit = "pedit" }
+  local cmds = {
+    edit = "edit",
+    split = "split",
+    below = "belowright split",
+    vsplit = "vsplit",
+    tab = "tabedit",
+    pedit = "pedit",
+  }
   local cmd = cmds[how or "edit"] or "edit"
   -- leave a float before opening a real window
   local win = vim.api.nvim_get_current_win()
