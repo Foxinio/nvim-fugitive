@@ -464,8 +464,8 @@ describe("summary buffer", function()
       assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
     end)
 
-    it("two- and three-way diffs: where <CR> opens, keeping the summary", function()
-      local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n" } })
+    it("two- and three-way diffs: a split below, keeping the other windows", function()
+      local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
       repo:git("checkout", "-q", "-b", "topic")
       repo:commit("topic", { ["c"] = "topic\n" })
       repo:git("checkout", "-q", "main")
@@ -473,33 +473,73 @@ describe("summary buffer", function()
       repo:git("merge", "topic", { allow_fail = true })
       repo:write("d", "D\n")
       vim.cmd("only")
-      local buf = open(repo)
-      vim.cmd("only")
+      vim.cmd("cd " .. repo.root)
+      vim.cmd("edit o")
+      local original = vim.api.nvim_get_current_win()
+      vim.cmd("vertical Git")
+      local buf = vim.api.nvim_get_current_buf()
+      H.wait(function()
+        return summary.state(buf) ~= nil and summary.state(buf).tick > 0
+      end)
       local summary_win = vim.api.nvim_get_current_win()
+      local function untouched()
+        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+        assert.equals(repo:path("o"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original)))
+      end
+
       goto_line("^U c$")
       H.feed("dd")
-      -- summary + ours, work tree, theirs
-      assert.equals(4, #wins())
-      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-      assert.is_true(vim.wo.diff)
+      -- original + summary + ours, work tree, theirs below the summary
+      assert.equals(5, #wins())
+      untouched()
+      local merge = {}
       for _, w in ipairs(wins()) do
-        if w ~= summary_win then
+        if w ~= summary_win and w ~= original then
           assert.is_true(row(w) > row(summary_win))
+          assert.is_true(vim.wo[w].diff)
+          table.insert(merge, w)
         end
       end
-      -- back in the summary: a two-way diff reuses the last window
-      vim.cmd("diffoff!")
+      assert.equals(3, #merge)
+      -- closing any one of the three closes the others
+      vim.api.nvim_win_close(merge[1], false)
+      H.wait(function()
+        return #wins() == 2
+      end, "merge windows closed")
+      untouched()
+
+      -- dq closes the sides only, keeping the work tree file
       vim.api.nvim_set_current_win(summary_win)
-      vim.cmd("only")
-      vim.cmd("belowright new")
-      local other = vim.api.nvim_get_current_win()
+      goto_line("^U c$")
+      H.feed("dd")
+      assert.equals(5, #wins())
+      local work = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(summary_win)
+      H.feed("dq")
+      vim.wait(50)
+      assert.equals(3, #wins())
+      assert.equals(repo:path("c"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(work)))
+      assert.is_false(vim.wo[work].diff)
+      vim.api.nvim_win_close(work, false)
+      untouched()
+
+      -- a two-way diff: a split below too
       vim.api.nvim_set_current_win(summary_win)
       goto_line("^M d$")
       H.feed("dv")
-      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-      assert.equals(repo:path("d"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(other)))
-      assert.is_true(vim.wo[other].diff)
-      assert.equals(3, #wins())
+      -- index | work tree, below the summary
+      assert.equals(4, #wins())
+      untouched()
+      local found = 0
+      for _, w in ipairs(wins()) do
+        if w ~= summary_win and w ~= original then
+          found = found + 1
+          assert.is_true(vim.wo[w].diff)
+          assert.is_true(row(w) > row(summary_win))
+        end
+      end
+      assert.equals(2, found)
+      assert.truthy(vim.fn.bufwinid(repo:path("d")) ~= -1)
     end)
   end)
 

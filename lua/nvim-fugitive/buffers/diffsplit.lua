@@ -87,6 +87,35 @@ local function open_side(url, mods)
   return win
 end
 
+---The three windows of a merge layout close together: closing any one of
+---them closes the other two (`dq` unlinks them first).
+---@param wins integer[]
+local function link_windows(wins)
+  local name = "fugitive_merge_" .. wins[2]
+  local group = vim.api.nvim_create_augroup(name, { clear = true })
+  for _, win in ipairs(wins) do
+    vim.w[win].fugitive_merge_group = name
+    vim.api.nvim_create_autocmd("WinClosed", {
+      group = group,
+      pattern = tostring(win),
+      callback = function()
+        pcall(vim.api.nvim_del_augroup_by_id, group)
+        vim.schedule(function()
+          for _, other in ipairs(wins) do
+            if
+              other ~= win
+              and vim.api.nvim_win_is_valid(other)
+              and #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(other)) > 1
+            then
+              pcall(vim.api.nvim_win_close, other, false)
+            end
+          end
+        end)
+      end,
+    })
+  end
+end
+
 ---@class fugitive.DiffOpts
 ---@field against? string object spec (commit or rev:path, :N:path)
 ---@field three_way? boolean
@@ -132,6 +161,7 @@ function M.split(opts)
       map(buf, "d3o", "<Cmd>diffget " .. tbuf .. "<Bar>diffupdate<CR>")
       diffthis(cur_win)
       vim.b[buf].fugitive_diff_3way = true
+      link_windows({ ow, cur_win, tw })
       vim.cmd("wincmd =")
       return
     end
@@ -179,6 +209,14 @@ end
 function M.close()
   ---@type integer?
   local cur = vim.api.nvim_get_current_win()
+  -- closing the sides here must not close the work tree window with them
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local group = vim.w[win].fugitive_merge_group
+    if group then
+      pcall(vim.api.nvim_del_augroup_by_name, group)
+      vim.w[win].fugitive_merge_group = nil
+    end
+  end
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(win) and vim.w[win].fugitive_diff_side then
       if win == cur then
