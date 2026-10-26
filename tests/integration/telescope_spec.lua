@@ -136,6 +136,71 @@ describe("telescope integration", function()
     end, "checkout topic")
   end)
 
+  it(":Git push picks the remote, then the branch (the current one first)", function()
+    if not has_telescope then
+      return
+    end
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    local origin = H.repo({ bare = true })
+    local fork = H.repo({ bare = true })
+    repo:git("remote", "add", "fork", fork.root)
+    repo:git("remote", "add", "origin", origin.root)
+    repo:git("push", "-q", "origin", "main")
+    repo:git("push", "-q", "origin", "main:release")
+    repo:git("fetch", "-q", "origin")
+    repo:git("checkout", "-q", "-b", "topic")
+    repo:commit("topic", { ["b"] = "b\n" })
+    vim.cmd("cd " .. repo.root)
+    local actions = require("telescope.actions")
+    local state = require("telescope.actions.state")
+    local function selected_after(p)
+      H.wait(function()
+        return state.get_selected_entry() ~= nil
+      end, "a selection")
+      return p, state.get_selected_entry().value
+    end
+
+    vim.cmd("Git push")
+    -- remotes: origin (the default) is selected at the start
+    local p, value = selected_after(picker())
+    assert.equals("origin", value)
+    assert.same(
+      { "fork", "origin" },
+      vim.tbl_map(function(e)
+        return e.value
+      end, p.finder.results)
+    )
+    actions.select_default(p.prompt_bufnr)
+    -- branches of origin: topic is not there yet, offered (new) and selected
+    p, value = selected_after(picker())
+    assert.equals("topic", value)
+    local names = vim.tbl_map(function(e)
+      return e.value
+    end, p.finder.results)
+    table.sort(names)
+    assert.same({ "main", "release", "topic" }, names)
+    actions.select_default(p.prompt_bufnr)
+    H.wait(function()
+      return vim.trim(origin:git("rev-parse", "--verify", "-q", "topic", { allow_fail = true }))
+        == repo:rev("HEAD")
+    end, "pushed topic", 10000)
+
+    -- a name typed in the prompt that matches nothing is pushed to as is
+    vim.cmd("Git push")
+    p = picker()
+    actions.select_default(p.prompt_bufnr)
+    p = picker()
+    p:set_prompt("brand-new")
+    H.wait(function()
+      return state.get_selected_entry() == nil
+    end, "no match")
+    actions.select_default(p.prompt_bufnr)
+    H.wait(function()
+      return vim.trim(origin:git("rev-parse", "--verify", "-q", "brand-new", { allow_fail = true }))
+        == repo:rev("HEAD")
+    end, "pushed HEAD:brand-new", 10000)
+  end)
+
   it(":Ggrep opens a picker; <C-q> sends to quickfix", function()
     if not has_telescope then
       return
@@ -183,6 +248,33 @@ describe("picker fallbacks without telescope", function()
     restore()
     assert.truthy(offered[1]:match("topic") or offered[2]:match("topic"))
     local _ = log
+  end)
+
+  it(":Git push offers the current branch first; one remote needs no pick", function()
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    local origin = H.repo({ bare = true })
+    repo:git("remote", "add", "origin", origin.root)
+    repo:git("push", "-q", "origin", "main", "main:aaa")
+    repo:git("fetch", "-q", "origin")
+    vim.cmd("cd " .. repo.root)
+    local orig = vim.ui.select
+    local prompts, offered = {}, nil
+    vim.ui.select = function(items, opts, cb)
+      table.insert(prompts, opts.prompt)
+      offered = vim.tbl_map(opts.format_item, items)
+      cb(items[1])
+    end
+    local log, restore = H.capture_notify()
+    repo:commit("more", { ["b"] = "b\n" })
+    vim.cmd("Git push")
+    vim.ui.select = orig
+    H.wait(function()
+      return vim.trim(origin:git("rev-parse", "main")) == repo:rev("HEAD")
+    end, "pushed main", 10000)
+    restore()
+    local _ = log
+    assert.same({ "git push origin" }, prompts)
+    assert.same({ "main", "aaa", "other…" }, offered)
   end)
 
   it("other invocations pass through without a picker", function()
