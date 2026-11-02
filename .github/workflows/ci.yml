@@ -34,7 +34,9 @@ jobs:
       - name: Build git 2.40
         run: |
           sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libexpat1-dev gettext libz-dev libssl-dev
-          curl -sL https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.40.0.tar.gz | tar xz
+          # a cut-off download used to fail the job in tar; fail and retry in curl
+          curl -fsSL --retry 5 --retry-all-errors -o git-2.40.0.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.40.0.tar.gz
+          tar xzf git-2.40.0.tar.gz
           make -C git-2.40.0 -j4 prefix=/usr/local NO_TCLTK=1 all >/dev/null
           sudo make -C git-2.40.0 prefix=/usr/local NO_TCLTK=1 install >/dev/null
       - run: git --version | grep -q '2\.40\.'
