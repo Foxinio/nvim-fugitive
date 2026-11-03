@@ -927,8 +927,8 @@ function M.diff(buf, layout)
     notify.warn("nothing to diff for " .. e.path)
     return
   end
-  -- the diff goes where <CR> opens files, the summary stays
-  M.edit_window(buf)
+  -- in a new split below, like `o`: the summary and the other windows stay
+  vim.cmd("belowright split")
   if i.section == "Unmerged" then
     vim.cmd("edit " .. vim.fn.fnameescape(repo:abs(e.path)))
     return ds.split({ three_way = true, layout = layout })

@@ -339,8 +339,9 @@ Navigation maps ~
 
 Diff maps ~
   dd  dv  ds  dh  Run |:Gdiffsplit| (vertical or horizontal) on the file,
-                  in the window <CR> would use. On an unmerged file this
-                  opens the three-way layout.
+                  in a new split below the summary (the other windows stay).
+                  On an unmerged file this opens the three-way layout, whose
+                  three windows close together.
   dp              Show `git diff` of the file in the pager float.
   dq              Close the diff windows.
 
@@ -470,7 +471,9 @@ FugitiveConflictTheirs, FugitiveConflictBase.
 
 In the summary, unmerged files have their own section: `2X` / `3X` take
 ours / theirs for the whole file, `s` marks it resolved and `dd` / `dv`
-open the three-way diff.
+open the three-way diff. Closing any of its three windows closes the other
+two; `dq` in the summary closes ours and theirs and keeps the work tree
+file.
 
 ==============================================================================
 8. OUTPUT ROUTING                                              *fugitive-output*
