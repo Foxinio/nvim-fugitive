@@ -155,6 +155,14 @@ function M.render(snap, expanded)
         { kind = "file", section = name, entry = e, note = M.submodule_note(e) }
       )
       add_diff(name, e)
+      -- an untracked directory expanded with `=`: its files, each its own entry
+      local children = snap.untracked_children and snap.untracked_children[e.path]
+      if name == "Untracked" and children then
+        for _, c in ipairs(children) do
+          add(status_mod.format(c), { kind = "file", section = name, entry = c })
+          add_diff(name, c)
+        end
+      end
     end
   end
   file_section("Unmerged", st.unmerged)

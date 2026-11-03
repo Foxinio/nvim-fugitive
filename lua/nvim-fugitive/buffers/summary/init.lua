@@ -303,12 +303,17 @@ function M.foldexpr(lnum)
     or (i.kind == "commit" and i.section ~= "Rebasing")
   then
     local nxt = st.info[lnum + 1]
+    -- files listed under an expanded untracked directory nest one deeper
+    local level = (i.entry and i.entry.parent) and 2 or 1
     if nxt and (nxt.kind == "hunk" or nxt.kind == "diffmeta" or nxt.kind == "diffline") then
+      return ">" .. (level + 1)
+    end
+    if nxt and nxt.kind == "file" and i.entry and nxt.entry.parent == i.entry.path then
       return ">2"
     end
-    return 1
+    return level
   elseif i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta" then
-    return 2
+    return (i.entry and i.entry.parent) and 3 or 2
   end
   return 1
 end
