@@ -68,7 +68,7 @@ lazily on first use.
 | `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
 | `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
 | `:GBrowse` | upstream-identical handler dict (vim-rhubarb, fugitive-gitlab keep working), built-in GitHub/GitLab/Bitbucket/Gitea/Forgejo/Codeberg/sourcehut providers, custom hosts |
-| Pickers | `:Telescope fugitive log` / `refs` / `stash` / `file_history` / `line_history` / `blame_line`, or `:FugitivePick` (falls back to `vim.ui.select`); picker input for a bare `:Git checkout`, `switch`, `merge` or `rebase`, and remote + branch pickers for a bare `:Git push` |
+| Pickers | `:Telescope fugitive log` / `refs` / `stash` / `file_history` / `line_history` / `blame_line`, or `:FugitivePick` (falls back to `vim.ui.select`); picker input for a bare `:Git checkout`, `switch`, `merge` or `rebase`, and remote + branch pickers for `:Git push` without an upstream (or `:Git push -u`, which keeps the choice) |
 | Work-tree hunks | opt-in maps for next/prev/stage/reset hunk, using gitsigns when installed and fugitive's own hunks otherwise |
 | Repositories | work trees, linked worktrees, submodules, bare repos, `core.worktree`, `$GIT_DIR`/`$GIT_WORK_TREE` dotfile setups |
 | Vimscript API | `FugitiveHead()`, `FugitiveStatusline()`, `FugitiveGitDir()`, `FugitiveFind()`, `FugitiveExecute()`, … and upstream's `User` events, so plugins written for vim-fugitive keep working; `gf` on objects |
