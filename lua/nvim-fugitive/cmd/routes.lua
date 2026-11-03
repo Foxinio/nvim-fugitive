@@ -615,10 +615,13 @@ end
 ---Picker input (§5.3.2): which picker, if any, should supply the ref.
 ---Only the exact bare forms and an explicit allow-list trigger it.
 ---@param args string[]
----@return {picker: "refs"|"log", sub: string, args: string[]}?
+---@return {picker: "refs"|"log"|"push", sub: string, args: string[]}?
 function M.picker_trigger(args)
   local n = #args
   local sub = args[1]
+  if n == 1 and sub == "push" then
+    return { picker = "push", sub = sub, args = args }
+  end
   if n == 1 and (sub == "checkout" or sub == "switch" or sub == "merge" or sub == "rebase") then
     return { picker = "refs", sub = sub, args = args }
   end

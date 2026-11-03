@@ -246,6 +246,7 @@ describe("routes.picker_trigger", function()
     assert.same({ picker = "refs", sub = "switch", args = { "switch" } }, trig("switch"))
     assert.same({ picker = "refs", sub = "merge", args = { "merge" } }, trig("merge"))
     assert.same({ picker = "refs", sub = "rebase", args = { "rebase" } }, trig("rebase"))
+    assert.same({ picker = "push", sub = "push", args = { "push" } }, trig("push"))
   end)
   it("triggers for the allow-listed flag-only forms", function()
     assert.equals("log", trig("rebase -i").picker)
@@ -266,6 +267,9 @@ describe("routes.picker_trigger", function()
       "switch --create topic",
       "checkout -b topic",
       "checkout -b topic main",
+      "push origin",
+      "push --force",
+      "push origin main",
       "log",
     }) do
       assert.is_nil(trig(s), s)

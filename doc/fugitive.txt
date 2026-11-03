@@ -664,9 +664,13 @@ telescope.nvim ~
 
 Picker input: exactly `:Git checkout`, `:Git switch`, `:Git merge` and
 `:Git rebase` with no arguments ask for a ref; `:Git rebase -i` asks for
-the base commit. Every other invocation runs unchanged (`:Git checkout -b
-{name}` creates the branch at HEAD). Without
-telescope, |vim.ui.select()| is used.
+the base commit. Exactly `:Git push` asks for the remote (when there are
+several; the branch's push remote is selected first), then for the branch
+on it, the current branch selected first and marked "(new)" when the
+remote does not have it yet; a name typed in telescope that matches none is
+pushed to as `HEAD:{name}`. Every other invocation runs unchanged (`:Git
+checkout -b {name}` creates the branch at HEAD, `:Git! push` pushes
+without asking). Without telescope, |vim.ui.select()| is used.
 
                                                           *fugitive-overseer*
 overseer.nvim ~

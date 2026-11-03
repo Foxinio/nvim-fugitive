@@ -3,7 +3,7 @@
 ---Telescope when installed, `vim.ui.select` fallback for the simple
 ---pickers. Pickers: `log`, `refs`, `stash` (`:Telescope fugitive <name>`),
 ---the `:Ggrep` results picker, and picker *input* for `:Git checkout`,
----`:Git switch`, `:Git merge`, `:Git rebase` (§5.3.2).
+---`:Git switch`, `:Git merge`, `:Git rebase` and `:Git push` (§5.3.2).
 
 local M = {}
 
@@ -92,10 +92,130 @@ end
 -- Picker input for :Git checkout|switch|merge|rebase
 
 ---Ask for a ref (or a base commit for `rebase -i`) and call `cb(ref)`.
+---@class fugitive.ChooseOpts
+---@field prompt string
+---@field default? string selected at the start
+---@field allow_new? boolean a name that matches no item may be given
+---@field format? fun(item: string): string
+
+---Pick one of `items` (strings), `default` selected first. With telescope a
+---typed name that matches nothing is taken as is when `allow_new` is set.
+---@param items string[]
+---@param opts fugitive.ChooseOpts
+---@param cb fun(item: string)
+function M.choose(items, opts, cb)
+  if M.available() then
+    return require("nvim-fugitive.integrations.telescope.pickers").choose(items, opts, cb)
+  end
+  local list = vim.deepcopy(items)
+  for i, item in ipairs(list) do
+    if item == opts.default then
+      table.insert(list, 1, table.remove(list, i))
+      break
+    end
+  end
+  local other = {}
+  if opts.allow_new then
+    table.insert(list, other)
+  end
+  vim.ui.select(list, {
+    prompt = opts.prompt,
+    format_item = function(item)
+      if item == other then
+        return "other…"
+      end
+      return opts.format and opts.format(item) or item
+    end,
+  }, function(choice)
+    if choice == other then
+      vim.ui.input({ prompt = opts.prompt .. ": " }, function(name)
+        if name and vim.trim(name) ~= "" then
+          cb(vim.trim(name))
+        end
+      end)
+    elseif choice then
+      cb(choice)
+    end
+  end)
+end
+
+---The current branch, its push remote (or origin) and the remote's branches.
 ---@param repo fugitive.Repo
----@param trigger {picker: "refs"|"log", sub: string, args?: string[]}
----@param cb fun(ref: string)
+---@return string? branch, string[] remotes, string? default_remote
+function M.push_context(repo)
+  local branch = repo:head()
+  local remotes = repo:lines({ "remote" }) or {}
+  local default = branch
+      and (repo:config("branch." .. branch .. ".pushRemote") or repo:config("remote.pushDefault") or repo:config(
+        "branch." .. branch .. ".remote"
+      ))
+    or nil
+  if not default or not vim.tbl_contains(remotes, default) then
+    default = vim.tbl_contains(remotes, "origin") and "origin" or remotes[1]
+  end
+  return branch, remotes, default
+end
+
+---Branch names of `remote` (from its remote-tracking refs).
+---@param repo fugitive.Repo
+---@param remote string
+---@return string[]
+function M.remote_branches(repo, remote)
+  local out = {}
+  local prefix = "refs/remotes/" .. remote .. "/"
+  for _, ref in ipairs(repo:lines({ "for-each-ref", "--format=%(refname)", prefix }) or {}) do
+    local name = ref:sub(#prefix + 1)
+    if name ~= "HEAD" then
+      table.insert(out, name)
+    end
+  end
+  return out
+end
+
+---`:Git push`: pick the remote (when there are several), then the remote
+---branch, the current branch's name first. Gives the arguments to append.
+---@param repo fugitive.Repo
+---@param cb fun(args: string[])
+function M.push_input(repo, cb)
+  local branch, remotes, default = M.push_context(repo)
+  if #remotes == 0 then
+    require("nvim-fugitive.ui.notify").error("git push: no remote configured")
+    return
+  end
+  local function pick_branch(remote)
+    local names = M.remote_branches(repo, remote)
+    local new = branch and not vim.tbl_contains(names, branch)
+    if new then
+      table.insert(names, 1, branch)
+    end
+    M.choose(names, {
+      prompt = "git push " .. remote,
+      default = branch,
+      allow_new = true,
+      format = function(name)
+        return (new and name == branch) and (name .. "  (new)") or name
+      end,
+    }, function(name)
+      if name == branch then
+        cb({ remote, name })
+      else
+        cb({ remote, "HEAD:" .. name })
+      end
+    end)
+  end
+  if #remotes == 1 then
+    return pick_branch(remotes[1])
+  end
+  M.choose(remotes, { prompt = "git push: remote", default = default }, pick_branch)
+end
+
+---@param repo fugitive.Repo
+---@param trigger {picker: "refs"|"log"|"push", sub: string, args?: string[]}
+---@param cb fun(ref: string|string[])
 function M.input(repo, trigger, cb)
+  if trigger.picker == "push" then
+    return M.push_input(repo, cb)
+  end
   local prompt = "git " .. trigger.sub
   if M.available() then
     if trigger.picker == "log" then
@@ -207,7 +327,10 @@ function M.pick(name, opts)
       return
     end
     return M.input(repo, { picker = "refs", sub = "checkout", args = { "checkout" } }, function(ref)
-      require("nvim-fugitive.cmd.git").run({ "checkout", ref }, { repo = repo, skip_picker = true })
+      require("nvim-fugitive.cmd.git").run({
+        "checkout",
+        ref --[[@as string]],
+      }, { repo = repo, skip_picker = true })
     end)
   elseif name == "stash" then
     local repo = get_repo(opts.repo)

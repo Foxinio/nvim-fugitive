@@ -196,6 +196,50 @@ function M.log(opts)
     :find()
 end
 
+---A plain list of names, `default` selected at the start; <CR> on a typed
+---name that matches nothing takes it as is when `allow_new` is set.
+---@param items string[]
+---@param opts fugitive.ChooseOpts
+---@param cb fun(item: string)
+function M.choose(items, opts, cb)
+  local index
+  for i, item in ipairs(items) do
+    if item == opts.default then
+      index = i
+    end
+  end
+  pickers
+    .new({}, {
+      prompt_title = opts.prompt,
+      default_selection_index = index,
+      finder = finders.new_table({
+        results = items,
+        entry_maker = function(item)
+          return {
+            value = item,
+            ordinal = item,
+            display = opts.format and opts.format(item) or item,
+          }
+        end,
+      }),
+      sorter = conf.generic_sorter({}),
+      attach_mappings = function(prompt_bufnr)
+        actions.select_default:replace(function()
+          local entry = action_state.get_selected_entry()
+          local typed = vim.trim(action_state.get_current_line())
+          actions.close(prompt_bufnr)
+          if entry then
+            cb(entry.value)
+          elseif opts.allow_new and typed ~= "" then
+            cb(typed)
+          end
+        end)
+        return true
+      end,
+    })
+    :find()
+end
+
 ---@param opts? {repo?: fugitive.Repo, prompt_title?: string, on_select?: fun(r: table)}
 function M.refs(opts)
   opts = opts or {}

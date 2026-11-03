@@ -365,7 +365,7 @@ function M.run(args, opts)
     local trigger = routes.picker_trigger(args)
     if trigger then
       return require("nvim-fugitive.integrations.telescope").input(repo, trigger, function(ref)
-        local full = vim.list_extend(vim.deepcopy(args), { ref })
+        local full = vim.list_extend(vim.deepcopy(args), type(ref) == "table" and ref or { ref })
         M.run(full, vim.tbl_extend("force", opts, { repo = repo, skip_picker = true }))
       end)
     end
