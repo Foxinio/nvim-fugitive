@@ -200,6 +200,7 @@ function M.set(buf, lines)
   if not vim.api.nvim_buf_is_valid(buf) then
     return
   end
+  vim.api.nvim_buf_clear_namespace(buf, require("nvim-fugitive.ui.ansi").ns, 0, -1)
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false

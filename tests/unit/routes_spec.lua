@@ -225,6 +225,95 @@ describe("routes.classify", function()
       assert.equals("status", classify({ "st" }, { st = "float" }).sub)
     end)
   end)
+
+  describe("alias chains", function()
+    -- graph = graph1, graph1 = log --graph … (an alias of an alias)
+    local aliases = {
+      graph = { "graph1" },
+      graph1 = { "log", "--graph", "--abbrev-commit", "--decorate", "--all" },
+      g = { "graph" },
+      a = { "b" },
+      b = { "a" },
+      lgs = {},
+      lgf = {},
+      sync = {},
+    }
+    local bodies = {
+      lgs = "git log --graph --oneline --all",
+      lgf = [[f() { git log --graph "$@"; }; f]],
+      sync = "git checkout main && git pull",
+    }
+    local function classify(args, overrides)
+      return routes.classify(args, {
+        overrides = overrides or {},
+        long_running = {},
+        aliases = function(name)
+          return aliases[name], bodies[name]
+        end,
+      })
+    end
+
+    it("are unfolded down to the git command", function()
+      for _, name in ipairs({ "graph", "g" }) do
+        local r = classify({ name })
+        assert.equals("float", r.route, name)
+        assert.equals("log", r.sub, name)
+        assert.equals(name, r.alias)
+      end
+    end)
+
+    it("stop at a loop", function()
+      local r = classify({ "a" })
+      assert.equals("a", r.alias)
+      assert.equals("notification", r.route)
+    end)
+
+    it("are routed by a name in the chain first, the one typed first", function()
+      assert.equals("tab", classify({ "graph" }, { graph1 = "tab" }).route)
+      assert.equals("vert", classify({ "graph" }, { graph = "vert", graph1 = "tab" }).route)
+      assert.equals("split", classify({ "graph" }, { log = "split" }).route)
+    end)
+
+    it("unfold shell aliases that run one git command", function()
+      local r = classify({ "lgs" })
+      assert.equals("float", r.route)
+      assert.equals("log", r.sub)
+      assert.is_true(r.shell)
+      assert.equals("log", classify({ "lgf", "-n", "3" }).sub)
+      -- several git commands: a task, as before
+      assert.equals("overseer", classify({ "sync" }).route)
+    end)
+  end)
+end)
+
+describe("routes.shell_alias_command", function()
+  local cmd = routes.shell_alias_command
+  it("finds the one git command a shell alias runs", function()
+    assert.same({ "log", "--graph", "--oneline", "--all" }, cmd("!git log --graph --oneline --all"))
+    assert.same({ "log", "--format=%h | %s" }, cmd([[!git log --format='%h | %s']]))
+    assert.same({ "log" }, cmd("!cd sub && git log"))
+    assert.same({ "log", "-n", "1" }, cmd("!command git log -n 1"))
+  end)
+  it("passes the arguments like git does", function()
+    -- appended to a plain command
+    assert.same({ "log", "--graph", "-n", "3" }, cmd("!git log --graph", { "-n", "3" }))
+    -- "$@" / $1 in a function wrapper
+    assert.same(
+      { "log", "--graph", "-n", "3" },
+      cmd([[!f() { git log --graph "$@"; }; f]], { "-n", "3" })
+    )
+    assert.same({ "show", "HEAD~2" }, cmd([[!f() { git show "$1"; }; f]], { "HEAD~2", "x" }))
+    -- a wrapper that ignores them, or a pipeline that gets them
+    assert.same({ "log" }, cmd([[!f() { git log; }; f]], { "-n", "3" }))
+    assert.same({ "log", "--oneline" }, cmd("!git log --oneline | head -20", { "-5" }))
+  end)
+  it("gives up when it cannot tell what runs", function()
+    assert.is_nil(cmd("!git checkout main && git pull"))
+    assert.is_nil(cmd("!sh -c 'echo hi'"))
+    assert.is_nil(cmd("!git log $(git rev-parse HEAD)"))
+    assert.is_nil(cmd("!git log $REV"))
+    assert.is_nil(cmd("!echo git"))
+  end)
 end)
 
 describe("routes.has_flag", function()
