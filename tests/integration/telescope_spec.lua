@@ -297,18 +297,24 @@ describe("picker fallbacks without telescope", function()
       cb(items[1])
     end
     local log, restore = H.capture_notify()
+    local function upstream()
+      return vim.trim(
+        repo:git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", { allow_fail = true })
+      )
+    end
+    -- git push -u updates the remote ref first and writes the upstream to
+    -- the config after that: wait for both
     local function push(cmd, ref)
       repo:commit("c" .. vim.uv.hrtime(), { ["b"] = tostring(vim.uv.hrtime()) })
       vim.cmd(cmd)
       H.wait(function()
         return vim.trim(origin:git("rev-parse", "--verify", "-q", ref, { allow_fail = true }))
-          == repo:rev("HEAD")
+            == repo:rev("HEAD")
+          and (
+            not cmd:find(" %-u") and not cmd:find("%-%-set%-upstream")
+            or upstream() == "origin/" .. ref
+          )
       end, cmd .. " -> " .. ref, 10000)
-    end
-    local function upstream()
-      return vim.trim(
-        repo:git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", { allow_fail = true })
-      )
     end
 
     -- -u: the picker, then the choice is the upstream from now on
