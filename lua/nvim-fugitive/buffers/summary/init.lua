@@ -20,7 +20,7 @@ local M = {}
 ---@field tick integer completed renders
 ---@field snap fugitive.Snapshot?
 ---@field waiters fun()[]? callbacks waiting for the running refresh
----@field pending_cursor {section: string, paths: table<string, true>, target: string?}? where staging/unstaging whole files moves the cursor
+---@field pending_cursor {section: string, paths: table<string, true>, target: {section: string, path: string}?}? where staging/unstaging files moves the cursor
 
 ---@type table<integer, fugitive.SummaryState>
 M._state = {}
@@ -121,17 +121,18 @@ local function apply(buf, st, snap)
   vim.bo[buf].readonly = true
   vim.bo[buf].modified = false
   M.highlight(buf, info)
-  -- after staging/unstaging whole files: on to the next file of the section
-  -- they left, once this render shows them gone from it
+  -- after staging/unstaging files (or the hunks emptying them): on to the
+  -- next file of the section they left, once this render shows them gone
   local moved_to
   local pending = st.pending_cursor
   if pending then
     local gone = true
+    local target = pending.target
     for lnum, i in ipairs(info) do
-      if i.kind == "file" and i.section == pending.section then
-        if pending.paths[i.entry.path] then
+      if i.kind == "file" then
+        if i.section == pending.section and pending.paths[i.entry.path] then
           gone = false
-        elseif i.entry.path == pending.target then
+        elseif target and i.section == target.section and i.entry.path == target.path then
           moved_to = lnum
         end
       end
