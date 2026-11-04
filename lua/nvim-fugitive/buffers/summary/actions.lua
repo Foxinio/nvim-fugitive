@@ -970,8 +970,10 @@ function M.diff(buf, layout)
     notify.warn("nothing to diff for " .. e.path)
     return
   end
-  -- in a new split below, like `o`: the summary and the other windows stay
+  -- in a new split below, like `o`: the summary and the other windows stay;
+  -- the next diff closes this one (diffsplit.close_others)
   vim.cmd("belowright split")
+  vim.w.fugitive_diff_owned = true
   if i.section == "Unmerged" then
     vim.cmd("edit " .. vim.fn.fnameescape(repo:abs(e.path)))
     return ds.split({ three_way = true, layout = layout })
