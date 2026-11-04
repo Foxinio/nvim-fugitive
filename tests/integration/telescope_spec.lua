@@ -326,6 +326,13 @@ describe("picker fallbacks without telescope", function()
     assert.equals("origin/main", upstream())
     push("Git push", "main")
     assert.equals(2, asked)
+    -- other flags keep the picker: -f -u asks, -f alone uses the upstream
+    pick = "aaa"
+    push("Git push -f -u", "aaa")
+    assert.equals(3, asked)
+    assert.equals("origin/aaa", upstream())
+    push("Git push -f", "aaa")
+    assert.equals(3, asked)
     vim.ui.select = orig
     restore()
     local _ = log

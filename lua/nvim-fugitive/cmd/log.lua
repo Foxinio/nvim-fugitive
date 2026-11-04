@@ -93,20 +93,12 @@ function M.log(opts)
   else
     vim.list_extend(args, user)
     -- a single path argument: entries are that file at each commit
-    local dashdash = vim.tbl_contains(user, "--")
-    local positional = require("nvim-fugitive.cmd.routes").positionals(user)
-    if dashdash then
-      local after = {}
-      local seen = false
-      for _, a in ipairs(user) do
-        if seen then
-          table.insert(after, a)
-        elseif a == "--" then
-          seen = true
-        end
-      end
-      if #after == 1 then
-        path = after[1]
+    -- (option values, like the 5 of `-n 5`, are not paths)
+    local scan = require("nvim-fugitive.cmd.routes").scan("log", user)
+    local positional = scan.positionals
+    if scan.dashdash then
+      if #scan.after == 1 then
+        path = scan.after[1]
       end
     elseif
       #positional == 1
