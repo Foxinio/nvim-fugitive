@@ -6,12 +6,12 @@ on:
 
 jobs:
   test:
-    name: test (nvim ${{ matrix.nvim }}, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: test (nvim ${{ matrix.nvim }})
+    # the plugin has nothing OS-specific; macOS runners were slow to come by
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
         nvim: [stable, nightly]
     steps:
       - uses: actions/checkout@v5
