@@ -11,6 +11,169 @@
 
 local M = {}
 
+---Split a command line into words: whitespace separated, with '…', "…"
+---and backslash escapes.
+---@param str string
+---@return string[]
+function M.split_args(str)
+  local args, cur, i, n = {}, nil, 1, #str
+  local quote
+  while i <= n do
+    local c = str:sub(i, i)
+    if quote then
+      if c == quote then
+        quote = nil
+      elseif c == "\\" and quote == '"' and i < n then
+        i = i + 1
+        cur = cur .. str:sub(i, i)
+      else
+        cur = cur .. c
+      end
+    elseif c == "'" or c == '"' then
+      quote = c
+      cur = cur or ""
+    elseif c == "\\" and i < n then
+      i = i + 1
+      cur = (cur or "") .. str:sub(i, i)
+    elseif c:match("%s") then
+      if cur then
+        table.insert(args, cur)
+        cur = nil
+      end
+    else
+      cur = (cur or "") .. c
+    end
+    i = i + 1
+  end
+  if cur then
+    table.insert(args, cur)
+  end
+  return args
+end
+
+---Split a shell command at `&&`, `||`, `;` and newlines outside quotes; each
+---part keeps only the first stage of a `|` pipeline.
+---@param str string
+---@return {text: string, piped: boolean}[]
+local function shell_segments(str)
+  local parts, cur, quote = {}, {}, nil
+  local i, n = 1, #str
+  local piped = false
+  local function cut()
+    local part = vim.trim(table.concat(cur))
+    if part ~= "" then
+      table.insert(parts, { text = part, piped = piped })
+    end
+    cur, piped = {}, false
+  end
+  while i <= n do
+    local c = str:sub(i, i)
+    local two = str:sub(i, i + 1)
+    if quote then
+      if c == "\\" and quote == '"' then
+        if not piped then
+          table.insert(cur, str:sub(i, i + 1))
+        end
+        i = i + 1
+      else
+        if c == quote then
+          quote = nil
+        end
+        if not piped then
+          table.insert(cur, c)
+        end
+      end
+    elseif c == "'" or c == '"' then
+      quote = c
+      if not piped then
+        table.insert(cur, c)
+      end
+    elseif c == "\\" then
+      if not piped then
+        table.insert(cur, str:sub(i, i + 1))
+      end
+      i = i + 1
+    elseif two == "&&" or two == "||" then
+      cut()
+      i = i + 1
+    elseif c == ";" or c == "\n" then
+      cut()
+    elseif c == "|" then
+      piped = true
+    elseif not piped then
+      table.insert(cur, c)
+    end
+    i = i + 1
+  end
+  cut()
+  return parts
+end
+
+---The git command a shell (`!`) alias runs, as `:Git` arguments, when its
+---body runs git exactly once (`!git log --graph`, `!f() { git log "$@"; }; f`,
+---`!git log --oneline | head`); nil otherwise. `args` are the arguments the
+---alias was given: they replace `"$@"`/`$1`…, or are appended like git does.
+---@param body string the alias value, with or without its leading `!`
+---@param args? string[]
+---@return string[]?
+function M.shell_alias_command(body, args)
+  args = args or {}
+  local s = vim.trim((body:gsub("^!", "")))
+  -- the usual function wrapper: f() { …; }; f
+  local name, inner, call = s:match("^([%w_]+)%s*%(%)%s*{(.*)}%s*;?%s*([%w_]+)%s*$")
+  local wrapped = name ~= nil and name == call
+  if wrapped then
+    s = inner
+  end
+  if s:find("$(", 1, true) or s:find("`", 1, true) then
+    -- a command substitution may run git too
+    return nil
+  end
+  local found, last
+  local parts = shell_segments(s)
+  for k, part in ipairs(parts) do
+    local words = M.split_args(part.text)
+    if words[1] == "command" then
+      table.remove(words, 1)
+    end
+    if words[1] == "git" then
+      if found then
+        return nil
+      end
+      found = vim.list_slice(words, 2)
+      -- appended arguments reach git only at the end of the command line
+      last = k == #parts and not part.piped
+    end
+  end
+  if not found or #found == 0 then
+    return nil
+  end
+  local out, used = {}, false
+  for _, w in ipairs(found) do
+    if w == "$@" or w == "$*" then
+      vim.list_extend(out, args)
+      used = true
+    elseif w:match("^%$%d$") then
+      local v = args[tonumber(w:sub(2))]
+      if v then
+        table.insert(out, v)
+      end
+      used = true
+    elseif w:find("$", 1, true) then
+      -- other shell variables: cannot know what runs
+      return nil
+    else
+      table.insert(out, w)
+    end
+  end
+  -- git appends the arguments to the command line: they reach git when it
+  -- runs last, outside a function wrapper and a pipeline
+  if not used and not wrapped and last then
+    vim.list_extend(out, args)
+  end
+  return out
+end
+
 ---@alias fugitive.RouteName "float"|"notify"|"task"|"terminal"|"editor"|"blame"
 
 ---Global git options that take a separate argument.
@@ -538,6 +701,7 @@ end
 ---@field parsed fugitive.ParsedArgs
 ---@field explicit boolean? the user's `routes` chose the target
 ---@field alias string? the git alias that was run
+---@field shell boolean? a shell (`!`) alias is involved
 
 ---Classify a `:Git` argument list.
 ---@param args string[]
@@ -553,31 +717,52 @@ function M.classify(args, opts)
   local parsed = M.parse(args)
   local sub, rest = parsed.sub, parsed.rest
   local result = { parsed = parsed }
-  if sub and not M.subcommands[sub] and opts.aliases then
-    local expansion = opts.aliases(sub)
-    if expansion then
-      result.alias = sub
-      -- `routes` keyed by the alias name win over everything else
-      local chosen = M.override(overrides, sub, rest)
-      local p2 = expansion[1] and M.parse(vim.list_extend(vim.deepcopy(expansion), rest))
+  -- unfold aliases (of aliases …) like git does; a shell alias that runs a
+  -- single git command is unfolded into that command
+  local chain, seen = {}, {}
+  local shell_unknown = false
+  while sub and not M.subcommands[sub] and opts.aliases and not seen[sub] do
+    local expansion, body = opts.aliases(sub)
+    if not expansion then
+      break
+    end
+    seen[sub] = true
+    table.insert(chain, { name = sub, rest = rest })
+    local words = expansion --[[@as string[]?]]
+    if not expansion[1] then
+      result.shell = true
+      words = body and M.shell_alias_command(body, rest)
+      if not words then
+        shell_unknown = true
+        break
+      end
+    else
+      words = vim.list_extend(vim.deepcopy(expansion), rest)
+    end
+    local p = M.parse(words)
+    if not p.sub then
+      break
+    end
+    sub, rest = p.sub, p.rest
+  end
+  if #chain > 0 then
+    result.alias = chain[1].name
+    -- `routes` keyed by an alias name win, the name typed first
+    for _, link in ipairs(chain) do
+      local chosen = M.override(overrides, link.name, link.rest)
       if chosen then
-        result.sub = p2 and p2.sub or sub
+        result.sub = sub
         result.route = chosen
         result.explicit = true
         return result
       end
-      if not p2 then
-        -- a shell (`!`) alias: run it as a task, like other long commands
-        result.sub = sub
-        result.route = parsed.paginate and "float"
-          or parsed.no_pager and "notification"
-          or "overseer"
-        return result
-      end
-      -- a simple alias is routed like the command it expands to
-      if p2.sub then
-        sub, rest = p2.sub, p2.rest
-      end
+    end
+    if shell_unknown then
+      -- a shell alias doing something else: run it as a task, like other
+      -- long commands
+      result.sub = sub
+      result.route = parsed.paginate and "float" or parsed.no_pager and "notification" or "overseer"
+      return result
     end
   end
   result.sub = sub

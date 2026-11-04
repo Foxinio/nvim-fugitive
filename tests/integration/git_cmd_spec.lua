@@ -171,6 +171,36 @@ describe(":Git routes", function()
     local _ = log
   end)
 
+  it("aliases of aliases and shell aliases running git open like that command", function()
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    -- the user's setup: graph = graph1, graph1 = log --graph with a format
+    repo:git(
+      "config",
+      "alias.graph1",
+      "log --graph --abbrev-commit --decorate --format=format:'%h - %s%d' --all"
+    )
+    repo:git("config", "alias.graph", "graph1")
+    repo:git("config", "alias.lgs", "!git log --graph --oneline --all")
+    repo:git("config", "alias.lgf", [[!f() { git log --oneline "$@"; }; f]])
+    vim.cmd("cd " .. repo.root)
+    for _, cmd in ipairs({ "Git graph", "Git graph1", "Git lgs", "Git lgf -1" }) do
+      local log, restore = H.capture_notify()
+      local before = output.get(1)
+      vim.cmd(cmd)
+      wait_done(before)
+      restore()
+      assert.equals(1, #float_wins(), cmd)
+      local buf = vim.api.nvim_get_current_buf()
+      assert.equals("git", vim.bo[buf].filetype, cmd)
+      assert.same({}, log, cmd)
+      assert.truthy(
+        H.lines(buf)[1]:match("%x+ %- initial") or H.lines(buf)[1]:match("%x+ initial"),
+        cmd
+      )
+      H.reset_ui()
+    end
+  end)
+
   it("user-defined aliases are routed like their expansion; shell ones are tasks", function()
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     -- common aliases from git guides and dotfiles
