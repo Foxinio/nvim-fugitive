@@ -11,45 +11,8 @@ local output = require("nvim-fugitive.ui.output")
 
 local M = {}
 
----Split a command line into words: whitespace separated, with '…', "…"
----and backslash escapes.
----@param str string
----@return string[]
-function M.split_args(str)
-  local args, cur, i, n = {}, nil, 1, #str
-  local quote
-  while i <= n do
-    local c = str:sub(i, i)
-    if quote then
-      if c == quote then
-        quote = nil
-      elseif c == "\\" and quote == '"' and i < n then
-        i = i + 1
-        cur = cur .. str:sub(i, i)
-      else
-        cur = cur .. c
-      end
-    elseif c == "'" or c == '"' then
-      quote = c
-      cur = cur or ""
-    elseif c == "\\" and i < n then
-      i = i + 1
-      cur = (cur or "") .. str:sub(i, i)
-    elseif c:match("%s") then
-      if cur then
-        table.insert(args, cur)
-        cur = nil
-      end
-    else
-      cur = (cur or "") .. c
-    end
-    i = i + 1
-  end
-  if cur then
-    table.insert(args, cur)
-  end
-  return args
-end
+---Split a command line into words (see routes.split_args).
+M.split_args = routes.split_args
 
 ---The current buffer's path as git sees it: repo-relative work-tree path, or
 ---the object name for fugitive:// buffers.
@@ -138,10 +101,10 @@ function M.blame_file_args(repo, args, rest)
   return out
 end
 
----Expansion of a git alias: its words, `{}` for a shell (`!`) alias, nil
----when `name` is not an alias.
+---Expansion of a git alias: its words, or `{}` and the shell command for a
+---shell (`!`) alias; nil when `name` is not an alias.
 ---@param repo fugitive.Repo
----@return fun(name: string): string[]?
+---@return fun(name: string): string[]?, string?
 function M.alias_resolver(repo)
   return function(name)
     local value = repo:config("alias." .. name)
@@ -150,7 +113,7 @@ function M.alias_resolver(repo)
       return nil
     end
     if value:sub(1, 1) == "!" then
-      return {}
+      return {}, value:sub(2)
     end
     return M.split_args(value)
   end
@@ -389,7 +352,7 @@ function M.run(args, opts)
       repo = repo,
     })
   elseif routes.is_pager(cls.route) then
-    if cls.sub == "blame" then
+    if cls.sub == "blame" and not cls.shell then
       args = M.blame_file_args(repo, args, cls.parsed.rest)
     end
     return M.run_float(repo, args, { mods = opts.mods, sub = cls.sub, window = cls.route })

@@ -287,8 +287,9 @@ require("nvim-fugitive").setup({
   -- "split", "vert", "tab" (output in a buffer), "notification", "overseer",
   -- "term". Unlisted commands use the built-in table: pager commands ->
   -- float, network commands -> overseer, `add -p` & co. -> term, git
-  -- aliases like their expansion and shell `!` aliases -> overseer (key
-  -- them by name here), everything else -> notification
+  -- aliases like the command they unfold to (shell `!` aliases running one
+  -- git command too, other ones -> overseer; key them by name here),
+  -- everything else -> notification
   -- (:help fugitive-output).
   routes = {},
   notify = {
