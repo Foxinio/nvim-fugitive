@@ -25,7 +25,7 @@
 | Language     | Lua, Neovim-only                                          |
 | Compat level | Drop-in for core; no deprecated aliases                   |
 | Neovim       | 0.11+                                                     |
-| Platforms    | Linux, macOS (CI-tested). Windows/WSL not supported for now |
+| Platforms    | Linux, macOS (CI-tested on Linux). Windows/WSL not supported for now |
 | Runtime deps | plenary.nvim (async, Job, path). Everything else optional |
 | Exec model   | Async by default; sync only where Vim semantics require it (BufReadCmd, BufWriteCmd, :Gwrite) |
 | Summary buffer | `:Git` must keep the upstream interface (window, sections, staging, upstream status); only tweak: bindings are configurable |
@@ -394,8 +394,8 @@ Key principles:
   covers the behaviour.
 
 ### 7.1 CI & tooling
-- GitHub Actions matrix: Neovim 0.11 stable + nightly × Linux/macOS; a job
-  pinned to git 2.40.
+- GitHub Actions matrix: Neovim 0.11 stable + nightly on Linux (nothing in
+  the plugin is OS-specific); a job pinned to git 2.40.
 - stylua + selene/luacheck gates.
 - LuaCATS annotations everywhere, checked with `lua-language-server --check`.
 

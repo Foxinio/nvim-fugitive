@@ -94,5 +94,5 @@ mutation ends in `User FugitiveChanged`.
 
 Small commits, one topic each, with tests and `doc/fugitive.txt` updated in
 the same commit. `make test` and `make lint` must pass. CI runs the suites
-on Neovim stable and nightly (Linux and macOS), a job pinned to git 2.40,
+on Neovim stable and nightly (Linux), a job pinned to git 2.40,
 the parity harness and lint.
