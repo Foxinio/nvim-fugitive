@@ -172,15 +172,59 @@ function M.remote_branches(repo, remote)
   return out
 end
 
----`:Git push`: pick the remote (when there are several), then the remote
----branch, the current branch's name first. Gives the arguments to append.
+---A branch's upstream (remote and branch name) and push remote, read fresh
+---(a `push -u` just changed them).
+---@param repo fugitive.Repo
+---@param branch? string
+---@return string? remote, string? name, string? push_remote
+function M.upstream(repo, branch)
+  if not branch then
+    return nil
+  end
+  local line = (repo:lines({
+    "for-each-ref",
+    "--format=%(upstream:remotename)%00%(upstream:remoteref)%00%(push:remotename)",
+    "refs/heads/" .. branch,
+  }) or {})[1] or ""
+  local remote, ref, push = line:match("^([^%z]*)%z([^%z]*)%z([^%z]*)$")
+  local function set(v)
+    return v ~= nil and v ~= "" and v or nil
+  end
+  remote, ref = set(remote), set(ref)
+  local name = ref and (ref:gsub("^refs/heads/", ""))
+  return remote and name and remote or nil, remote and name or nil, set(push)
+end
+
+---`:Git push`: with an upstream (or a push remote), push there without
+---asking. Otherwise, and always for `:Git push -u`, pick the remote (when
+---there are several), then the remote branch, the upstream's (or the
+---current branch's) name first. Gives the arguments to append.
 ---@param repo fugitive.Repo
 ---@param cb fun(args: string[])
-function M.push_input(repo, cb)
+---@param opts? {set_upstream?: boolean}
+function M.push_input(repo, cb, opts)
+  opts = opts or {}
   local branch, remotes, default = M.push_context(repo)
+  local up_remote, up_name, push_remote = M.upstream(repo, branch)
+  if not opts.set_upstream and branch then
+    -- a push remote of its own (pushRemote, pushDefault), or an upstream
+    -- under the same name: git's own push goes where it should
+    if
+      (push_remote and push_remote ~= up_remote)
+      or (up_remote and (up_name == branch or up_remote == "."))
+    then
+      return cb({})
+    elseif up_remote then
+      -- an upstream under another name: a bare push would refuse it
+      return cb({ up_remote, "HEAD:" .. up_name })
+    end
+  end
   if #remotes == 0 then
     require("nvim-fugitive.ui.notify").error("git push: no remote configured")
     return
+  end
+  if up_remote and vim.tbl_contains(remotes, up_remote) then
+    default = up_remote
   end
   local function pick_branch(remote)
     local names = M.remote_branches(repo, remote)
@@ -188,9 +232,13 @@ function M.push_input(repo, cb)
     if new then
       table.insert(names, 1, branch)
     end
+    local preferred = (remote == up_remote and up_name) or branch
+    if preferred and not vim.tbl_contains(names, preferred) then
+      table.insert(names, 1, preferred)
+    end
     M.choose(names, {
       prompt = "git push " .. remote,
-      default = branch,
+      default = preferred,
       allow_new = true,
       format = function(name)
         return (new and name == branch) and (name .. "  (new)") or name
@@ -210,11 +258,11 @@ function M.push_input(repo, cb)
 end
 
 ---@param repo fugitive.Repo
----@param trigger {picker: "refs"|"log"|"push", sub: string, args?: string[]}
+---@param trigger {picker: "refs"|"log"|"push", sub: string, args?: string[], set_upstream?: boolean}
 ---@param cb fun(ref: string|string[])
 function M.input(repo, trigger, cb)
   if trigger.picker == "push" then
-    return M.push_input(repo, cb)
+    return M.push_input(repo, cb, { set_upstream = trigger.set_upstream })
   end
   local prompt = "git " .. trigger.sub
   if M.available() then

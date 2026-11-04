@@ -800,12 +800,16 @@ end
 ---Picker input (§5.3.2): which picker, if any, should supply the ref.
 ---Only the exact bare forms and an explicit allow-list trigger it.
 ---@param args string[]
----@return {picker: "refs"|"log"|"push", sub: string, args: string[]}?
+---@return {picker: "refs"|"log"|"push", sub: string, args: string[], set_upstream?: boolean}?
 function M.picker_trigger(args)
   local n = #args
   local sub = args[1]
   if n == 1 and sub == "push" then
     return { picker = "push", sub = sub, args = args }
+  end
+  -- choose the upstream once; later pushes use it without asking
+  if n == 2 and sub == "push" and (args[2] == "-u" or args[2] == "--set-upstream") then
+    return { picker = "push", sub = sub, args = args, set_upstream = true }
   end
   if n == 1 and (sub == "checkout" or sub == "switch" or sub == "merge" or sub == "rebase") then
     return { picker = "refs", sub = sub, args = args }

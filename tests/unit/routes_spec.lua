@@ -336,6 +336,11 @@ describe("routes.picker_trigger", function()
     assert.same({ picker = "refs", sub = "merge", args = { "merge" } }, trig("merge"))
     assert.same({ picker = "refs", sub = "rebase", args = { "rebase" } }, trig("rebase"))
     assert.same({ picker = "push", sub = "push", args = { "push" } }, trig("push"))
+    for _, form in ipairs({ "push -u", "push --set-upstream" }) do
+      local t = trig(form)
+      assert.equals("push", t.picker, form)
+      assert.is_true(t.set_upstream, form)
+    end
   end)
   it("triggers for the allow-listed flag-only forms", function()
     assert.equals("log", trig("rebase -i").picker)
@@ -359,6 +364,8 @@ describe("routes.picker_trigger", function()
       "push origin",
       "push --force",
       "push origin main",
+      "push -u origin",
+      "push -u origin main",
       "log",
     }) do
       assert.is_nil(trig(s), s)
