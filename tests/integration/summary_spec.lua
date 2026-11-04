@@ -541,6 +541,59 @@ describe("summary buffer", function()
       assert.equals(2, found)
       assert.truthy(vim.fn.bufwinid(repo:path("d")) ~= -1)
     end)
+
+    it("a new diff replaces the one already open", function()
+      local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
+      repo:git("checkout", "-q", "-b", "topic")
+      repo:commit("topic", { ["c"] = "topic\n" })
+      repo:git("checkout", "-q", "main")
+      repo:commit("main", { ["c"] = "main\n" })
+      repo:git("merge", "topic", { allow_fail = true })
+      repo:write("d", "D\n")
+      vim.cmd("only")
+      vim.cmd("cd " .. repo.root)
+      vim.cmd("edit o")
+      local original = vim.api.nvim_get_current_win()
+      vim.cmd("vertical Git")
+      local buf = vim.api.nvim_get_current_buf()
+      H.wait(function()
+        return summary.state(buf) ~= nil and summary.state(buf).tick > 0
+      end)
+      local summary_win = vim.api.nvim_get_current_win()
+      local function diff_wins()
+        local n = 0
+        for _, w in ipairs(wins()) do
+          if w ~= summary_win and w ~= original then
+            assert.is_true(vim.wo[w].diff)
+            n = n + 1
+          end
+        end
+        return n
+      end
+      local function again(pattern, keys)
+        vim.api.nvim_set_current_win(summary_win)
+        goto_line(pattern)
+        H.feed(keys)
+        vim.wait(50)
+        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+        assert.equals(repo:path("o"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original)))
+      end
+
+      -- the three-way diff twice: one layout of three windows, not two
+      again("^U c$", "dd")
+      assert.equals(3, diff_wins())
+      again("^U c$", "dd")
+      assert.equals(3, diff_wins())
+      assert.equals(5, #wins())
+      -- a two-way diff replaces it
+      again("^M d$", "dv")
+      assert.equals(2, diff_wins())
+      assert.equals(4, #wins())
+      -- and the three-way diff replaces that
+      again("^U c$", "dd")
+      assert.equals(3, diff_wins())
+      assert.equals(5, #wins())
+    end)
   end)
 
   it("opens the thing under the cursor in a float with f", function()

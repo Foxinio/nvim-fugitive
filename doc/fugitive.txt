@@ -184,7 +184,9 @@ maps). Maps inside fugitive's own buffers are always set.
                         argument a work-tree file is compared with the
                         index, and an index or commit blob with the work
                         tree. The work tree version is always placed to the
-                        right or bottom. Focus moves to the new window.
+                        right or bottom. Focus moves to the new window. A
+                        diff already open in the tab (two- or three-way)
+                        is closed first.
 :Gdiffsplit! [object]   Like above but keep focus. During a merge conflict,
                         open the three-way layout, see |fugitive-conflicts|.
 :Gvdiffsplit [object]   Always split vertically.
@@ -341,7 +343,8 @@ Diff maps ~
   dd  dv  ds  dh  Run |:Gdiffsplit| (vertical or horizontal) on the file,
                   in a new split below the summary (the other windows stay).
                   On an unmerged file this opens the three-way layout, whose
-                  three windows close together.
+                  three windows close together. A new diff replaces the one
+                  already open: at most one is open at once.
   dp              Show `git diff` of the file in the pager float.
   dq              Close the diff windows.
 
