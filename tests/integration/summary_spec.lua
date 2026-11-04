@@ -166,6 +166,71 @@ describe("summary buffer", function()
     assert.same({}, log)
   end)
 
+  it("moves on when a hunk staged from an expanded file empties it", function()
+    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "1\n2\n3\n4\n5\n6\n7\n8\n9\n" } })
+    repo:write("a", "A\n")
+    local buf = open(repo)
+    goto_line("^M a$")
+    after(buf, function()
+      H.feed("=")
+    end)
+    -- - on a diff line stages that hunk, the whole change of a
+    goto_line("^%+A$")
+    after(buf, function()
+      H.feed("-")
+    end)
+    assert.equals("M  a\n", repo:status())
+    -- Unstaged is empty, Staged is where a went: nowhere else to go but a
+    assert.equals("M a", vim.api.nvim_get_current_line())
+
+    -- two hunks: the first one leaves the file where it was
+    repo:write("b", "ONE\n2\n3\n4\n5\n6\n7\n8\nNINE\n")
+    repo:write("c", "c\n")
+    vim.cmd("Git")
+    H.wait(function()
+      return H.find_line("^%? c$") ~= nil
+    end)
+    goto_line("^M b$")
+    after(buf, function()
+      H.feed("=")
+    end)
+    goto_line("^%+ONE$")
+    after(buf, function()
+      H.feed("-")
+    end)
+    assert.truthy(repo:status():match("MM b"))
+    assert.equals("Unstaged", summary.state(buf).info[vim.fn.line(".")].section)
+    -- the second one empties it: on to the next section, not Staged
+    goto_line("^%+NINE$")
+    after(buf, function()
+      H.feed("-")
+    end)
+    assert.truthy(repo:status():match("M  b"))
+    assert.equals("? c", vim.api.nvim_get_current_line())
+  end)
+
+  it("moves on to the next section when the last file of one is staged", function()
+    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+    repo:write("a", "A\n")
+    repo:write("b", "B\n")
+    repo:write("u.txt", "u\n")
+    local buf = open(repo)
+    goto_line("^%? u.txt$")
+    after(buf, function()
+      H.feed("-")
+    end)
+    assert.truthy(repo:status():match("A  u.txt"))
+    -- not A u.txt in Staged: the first file of Unstaged
+    assert.equals("M a", vim.api.nvim_get_current_line())
+    -- unstaging the only staged file: it lands in Untracked, and Unstaged
+    -- or Untracked are where unstaged files go, so the cursor follows it
+    goto_line("^A u.txt$")
+    after(buf, function()
+      H.feed("u")
+    end)
+    assert.equals("? u.txt", vim.api.nvim_get_current_line())
+  end)
+
   it("moves on to the next file of the section after staging or unstaging one", function()
     local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n", ["c"] = "c\n" } })
     repo:write("a", "A\n")
@@ -540,6 +605,59 @@ describe("summary buffer", function()
       end
       assert.equals(2, found)
       assert.truthy(vim.fn.bufwinid(repo:path("d")) ~= -1)
+    end)
+
+    it("a new diff replaces the one already open", function()
+      local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
+      repo:git("checkout", "-q", "-b", "topic")
+      repo:commit("topic", { ["c"] = "topic\n" })
+      repo:git("checkout", "-q", "main")
+      repo:commit("main", { ["c"] = "main\n" })
+      repo:git("merge", "topic", { allow_fail = true })
+      repo:write("d", "D\n")
+      vim.cmd("only")
+      vim.cmd("cd " .. repo.root)
+      vim.cmd("edit o")
+      local original = vim.api.nvim_get_current_win()
+      vim.cmd("vertical Git")
+      local buf = vim.api.nvim_get_current_buf()
+      H.wait(function()
+        return summary.state(buf) ~= nil and summary.state(buf).tick > 0
+      end)
+      local summary_win = vim.api.nvim_get_current_win()
+      local function diff_wins()
+        local n = 0
+        for _, w in ipairs(wins()) do
+          if w ~= summary_win and w ~= original then
+            assert.is_true(vim.wo[w].diff)
+            n = n + 1
+          end
+        end
+        return n
+      end
+      local function again(pattern, keys)
+        vim.api.nvim_set_current_win(summary_win)
+        goto_line(pattern)
+        H.feed(keys)
+        vim.wait(50)
+        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+        assert.equals(repo:path("o"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original)))
+      end
+
+      -- the three-way diff twice: one layout of three windows, not two
+      again("^U c$", "dd")
+      assert.equals(3, diff_wins())
+      again("^U c$", "dd")
+      assert.equals(3, diff_wins())
+      assert.equals(5, #wins())
+      -- a two-way diff replaces it
+      again("^M d$", "dv")
+      assert.equals(2, diff_wins())
+      assert.equals(4, #wins())
+      -- and the three-way diff replaces that
+      again("^U c$", "dd")
+      assert.equals(3, diff_wins())
+      assert.equals(5, #wins())
     end)
   end)
 

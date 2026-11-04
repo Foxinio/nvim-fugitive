@@ -83,7 +83,8 @@ end
 local function open_side(url, mods)
   vim.cmd(mods .. " split " .. vim.fn.fnameescape(url))
   local win = vim.api.nvim_get_current_win()
-  vim.w.fugitive_diff_side = true
+  -- the buffer it was opened for: a window reused since is not a side
+  vim.w.fugitive_diff_side = vim.api.nvim_get_current_buf()
   return win
 end
 
@@ -133,6 +134,13 @@ function M.split(opts)
   if not repo or not rel or rel == "" then
     notify.error("not a file in a git repository")
     return
+  end
+  -- a new diff replaces the one already open
+  M.close_others(cur_win)
+  if vim.w[cur_win].fugitive_diff_owned == true then
+    -- opened by the summary for this diff: closed by the next one while it
+    -- still shows this buffer
+    vim.w[cur_win].fugitive_diff_owned = buf
   end
   local mods_extra = (opts.mods or ""):gsub("vertical", ""):gsub("horizontal", "")
 
@@ -205,11 +213,16 @@ function M.split(opts)
   vim.api.nvim_set_current_win(opts.keep_focus and cur_win or win)
 end
 
----Close the diff: wipe the fugitive side windows, diffoff the rest (dq).
-function M.close()
-  ---@type integer?
-  local cur = vim.api.nvim_get_current_win()
-  -- closing the sides here must not close the work tree window with them
+---Is `win` still a side window of a diff (not reused for another buffer)?
+---@param win integer
+local function is_side(win)
+  local side = vim.w[win].fugitive_diff_side
+  return side ~= nil and side == vim.api.nvim_win_get_buf(win)
+end
+
+---Unlink the merge layouts of the current tab, so closing some of their
+---windows does not close the others with them.
+local function unlink_merge_groups()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local group = vim.w[win].fugitive_merge_group
     if group then
@@ -217,8 +230,46 @@ function M.close()
       vim.w[win].fugitive_merge_group = nil
     end
   end
+end
+
+---End every fugitive diff of the current tab but in `keep`: at most one
+---diff (two- or three-way) is open at once. Closes the side windows and the
+---windows the summary opened for a diff; diffoff what our diffthis set.
+---@param keep integer window the new diff goes in
+function M.close_others(keep)
+  unlink_merge_groups()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if vim.api.nvim_win_is_valid(win) and vim.w[win].fugitive_diff_side then
+    if
+      win ~= keep
+      and vim.api.nvim_win_is_valid(win)
+      and (
+        is_side(win)
+        -- a split the summary opened for a diff, unless reused since for
+        -- another buffer
+        or vim.w[win].fugitive_diff_owned == vim.api.nvim_win_get_buf(win)
+      )
+    then
+      pcall(vim.api.nvim_win_close, win, false)
+    end
+  end
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.wo[win].diff and vim.w[win].fugitive_diff_restore then
+      vim.api.nvim_win_call(win, function()
+        vim.cmd("diffoff")
+        vim.w.fugitive_diff_restore = nil
+      end)
+    end
+  end
+end
+
+---Close the diff: wipe the fugitive side windows, diffoff the rest (dq).
+function M.close()
+  ---@type integer?
+  local cur = vim.api.nvim_get_current_win()
+  -- closing the sides here must not close the work tree window with them
+  unlink_merge_groups()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_is_valid(win) and is_side(win) then
       if win == cur then
         -- closing from a side window: return to the work tree window
         cur = nil

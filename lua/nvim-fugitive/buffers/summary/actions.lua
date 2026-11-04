@@ -318,6 +318,7 @@ local function unstage_cmds(st, items)
 end
 
 local file_sections = { "Untracked", "Unstaged", "Staged", "Unmerged" }
+local file_sections_set = { Untracked = true, Unstaged = true, Staged = true, Unmerged = true }
 
 ---Whole files moved by a stage/unstage: collapse them in every section, so
 ---one comes back folded wherever it lands, now or after moving back.
@@ -346,18 +347,20 @@ local function fold_moved(st, items)
   return paths
 end
 
----Where the cursor goes once whole files left their section: the next file
----of that section (else the previous one), not the moved file.
+---Where the cursor goes once files (or the hunks emptying them) left their
+---section: the next file of that section, else the previous one, else the
+---first file of another section the files do not land in (the next ones
+---first), not the moved file.
 ---@param st fugitive.SummaryState
 ---@param items table[]
 ---@param l1 integer
 ---@param l2 integer
----@return {section: string, paths: table<string, true>, target: string?}?
+---@return {section: string, paths: table<string, true>, target: {section: string, path: string}?}?
 local function cursor_after_move(st, items, l1, l2)
   local section
   local moved = {}
   for _, it in ipairs(items) do
-    if it.type ~= "file" then
+    if it.type ~= "file" and it.type ~= "patch" then
       return nil
     end
     section = section or it.section
@@ -369,17 +372,57 @@ local function cursor_after_move(st, items, l1, l2)
   if not section then
     return nil
   end
+  -- hunks: only of one file
+  if items[1].type == "patch" and vim.tbl_count(moved) > 1 then
+    return nil
+  end
   local before, after
+  local firsts, order = {}, {}
   for lnum, i in ipairs(st.info) do
-    if i.kind == "file" and i.section == section and not moved[i.entry.path] then
-      if lnum < l1 then
-        before = i.entry.path
-      elseif lnum > l2 and not after then
-        after = i.entry.path
+    if i.kind == "file" and file_sections_set[i.section] then
+      if not firsts[i.section] then
+        firsts[i.section] = i.entry.path
+        table.insert(order, i.section)
+      end
+      if i.section == section and not moved[i.entry.path] then
+        if lnum < l1 then
+          before = i.entry.path
+        elseif lnum > l2 and not after then
+          after = i.entry.path
+        end
       end
     end
   end
-  return { section = section, paths = moved, target = after or before }
+  local target = after or before
+  if target then
+    return { section = section, paths = moved, target = { section = section, path = target } }
+  end
+  -- the section is empty now: the first file of another section, the ones
+  -- below first, skipping where the files land
+  local lands = section == "Staged" and { Unstaged = true, Untracked = true } or { Staged = true }
+  local here
+  for k, sec in ipairs(order) do
+    if sec == section then
+      here = k
+    end
+  end
+  local candidates = {}
+  for k = (here or 0) + 1, #order do
+    table.insert(candidates, order[k])
+  end
+  for k = (here or #order + 1) - 1, 1, -1 do
+    table.insert(candidates, order[k])
+  end
+  for _, sec in ipairs(candidates) do
+    if not lands[sec] then
+      return {
+        section = section,
+        paths = moved,
+        target = { section = sec, path = firsts[sec] },
+      }
+    end
+  end
+  return { section = section, paths = moved }
 end
 
 -- Staging is routine: errors notify (from run_chain), success is silent and
@@ -927,8 +970,10 @@ function M.diff(buf, layout)
     notify.warn("nothing to diff for " .. e.path)
     return
   end
-  -- in a new split below, like `o`: the summary and the other windows stay
+  -- in a new split below, like `o`: the summary and the other windows stay;
+  -- the next diff closes this one (diffsplit.close_others)
   vim.cmd("belowright split")
+  vim.w.fugitive_diff_owned = true
   if i.section == "Unmerged" then
     vim.cmd("edit " .. vim.fn.fnameescape(repo:abs(e.path)))
     return ds.split({ three_way = true, layout = layout })
