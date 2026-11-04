@@ -145,11 +145,16 @@ describe("parity with upstream vim-fugitive", function()
       local buf = vim.api.nvim_get_current_buf()
       local st = require("nvim-fugitive.buffers.summary").state(buf)
       vim.api.nvim_win_set_cursor(0, { assert(H.find_line(lua_pattern)), 0 })
+      -- the refresh started by opening the summary must not count as the
+      -- render after the map: it can finish before the map's git command
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
       local tick = st.tick
       H.feed(ms[3])
       H.wait(function()
-        return st.tick > tick
-      end)
+        return st.tick > tick and not st.running
+      end, "refresh after " .. ms[3])
       assert.equals(up:status(), ours:status())
       assert.equals(up:read("a"), ours:read("a"))
     end)
