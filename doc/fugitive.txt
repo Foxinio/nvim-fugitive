@@ -43,7 +43,8 @@ Repositories are found from the buffer's file: work trees, linked
 worktrees, submodules, bare repositories, git dirs with `core.worktree`,
 and external git dirs given by $GIT_DIR/$GIT_WORK_TREE (dotfiles setups).
 
-Optional: telescope.nvim, overseer.nvim, gitsigns.nvim, and any plugin
+Optional: telescope.nvim, overseer.nvim, gitsigns.nvim,
+term-color-parser.nvim (git's colours, |fugitive-colours|), and any plugin
 that renders |vim.notify| (noice.nvim, nvim-notify, ...).
 
 ==============================================================================
@@ -136,8 +137,10 @@ maps). Maps inside fugitive's own buffers are always set.
 
                                                              *:FugitiveOutput*
 :FugitiveOutput [n]     Show the complete stdout and stderr of a recent
-                        command, newest first ([n] = 1 is the latest).
-                        Opens in the float; modifiers open a split.
+                        command, newest first ([n] = 1 is the latest), with
+                        the colours git printed (|fugitive-colours|).
+                        Opens in the float;
+                        modifiers open a split.
 
                                                             *:FugitiveRestore*
 :FugitiveRestore [path] Pick a discarded change from the journal and
@@ -514,6 +517,15 @@ is routed like that command; other shell aliases run as tasks
 `routes = { lg = "vert", sync = "term" }`; a name anywhere in the chain
 counts, the one typed first. A name that is neither a git command (builtin
 or `git-<name>` on $PATH) nor an alias is an error, and nothing is run.
+
+                                                          *fugitive-colours*
+With term-color-parser.nvim installed
+(https://github.com/Foxinio/term-color-parser.nvim), output in the float
+(and in |:FugitiveOutput|) keeps git's colours where git would colour it in
+a terminal: unless `color.ui`, `color.pager` or the command's own
+`color.<cmd>` (e.g. `color.diff` for log) is false. `%C(...)` formats of
+your aliases show as in a terminal. Without it, git runs without colours, as
+before. Notifications are never coloured.
 
                                                         *fugitive-routes*
 Choose the target per command with `routes`. Keys are a subcommand or a

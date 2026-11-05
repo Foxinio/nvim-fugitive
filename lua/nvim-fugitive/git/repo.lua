@@ -394,7 +394,8 @@ end
 ---@return string[]
 function Repo:config_all(key)
   if not self._config then
-    local res = self:sync({ "config", "--list", "-z" })
+    -- the user's config: without our own -c overrides (color.ui=never, …)
+    local res = self:sync({ "config", "--list", "-z" }, { raw = true })
     local cfg = {}
     for entry in (res.stdout or ""):gmatch("([^%z]+)") do
       local k, v = entry:match("^([^\n]*)\n(.*)$")

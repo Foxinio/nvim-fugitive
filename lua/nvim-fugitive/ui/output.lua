@@ -116,12 +116,17 @@ function M.show(n, mods)
     require("nvim-fugitive.ui.notify").warn("no command output recorded")
     return
   end
-  return require("nvim-fugitive.ui.float").show(M.lines(entry), {
+  -- with git's colours, as the command printed them
+  local ansi = require("nvim-fugitive.ui.ansi")
+  local lines, spans = ansi.decode(table.concat(M.lines(entry), "\n"))
+  local buf, win = require("nvim-fugitive.ui.float").show(lines, {
     title = "git output #" .. entry.id,
     mods = mods,
     filetype = "fugitiveoutput",
     name = "fugitive-output://" .. entry.id,
   })
+  ansi.apply(buf, spans)
+  return buf, win
 end
 
 return M

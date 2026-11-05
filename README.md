@@ -14,7 +14,7 @@ is [project.md](project.md); development notes are in
 
 - Neovim ≥ 0.11, git ≥ 2.40, Linux or macOS
 - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim)
-- optional: telescope.nvim, overseer.nvim, gitsigns.nvim, noice.nvim
+- optional: telescope.nvim, overseer.nvim, gitsigns.nvim, noice.nvim, [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim) (git's colours in the float)
 
 ## Installation
 
