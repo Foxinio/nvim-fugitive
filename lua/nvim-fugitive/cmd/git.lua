@@ -276,7 +276,8 @@ function M.run_float(repo, args, opts)
     editor = true,
     mods = opts.mods,
     env = env,
-    color = M.color_keys(repo, opts.sub),
+    -- colours only when term-color-parser.nvim can show them
+    color = ansi.available() and M.color_keys(repo, opts.sub) or nil,
     on_stdout = function(_, data)
       if data then
         table.insert(raw, data)
