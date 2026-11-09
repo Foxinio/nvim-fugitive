@@ -277,6 +277,66 @@ describe("picker fallbacks without telescope", function()
     assert.same({ "main", "aaa", "other…" }, offered)
   end)
 
+  it(":Git push asks only without an upstream; -u chooses it for good", function()
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    local origin = H.repo({ bare = true })
+    repo:git("remote", "add", "origin", origin.root)
+    repo:git("push", "-q", "origin", "main", "main:aaa")
+    repo:git("fetch", "-q", "origin")
+    vim.cmd("cd " .. repo.root)
+    local orig = vim.ui.select
+    local asked, pick = 0, nil
+    vim.ui.select = function(items, opts, cb)
+      asked = asked + 1
+      local labels = vim.tbl_map(opts.format_item, items)
+      for i, label in ipairs(labels) do
+        if label == pick then
+          return cb(items[i])
+        end
+      end
+      cb(items[1])
+    end
+    local log, restore = H.capture_notify()
+    local function upstream()
+      return vim.trim(
+        repo:git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", { allow_fail = true })
+      )
+    end
+    -- git push -u updates the remote ref first and writes the upstream to
+    -- the config after that: wait for both
+    local function push(cmd, ref)
+      repo:commit("c" .. vim.uv.hrtime(), { ["b"] = tostring(vim.uv.hrtime()) })
+      vim.cmd(cmd)
+      H.wait(function()
+        return vim.trim(origin:git("rev-parse", "--verify", "-q", ref, { allow_fail = true }))
+            == repo:rev("HEAD")
+          and (
+            not cmd:find(" %-u") and not cmd:find("%-%-set%-upstream")
+            or upstream() == "origin/" .. ref
+          )
+      end, cmd .. " -> " .. ref, 10000)
+    end
+
+    -- -u: the picker, then the choice is the upstream from now on
+    pick = "aaa"
+    push("Git push -u", "aaa")
+    assert.equals(1, asked)
+    assert.equals("origin/aaa", upstream())
+    -- a bare push now goes there without asking, though the name differs
+    push("Git push", "aaa")
+    assert.equals(1, asked)
+    -- -u asks again, starting at the upstream
+    pick = "main"
+    push("Git push --set-upstream", "main")
+    assert.equals(2, asked)
+    assert.equals("origin/main", upstream())
+    push("Git push", "main")
+    assert.equals(2, asked)
+    vim.ui.select = orig
+    restore()
+    local _ = log
+  end)
+
   it("other invocations pass through without a picker", function()
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     repo:git("branch", "topic")
