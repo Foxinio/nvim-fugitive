@@ -286,6 +286,40 @@ describe(":Git routes", function()
     assert.truthy(log[1].msg:match("modified:%s+a"))
   end)
 
+  it("commit.signoff adds --signoff to every commit", function()
+    local config = require("nvim-fugitive.config")
+    local git = require("nvim-fugitive.cmd.git")
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    repo:git("config", "alias.ci", "commit")
+    repo:git("config", "alias.cish", "!git commit")
+    local r = require("nvim-fugitive.git.repo").find(repo.root)
+    local function with(s)
+      return table.concat(git.with_signoff(r, vim.split(s, " ", { trimempty = true })), " ")
+    end
+    -- off by default
+    assert.equals("commit -m x", with("commit -m x"))
+    config.set({ commit = { signoff = true } })
+    assert.equals("commit --signoff -m x", with("commit -m x"))
+    assert.equals("-c a=b commit --signoff -m x -- a", with("-c a=b commit -m x -- a"))
+    assert.equals("ci --signoff -m x", with("ci -m x"))
+    -- the user's own choice stays; other commands and shell aliases too
+    for _, s in ipairs({ "commit -s", "commit -asm x", "commit --no-signoff", "log", "cish -m x" }) do
+      assert.equals(s, with(s))
+    end
+
+    -- end to end
+    vim.cmd("cd " .. repo.root)
+    repo:write("a", "changed\n")
+    local before = output.get(1)
+    vim.cmd("Git commit -am signed")
+    wait_done(before)
+    config.set({})
+    assert.equals(
+      "signed\n\nSigned-off-by: Test <test@example.com>",
+      vim.trim(repo:git("log", "-1", "--format=%B"))
+    )
+  end)
+
   it("errors clearly on a name that is neither a git command nor an alias", function()
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     vim.cmd("cd " .. repo.root)

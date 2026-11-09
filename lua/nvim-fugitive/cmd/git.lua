@@ -299,6 +299,30 @@ function M.run_float(repo, args, opts)
   return job
 end
 
+---With `commit.signoff` on, a commit (or an alias of commit) gets
+---`--signoff` right after its subcommand word, before the user's own
+---arguments, so their `--no-signoff` still wins and it never follows `--`.
+---Shell aliases are left as they are.
+---@param repo fugitive.Repo
+---@param args string[]
+---@return string[]
+function M.with_signoff(repo, args)
+  if not require("nvim-fugitive.config").get().commit.signoff then
+    return args
+  end
+  local cls = routes.classify(args, { aliases = M.alias_resolver(repo) })
+  if cls.sub ~= "commit" or cls.shell then
+    return args
+  end
+  local rest = vim.list_slice(args, #cls.parsed.globals + 2)
+  if routes.has_flag(rest, { "-s", "--signoff", "--no-signoff" }) then
+    return args
+  end
+  local out = vim.list_slice(args, 1, #cls.parsed.globals + 1)
+  table.insert(out, "--signoff")
+  return vim.list_extend(out, rest)
+end
+
 ---Dispatch `:Git {args}`.
 ---@param args string[]
 ---@param opts? {bang?: boolean, mods?: string, buf?: integer, repo?: fugitive.Repo, skip_picker?: boolean, on_done?: fun(res: fugitive.ExecResult)}
@@ -339,6 +363,8 @@ function M.run(args, opts)
     notify.error(string.format("'%s' is not a git command or a defined alias (alias.%s)", sub, sub))
     return nil
   end
+
+  args = M.with_signoff(repo, args)
 
   if opts.bang then
     return M.run_background(repo, args, { on_done = opts.on_done })

@@ -17,6 +17,7 @@ local M = {}
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
 ---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer}
+---@field commit {signoff: boolean} `signoff`: add --signoff to every commit
 
 ---@type fugitive.Config
 M.defaults = {
@@ -261,6 +262,9 @@ M.defaults = {
   browse = { hosts = {}, providers = {} },
   integrations = { telescope = true, overseer = true, gitsigns = true },
   summary = { window = "split", log_limit = 256 },
+  -- signoff: every commit made through fugitive gets --signoff (a
+  -- Signed-off-by trailer); `--no-signoff` on a command still wins
+  commit = { signoff = false },
 }
 
 ---@type fugitive.Config
@@ -281,6 +285,7 @@ local function validate(opts)
     browse = "table",
     integrations = "table",
     summary = "table",
+    commit = "table",
   }) do
     vim.validate("opts." .. key, opts[key], spec, true)
   end
@@ -310,6 +315,9 @@ local function validate(opts)
         )
       end
     end
+  end
+  if opts.commit and opts.commit.signoff ~= nil then
+    vim.validate("opts.commit.signoff", opts.commit.signoff, "boolean")
   end
   if opts.notify and opts.notify.max_lines ~= nil then
     vim.validate("opts.notify.max_lines", opts.notify.max_lines, "number")

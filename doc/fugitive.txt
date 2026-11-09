@@ -74,10 +74,18 @@ Calling setup is optional; without it the defaults below apply. >lua
     browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
     integrations = { telescope = true, overseer = true, gitsigns = true },
     summary = { window = "split", log_limit = 256 },
+    commit = { signoff = false },       -- |fugitive-signoff|
   })
 <
 Map tables are merged key by key, so a single map can be changed. Lists
 such as `long_running` replace the default list.
+
+                                                          *fugitive-signoff*
+With `commit = { signoff = true }`, every commit made through fugitive gets
+`--signoff` (a `Signed-off-by:` trailer): `:Git commit`, `:Git! commit`, the
+summary's commit maps (`cc`, `ca`, `ce`, `cw`, ...) and aliases of commit.
+It goes right after the subcommand, so `--no-signoff` on a command still
+wins. Shell (`!`) aliases are left as they are.
 
                                                           *g:fugitive_no_maps*
 Setting `g:fugitive_no_maps` disables the maps that fugitive would put in
