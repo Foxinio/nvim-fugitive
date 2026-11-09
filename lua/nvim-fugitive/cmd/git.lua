@@ -354,28 +354,57 @@ function M.run_float(repo, args, opts)
   return job
 end
 
----With `commit.signoff` on, a commit (or an alias of commit) gets
----`--signoff` right after its subcommand word, before the user's own
----arguments, so their `--no-signoff` still wins and it never follows `--`.
----Shell aliases are left as they are.
+---Add the configured default arguments (`args`) to a command: those of its
+---subcommand right after the subcommand word, those of a "sub word" key
+---right after that word. An alias gets those of the command it runs; shell
+---aliases get none. Arguments already present are not added again, and the
+---user's own come after, so a later `--no-…` still wins.
 ---@param repo fugitive.Repo
 ---@param args string[]
 ---@return string[]
-function M.with_signoff(repo, args)
-  if not require("nvim-fugitive.config").get().commit.signoff then
+function M.default_args(repo, args)
+  local defaults = require("nvim-fugitive.config").get().args
+  if next(defaults) == nil then
     return args
   end
   local cls = routes.classify(args, { aliases = M.alias_resolver(repo) })
-  if cls.sub ~= "commit" or cls.shell then
+  if not cls.sub or cls.shell then
     return args
   end
-  local rest = vim.list_slice(args, #cls.parsed.globals + 2)
-  if routes.has_flag(rest, { "-s", "--signoff", "--no-signoff" }) then
-    return args
+  -- index of the subcommand (or alias) word, and of the first positional
+  local at = #cls.parsed.globals + 1
+  local word_at
+  for i = at + 1, #args do
+    if args[i] == "--" then
+      break
+    elseif args[i]:sub(1, 1) ~= "-" then
+      word_at = i
+      break
+    end
   end
-  local out = vim.list_slice(args, 1, #cls.parsed.globals + 1)
-  table.insert(out, "--signoff")
-  return vim.list_extend(out, rest)
+  local present = {}
+  for i = 1, #args do
+    if args[i] == "--" then
+      break
+    end
+    present[args[i]] = true
+  end
+  local function missing(list)
+    return vim.tbl_filter(function(a)
+      return not present[a]
+    end, list or {})
+  end
+  local out = vim.deepcopy(args)
+  -- the later position first, so the earlier index stays valid
+  if word_at then
+    for i, a in ipairs(missing(defaults[cls.sub .. " " .. args[word_at]])) do
+      table.insert(out, word_at + i, a)
+    end
+  end
+  for i, a in ipairs(missing(defaults[cls.sub])) do
+    table.insert(out, at + i, a)
+  end
+  return out
 end
 
 ---Dispatch `:Git {args}`.
@@ -419,11 +448,12 @@ function M.run(args, opts)
     return nil
   end
 
-  args = M.with_signoff(repo, args)
-
   if opts.bang then
     return M.run_background(repo, args, { on_done = opts.on_done })
   end
+
+  -- :Git! runs exactly what was typed; everything else gets the defaults
+  args = M.default_args(repo, args)
 
   local cls = routes.classify(args, { aliases = M.alias_resolver(repo) })
   if cls.route == "blame" then

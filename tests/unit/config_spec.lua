@@ -5,7 +5,7 @@ describe("config.merge", function()
     local c = config.merge()
     assert.equals("stage", c.maps.summary["s"])
     assert.equals(10, c.notify.max_lines)
-    assert.is_false(c.commit.signoff)
+    assert.same({}, c.args)
   end)
 
   it("merges map tables key by key and keeps false", function()
@@ -40,8 +40,13 @@ describe("config.merge", function()
     assert.has_error(function()
       config.merge({ notify = { max_lines = "ten" } })
     end)
-    assert.has_error(function()
-      config.merge({ commit = { signoff = "yes" } })
-    end)
+    for _, bad in ipairs({
+      { commit = "--signoff" },
+      { commit = { 1 } },
+      { ["reset --hard"] = { "-q" } },
+      { ["remote add origin"] = { "-f" } },
+    }) do
+      assert.is_false(pcall(config.merge, { args = bad }), vim.inspect(bad))
+    end
   end)
 end)

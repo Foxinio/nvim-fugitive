@@ -332,9 +332,10 @@ require("nvim-fugitive").setup({
   -- the summary window ("split", "vsplit", "tab", "current") and how many
   -- commits the Unpushed/Unpulled sections show
   summary = { window = "split", log_limit = 256 },
-  -- signoff: every commit made through fugitive (`:Git commit`, `cc`, `ca`,
-  -- …, aliases of commit) gets --signoff; `--no-signoff` on a command wins
-  commit = { signoff = false },
+  -- default arguments per subcommand ("sub" or "sub word"), added right
+  -- after it for every command fugitive runs except :Git! (typed commands,
+  -- summary maps, aliases), e.g. { commit = { "--signoff" } }
+  args = {},
 })
 ```
 
