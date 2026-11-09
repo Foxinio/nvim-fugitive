@@ -392,6 +392,7 @@ end
 ---@class fugitive.Scan
 ---@field opts {[1]: string, [2]: string?}[] options in order: name and value
 ---@field positionals string[] non-option arguments before `--`
+---@field at integer[] the index in `rest` of each positional
 ---@field dashdash boolean `--` was given
 ---@field after string[] the arguments after `--`
 
@@ -403,7 +404,7 @@ end
 ---@return fugitive.Scan
 function M.scan(sub, rest)
   local spec = lookup(sub)
-  local r = { opts = {}, positionals = {}, dashdash = false, after = {} }
+  local r = { opts = {}, positionals = {}, at = {}, dashdash = false, after = {} }
   local i = 1
   while i <= #rest do
     local a = rest[i]
@@ -454,6 +455,7 @@ function M.scan(sub, rest)
       end
     else
       table.insert(r.positionals, a)
+      table.insert(r.at, i)
     end
     i = i + 1
   end

@@ -326,6 +326,7 @@ describe(":Git routes", function()
         commit = { "--signoff" },
         stash = { "-q" },
         ["stash push"] = { "--include-untracked" },
+        ["notes add"] = { "--allow-empty" },
       },
     })
     assert.equals("commit --signoff -m x", with("commit -m x"))
@@ -335,6 +336,8 @@ describe(":Git routes", function()
     -- "sub word": after that word, as well as the "sub" defaults
     assert.equals("stash -q push --include-untracked -m wip", with("stash push -m wip"))
     assert.equals("stash -q list", with("stash list"))
+    -- an option's value is not taken for the word
+    assert.equals("notes --ref foo add --allow-empty -m x", with("notes --ref foo add -m x"))
     -- already given, other commands, shell aliases: unchanged
     for _, s in ipairs({ "commit --signoff -m x", "log", "cish -m x" }) do
       assert.equals(s, with(s))
