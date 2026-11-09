@@ -26,7 +26,7 @@
 | Compat level | Drop-in for core; no deprecated aliases                   |
 | Neovim       | 0.11+                                                     |
 | Platforms    | Linux, macOS (CI-tested on Linux). Windows/WSL not supported for now |
-| Runtime deps | plenary.nvim (async, Job, path). Everything else optional |
+| Runtime deps | none; everything else optional (plenary.nvim only runs the tests) |
 | Exec model   | Async by default; sync only where Vim semantics require it (BufReadCmd, BufWriteCmd, :Gwrite) |
 | Summary buffer | `:Git` must keep the upstream interface (window, sections, staging, upstream status); only tweak: bindings are configurable |
 | Conflict resolution | Required: upstream 3-way `:Gdiffsplit!`, conflict-marker actions in the work tree, an "Unmerged" UX in the summary buffer (§4.3) |
@@ -153,7 +153,7 @@ define our own recovery path:
 ## 5. Dependencies & integrations
 
 ### 5.1 Required
-- Neovim ≥ 0.11, git ≥ 2.40, plenary.nvim.
+- Neovim ≥ 0.11, git ≥ 2.40.
 
 ### 5.1.1 Optional
 - noice.nvim (indirectly, via `vim.notify`), telescope.nvim, gitsigns.nvim,
@@ -337,7 +337,7 @@ lua/nvim-fugitive/
   init.lua                   -- setup(), public Lua API
   config.lua                 -- defaults, validation, merge; keymap tables
   git/
-    exec.lua                 -- plenary.Job/vim.system wrapper: async (coroutine) + sync
+    exec.lua                 -- vim.system wrapper: async (callback, coroutine) + sync
     repo.lua                 -- detection & caching: worktree, common dir, submodule, symlinks
     status.lua               -- `status --porcelain=v2 -z --branch --show-stash` parser
     diff.lua                 -- unified diff parsing, hunk math, partial-patch building

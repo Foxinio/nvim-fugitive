@@ -57,3 +57,61 @@ describe("exec.build", function()
     assert(ok, err)
   end)
 end)
+
+describe("exec.async", function()
+  local function fake(results)
+    local orig = exec.run
+    exec.run = function(args, _, cb)
+      vim.schedule(function()
+        cb(results[args[1]])
+      end)
+    end
+    return function()
+      exec.run = orig
+    end
+  end
+
+  it("runs awaits in order and passes the function's results", function()
+    local restore = fake({ a = { stdout = "1" }, b = { stdout = "2" } })
+    local got
+    exec.async(function()
+      local x = exec.await({ "a" })
+      local y = exec.await({ "b" })
+      return x.stdout .. y.stdout, "extra"
+    end, function(...)
+      got = { ... }
+    end)
+    vim.wait(1000, function()
+      return got ~= nil
+    end)
+    restore()
+    assert.same({ true, "12", "extra" }, got)
+  end)
+
+  it("reports an error with false", function()
+    local restore = fake({ a = { stdout = "" } })
+    local ok, err
+    exec.async(function()
+      exec.await({ "a" })
+      error("boom")
+    end, function(o, e)
+      ok, err = o, e
+    end)
+    vim.wait(1000, function()
+      return ok ~= nil
+    end)
+    restore()
+    assert.is_false(ok)
+    assert.truthy(tostring(err):match("boom"))
+  end)
+
+  it("runs a function that never awaits", function()
+    local got
+    exec.async(function()
+      return 42
+    end, function(...)
+      got = { ... }
+    end)
+    assert.same({ true, 42 }, got)
+  end)
+end)
