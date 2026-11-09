@@ -235,6 +235,86 @@ describe("routes.has_flag", function()
     assert.is_false(routes.has_flag({ "--messages" }, { "--message" }))
     assert.is_false(routes.has_flag({ "-mfoe" }, { "-e" }))
   end)
+  it("splits short clusters by the subcommand's own value letters", function()
+    -- push -u is a switch, branch -u takes the upstream
+    assert.is_true(routes.has_flag({ "-uf" }, { "-f" }, "push"))
+    assert.is_false(routes.has_flag({ "-uf" }, { "-f" }, "branch"))
+    assert.is_true(routes.has_flag({ "-fu" }, { "-u" }, "push"))
+    -- --x v and --x=v are the same option
+    assert.is_true(routes.has_flag({ "--fixup", "amend:HEAD" }, { "--fixup=amend:" }, "commit"))
+    assert.is_true(routes.has_flag({ "--", "x" }, { "--" }, "blame"))
+  end)
+end)
+
+describe("routes.scan", function()
+  local scan = function(sub, s)
+    return routes.scan(sub, vim.split(s, " ", { trimempty = true }))
+  end
+  it("reads options, their values and positionals per subcommand", function()
+    local r = scan("commit", "-am msg --author me --date=now file")
+    assert.same(
+      {
+        { "-a" },
+        { "-m", "msg" },
+        { "--author", "me" },
+        { "--date", "now" },
+      },
+      vim.tbl_map(function(o)
+        return { o[1], o[2] }
+      end, r.opts)
+    )
+    assert.same({ "file" }, r.positionals)
+    assert.is_false(r.dashdash)
+  end)
+  it("expands clusters with attached values", function()
+    assert.same(
+      { "-m", "fix" },
+      { scan("commit", "-vmfix").opts[2][1], scan("commit", "-vmfix").opts[2][2] }
+    )
+    assert.equals(2, #scan("push", "-uf").opts)
+    -- an optional value is attached only: -uno is -u no, -S takes no word
+    assert.same({ { "-u", "no" } }, scan("commit", "-uno").opts)
+    assert.same({ "msg" }, scan("commit", "-S msg").positionals)
+  end)
+  it("stops at -- and keeps a lone - as a positional", function()
+    local r = scan("checkout", "-f - -- a b")
+    assert.same({ "-" }, r.positionals)
+    assert.is_true(r.dashdash)
+    assert.same({ "a", "b" }, r.after)
+  end)
+  it("does not take option values for positionals", function()
+    assert.same({}, scan("log", "-n 5 --author me").positionals)
+    assert.same({ "add" }, scan("notes", "--ref foo add").positionals)
+    assert.same({ "f.txt" }, scan("blame", "-L 1,5 --date iso f.txt").positionals)
+  end)
+end)
+
+describe("editor routing", function()
+  local route = function(s)
+    return routes.classify(vim.split(s, " ", { trimempty = true }), { overrides = {} }).route
+  end
+  it("lets the last of --edit and --no-edit win, as git does", function()
+    assert.equals("notification", route("commit -e --no-edit"))
+    assert.equals("editor", route("commit --no-edit -e"))
+    assert.equals("editor", route("merge --no-edit -e"))
+    assert.equals("notification", route("merge -e --no-edit"))
+    assert.equals("notification", route("commit -c HEAD --no-edit"))
+  end)
+  it("keeps -e over a message given elsewhere", function()
+    assert.equals("editor", route("commit -e -m msg"))
+    assert.equals("editor", route("commit -m msg --edit"))
+    assert.equals("notification", route("commit -m msg"))
+  end)
+  it("reads the notes subcommand after the global --ref", function()
+    assert.equals("editor", route("notes --ref foo add"))
+    assert.equals("editor", route("notes --ref=foo add"))
+    assert.equals("notification", route("notes --ref foo add -m msg"))
+  end)
+  it("opens the editor for annotated tags without a message", function()
+    assert.equals("editor", route("tag -u key v1"))
+    assert.equals("notification", route("tag -u key -m msg v1"))
+    assert.equals("editor", route("tag -a v1 -m msg -e"))
+  end)
 end)
 
 describe("routes.picker_trigger", function()
@@ -257,6 +337,43 @@ describe("routes.picker_trigger", function()
     assert.equals("log", trig("rebase -i").picker)
     assert.equals("log", trig("rebase --interactive").picker)
   end)
+  it("triggers when only flags are given", function()
+    for _, s in ipairs({
+      "push -f",
+      "push --force",
+      "push --force-with-lease",
+      "push -o ci.skip",
+      "push --push-option ci.skip",
+      "push -v --dry-run",
+      "-c push.default=current push",
+      "merge --no-ff",
+      "merge -m msg",
+      "checkout --detach",
+      "switch --detach",
+      "rebase --autostash",
+    }) do
+      local t = trig(s)
+      assert.is_not_nil(t, s)
+      assert.is_nil(t.set_upstream, s)
+    end
+    assert.equals("push", trig("push -f").picker)
+    assert.equals("refs", trig("merge --no-ff").picker)
+    assert.equals("log", trig("rebase -i --autosquash").picker)
+    assert.same({ "-c", "push.default=current", "push" }, trig("-c push.default=current push").args)
+  end)
+  it("sets the upstream for -u anywhere in the flags", function()
+    for _, s in ipairs({
+      "push -f -u",
+      "push -u -f",
+      "push -fu",
+      "push -uf",
+      "push --set-upstream -f",
+    }) do
+      local t = trig(s)
+      assert.equals("push", t and t.picker, s)
+      assert.is_true(t.set_upstream, s)
+    end
+  end)
   it("passes every other invocation through", function()
     for _, s in ipairs({
       "rebase --continue",
@@ -273,8 +390,22 @@ describe("routes.picker_trigger", function()
       "checkout -b topic",
       "checkout -b topic main",
       "push origin",
-      "push --force",
       "push origin main",
+      "push -f origin",
+      "push -o ci.skip origin",
+      "push --all",
+      "push --tags",
+      "push --mirror",
+      "push -d",
+      "push --delete",
+      "merge --continue",
+      "merge --quit",
+      "rebase --skip",
+      "rebase --edit-todo",
+      "rebase -i --root",
+      "checkout -p",
+      "checkout --orphan new",
+      "switch --orphan new",
       "push -u origin",
       "push -u origin main",
       "log",
