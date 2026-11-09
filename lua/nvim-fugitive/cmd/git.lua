@@ -195,6 +195,50 @@ local pager_filetypes = {
   blame = "fugitiveblame",
 }
 
+-- the colour.<cmd> key git consults for a subcommand's output
+local color_keys = {
+  log = "color.diff",
+  show = "color.diff",
+  diff = "color.diff",
+  reflog = "color.diff",
+  whatchanged = "color.diff",
+  ["range-diff"] = "color.diff",
+  stash = "color.diff",
+  branch = "color.branch",
+  grep = "color.grep",
+  status = "color.status",
+  ["show-branch"] = "color.showBranch",
+}
+
+local function color_off(value)
+  value = value and value:lower()
+  return value == "false" or value == "never" or value == "no" or value == "off" or value == "0"
+end
+
+---Colour keys to force on for a pager command: git colours its output in a
+---terminal unless color.pager, color.<cmd> or color.ui turns it off.
+---@param repo fugitive.Repo
+---@param sub? string
+---@return string[]?
+function M.color_keys(repo, sub)
+  if color_off(repo:config("color.pager")) then
+    return nil
+  end
+  local key = color_keys[sub or ""]
+  local value = key and repo:config(key)
+  if value == nil then
+    value = repo:config("color.ui")
+  end
+  if color_off(value) then
+    return nil
+  end
+  local keys = { "color.ui" }
+  if key then
+    table.insert(keys, key)
+  end
+  return keys
+end
+
 ---Run a pager-type command; stream its output into the float (or a split
 ---with window modifiers). `<C-c>` in the pager cancels it.
 ---@param repo fugitive.Repo
@@ -203,15 +247,22 @@ local pager_filetypes = {
 ---@return fugitive.Job
 function M.run_float(repo, args, opts)
   local float = require("nvim-fugitive.ui.float")
+  local ansi = require("nvim-fugitive.ui.ansi")
   local buf
   local entry
-  local pending = {}
+  local pending, raw = {}, {}
   local scheduled = false
+  -- git's colours become highlights; the buffer gets the plain text
+  local decoder = ansi.decoder()
   local function flush()
     scheduled = false
     if #pending > 0 and buf then
-      float.append(buf, table.concat(pending))
+      local text, spans = decoder:feed(table.concat(pending))
       pending = {}
+      if vim.api.nvim_buf_is_valid(buf) then
+        float.append(buf, text)
+        ansi.apply(buf, spans)
+      end
     end
   end
   local env = {}
@@ -225,8 +276,11 @@ function M.run_float(repo, args, opts)
     editor = true,
     mods = opts.mods,
     env = env,
+    -- colours only when term-color-parser.nvim can show them
+    color = ansi.available() and M.color_keys(repo, opts.sub) or nil,
     on_stdout = function(_, data)
       if data then
+        table.insert(raw, data)
         table.insert(pending, data)
         if not scheduled then
           scheduled = true
@@ -236,10 +290,11 @@ function M.run_float(repo, args, opts)
     end,
   }, function(res)
     flush()
-    -- the streamed text is authoritative; vim.system returns nil stdout
-    -- when a callback consumed it
-    if res.stdout == "" and buf and vim.api.nvim_buf_is_valid(buf) then
-      res.stdout = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    -- the streamed text is authoritative (with its colours, for
+    -- :FugitiveOutput); vim.system returns nil stdout when a callback
+    -- consumed it
+    if res.stdout == "" then
+      res.stdout = table.concat(raw)
     end
     output.finish(entry, res)
     if buf and vim.api.nvim_buf_is_valid(buf) then
