@@ -50,17 +50,6 @@ function M.expand(args, repo)
   return out
 end
 
--- blame options that take the next argument as their value
-local blame_with_arg = {
-  ["-L"] = true,
-  ["-S"] = true,
-  ["--contents"] = true,
-  ["--date"] = true,
-  ["--encoding"] = true,
-  ["--ignore-rev"] = true,
-  ["--ignore-revs-file"] = true,
-}
-
 ---`:Git blame -L 1,5` or a blame routed to a pager names no file: blame the
 ---current buffer's like upstream, instead of letting git print its usage.
 ---@param repo fugitive.Repo
@@ -71,7 +60,7 @@ function M.blame_file_args(repo, args, rest)
   if vim.tbl_contains(rest, "--") then
     return args
   end
-  local positionals = routes.positionals(rest, blame_with_arg)
+  local positionals = routes.positionals(rest, "blame")
   for _, p in ipairs(positionals) do
     local abs = p:match("^/") and p or (repo.worktree and repo.worktree .. "/" .. p)
     if (abs and vim.uv.fs_stat(abs)) or vim.uv.fs_stat(p) then

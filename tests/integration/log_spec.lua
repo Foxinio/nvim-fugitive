@@ -46,6 +46,16 @@ describe(":Gclog / :Gllog", function()
     assert.equals("", vim.api.nvim_buf_get_name(0))
   end)
 
+  it("an option's value is not taken for the path", function()
+    vim.cmd("Gclog -n 1 f")
+    local qf = wait_qf(vim.fn.getqflist)
+    assert.equals(1, #qf)
+    assert.equals(
+      object.format(repo.root .. "/.git", c2, "f"),
+      vim.api.nvim_buf_get_name(qf[1].bufnr)
+    )
+  end)
+
   it(":{range}Gclog follows the lines with log -L, on each hunk", function()
     vim.cmd("edit f")
     vim.cmd("5,5Gclog")
