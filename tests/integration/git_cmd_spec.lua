@@ -309,6 +309,65 @@ describe(":Git routes", function()
     assert.truthy(log[1].msg:match("modified:%s+a"))
   end)
 
+  it("args adds default arguments after the subcommand", function()
+    local config = require("nvim-fugitive.config")
+    local git = require("nvim-fugitive.cmd.git")
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    repo:git("config", "alias.ci", "commit")
+    repo:git("config", "alias.cish", "!git commit")
+    local r = require("nvim-fugitive.git.repo").find(repo.root)
+    local function with(s)
+      return table.concat(git.default_args(r, vim.split(s, " ", { trimempty = true })), " ")
+    end
+    -- none configured
+    assert.equals("commit -m x", with("commit -m x"))
+    config.set({
+      args = {
+        commit = { "--signoff" },
+        stash = { "-q" },
+        ["stash push"] = { "--include-untracked" },
+      },
+    })
+    assert.equals("commit --signoff -m x", with("commit -m x"))
+    assert.equals("-c a=b commit --signoff -m x -- a", with("-c a=b commit -m x -- a"))
+    -- an alias gets the defaults of the command it runs
+    assert.equals("ci --signoff -m x", with("ci -m x"))
+    -- "sub word": after that word, as well as the "sub" defaults
+    assert.equals("stash -q push --include-untracked -m wip", with("stash push -m wip"))
+    assert.equals("stash -q list", with("stash list"))
+    -- already given, other commands, shell aliases: unchanged
+    for _, s in ipairs({ "commit --signoff -m x", "log", "cish -m x" }) do
+      assert.equals(s, with(s))
+    end
+
+    -- end to end: :Git and the summary's maps get them, :Git! does not
+    vim.cmd("cd " .. repo.root)
+    local function last_message()
+      return vim.trim(repo:git("log", "-1", "--format=%B"))
+    end
+    local trailer = "Signed-off-by: Test <test@example.com>"
+    repo:write("a", "one\n")
+    local before = output.get(1)
+    vim.cmd("Git commit -am signed")
+    wait_done(before)
+    assert.equals("signed\n\n" .. trailer, last_message())
+
+    repo:write("a", "two\n")
+    vim.cmd("Git! commit -am unsigned")
+    H.wait(function()
+      return last_message():match("^unsigned") ~= nil
+    end, ":Git! commit")
+    assert.equals("unsigned", last_message())
+
+    -- ce (commit --amend --no-edit) from the summary
+    vim.cmd("Git")
+    before = output.get(1)
+    H.feed("ce")
+    wait_done(before)
+    assert.equals("unsigned\n\n" .. trailer, last_message())
+    config.set({})
+  end)
+
   it("errors clearly on a name that is neither a git command nor an alias", function()
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     vim.cmd("cd " .. repo.root)

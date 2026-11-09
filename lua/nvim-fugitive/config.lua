@@ -17,6 +17,7 @@ local M = {}
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
 ---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer}
+---@field args table<string, string[]> default arguments per subcommand ("sub" or "sub word")
 
 ---@type fugitive.Config
 M.defaults = {
@@ -261,6 +262,9 @@ M.defaults = {
   browse = { hosts = {}, providers = {} },
   integrations = { telescope = true, overseer = true, gitsigns = true },
   summary = { window = "split", log_limit = 256 },
+  -- default arguments per subcommand ("sub" or "sub word"), added right
+  -- after it, e.g. { commit = { "--signoff" } }; not for :Git!
+  args = {},
 }
 
 ---@type fugitive.Config
@@ -281,6 +285,7 @@ local function validate(opts)
     browse = "table",
     integrations = "table",
     summary = "table",
+    args = "table",
   }) do
     vim.validate("opts." .. key, opts[key], spec, true)
   end
@@ -308,6 +313,21 @@ local function validate(opts)
             lhs
           )
         )
+      end
+    end
+  end
+  for key, list in pairs(opts.args or {}) do
+    -- "sub" or "sub word": arguments go right after the last word, which a
+    -- flag cannot be
+    if type(key) ~= "string" or not (key:match("^%S+$") or key:match("^%S+%s+[^%s-]%S*$")) then
+      error(string.format('fugitive: invalid args key %q (use "sub" or "sub word")', tostring(key)))
+    end
+    if type(list) ~= "table" or not vim.islist(list) then
+      error(string.format("fugitive: args[%q] must be a list of strings", key))
+    end
+    for _, a in ipairs(list) do
+      if type(a) ~= "string" then
+        error(string.format("fugitive: args[%q] must be a list of strings", key))
       end
     end
   end
