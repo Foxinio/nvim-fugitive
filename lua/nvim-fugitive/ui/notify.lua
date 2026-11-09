@@ -14,7 +14,8 @@ local TITLE = "Fugitive"
 ---@param opts? table
 function M.notify(msg, level, opts)
   opts = vim.tbl_extend("keep", opts or {}, { title = TITLE })
-  vim.notify(msg, level or vim.log.levels.INFO, opts)
+  -- a coloured command's output: no escape sequences in a notification
+  vim.notify(require("nvim-fugitive.ui.ansi").strip(msg), level or vim.log.levels.INFO, opts)
 end
 
 function M.info(msg, opts)

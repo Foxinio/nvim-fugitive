@@ -29,6 +29,8 @@ local M = {}
 ---@field on_stderr? fun(err: string?, data: string?)
 ---@field detach? boolean run in its own process group (cancellable as a group)
 ---@field mods? string command modifiers, used to place the editor window
+---@field color? string[] colour config keys to force to "always" (after the
+---common `color.ui=never`), e.g. { "color.ui", "color.diff" }
 
 M.git = "git"
 
@@ -82,6 +84,13 @@ function M.build(args, opts)
   end
   if not opts.raw then
     vim.list_extend(cmd, M.common_flags)
+  end
+  -- colours on, as in a terminal: the later -c wins
+  for _, key in ipairs(opts.color or {}) do
+    vim.list_extend(cmd, { "-c", key .. "=always" })
+  end
+  if opts.color then
+    env.NO_COLOR = false
   end
   local cwd = opts.cwd
   if repo then
