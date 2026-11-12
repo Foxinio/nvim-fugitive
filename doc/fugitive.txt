@@ -36,7 +36,6 @@ exist. Features that are not implemented yet are listed in
 
 - Neovim 0.11 or later.
 - git 2.40 or later.
-- plenary.nvim.
 - Linux or macOS. Windows and WSL are not supported for now.
 
 Repositories are found from the buffer's file: work trees, linked
@@ -739,7 +738,12 @@ the summary refreshes afterwards.
 
                                                           *fugitive-gitsigns*
 gitsigns.nvim ~
-After every change fugitive asks gitsigns to refresh. Work-tree hunk maps
+After every change fugitive asks gitsigns to refresh. gitsigns also attaches
+to fugitive's object buffers: a file at a commit (`:Gedit HEAD~2:%`) shows
+the changes that commit made, and the index (`:Gedit :%`) shows the staged
+changes, updated when `:w` stages it. Like upstream, fugitive fires
+|BufReadPost| after reading a fugitive:// buffer, so other plugins that
+attach on it see these buffers too. Work-tree hunk maps
 are opt-in through the `worktree` map table, with the actions
 `next_hunk`, `prev_hunk`, `stage_hunk` and `reset_hunk`: >lua
   require("nvim-fugitive").setup({

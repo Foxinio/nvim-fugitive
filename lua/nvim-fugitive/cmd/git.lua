@@ -351,27 +351,21 @@ end
 ---user's own come after, so a later `--no-…` still wins.
 ---@param repo fugitive.Repo
 ---@param args string[]
----@return string[]
-function M.default_args(repo, args)
+---@param cls? fugitive.Classification `args` already classified
+---@return string[] args the same table when nothing is added
+function M.default_args(repo, args, cls)
   local defaults = require("nvim-fugitive.config").get().args
   if next(defaults) == nil then
     return args
   end
-  local cls = routes.classify(args, { aliases = M.alias_resolver(repo) })
+  cls = cls or routes.classify(args, { aliases = M.alias_resolver(repo) })
   if not cls.sub or cls.shell then
     return args
   end
-  -- index of the subcommand (or alias) word, and of the first positional
+  -- the subcommand (or alias) word, and its first positional
   local at = #cls.parsed.globals + 1
-  local word_at
-  for i = at + 1, #args do
-    if args[i] == "--" then
-      break
-    elseif args[i]:sub(1, 1) ~= "-" then
-      word_at = i
-      break
-    end
-  end
+  local first = argv.scan(cls.sub, cls.parsed.rest).at[1]
+  local word_at = first and at + first
   local present = {}
   for i = 1, #args do
     if args[i] == "--" then
@@ -384,14 +378,17 @@ function M.default_args(repo, args)
       return not present[a]
     end, list or {})
   end
+  local word = word_at and missing(defaults[cls.sub .. " " .. args[word_at]]) or {}
+  local own = missing(defaults[cls.sub])
+  if #word == 0 and #own == 0 then
+    return args
+  end
   local out = vim.deepcopy(args)
   -- the later position first, so the earlier index stays valid
-  if word_at then
-    for i, a in ipairs(missing(defaults[cls.sub .. " " .. args[word_at]])) do
-      table.insert(out, word_at + i, a)
-    end
+  for i, a in ipairs(word) do
+    table.insert(out, word_at + i, a)
   end
-  for i, a in ipairs(missing(defaults[cls.sub])) do
+  for i, a in ipairs(own) do
     table.insert(out, at + i, a)
   end
   return out
@@ -443,9 +440,13 @@ function M.run(args, opts)
   end
 
   -- :Git! runs exactly what was typed; everything else gets the defaults
-  args = M.default_args(repo, args)
-
-  local cls = routes.classify(args, { aliases = M.alias_resolver(repo) })
+  local aliases = M.alias_resolver(repo)
+  local cls = routes.classify(args, { aliases = aliases })
+  local with_defaults = M.default_args(repo, args, cls)
+  if with_defaults ~= args then
+    args = with_defaults
+    cls = routes.classify(args, { aliases = aliases })
+  end
   if cls.route == "blame" then
     return require("nvim-fugitive.buffers.blame").open({
       flags = cls.parsed.rest,

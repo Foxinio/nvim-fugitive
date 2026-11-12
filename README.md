@@ -13,7 +13,6 @@ is [project.md](project.md); development notes are in
 ## Requirements
 
 - Neovim ≥ 0.11, git ≥ 2.40, Linux or macOS
-- [plenary.nvim](https://github.com/nvim-lua/plenary.nvim)
 - optional: telescope.nvim, overseer.nvim, gitsigns.nvim, noice.nvim, [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim) (git's colours in the float)
 
 ## Installation
@@ -23,7 +22,6 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "Foxinio/nvim-fugitive",
-  dependencies = { "nvim-lua/plenary.nvim" },
   cmd = { "Git", "G", "Gedit", "Gsplit", "Gvsplit", "Gtabedit", "Gpedit", "Gdrop",
           "Gread", "Gwrite", "Gwq", "Gclog", "Gllog", "Gcd", "Glcd",
           "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",

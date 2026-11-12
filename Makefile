@@ -5,6 +5,8 @@ PLENARY := $(DEPS)/plenary.nvim
 TELESCOPE := $(DEPS)/telescope.nvim
 # optional: git's colours in the float; the colour tests are pending without it
 COLORS    := $(DEPS)/term-color-parser.nvim
+# optional: gitsigns attaching to fugitive:// buffers; pending without it
+GITSIGNS  := $(DEPS)/gitsigns.nvim
 INIT    := tests/minimal_init.lua
 BUSTED   = $(NVIM) --headless --noplugin -u $(INIT) -c "PlenaryBustedDirectory $(1) {minimal_init = '$(INIT)', sequential = true, timeout = 60000}"
 
@@ -37,7 +39,7 @@ lint:
 format:
 	stylua lua plugin tests
 
-deps: $(PLENARY) $(TELESCOPE) $(COLORS)
+deps: $(PLENARY) $(TELESCOPE) $(COLORS) $(GITSIGNS)
 
 $(PLENARY):
 	git clone --depth 1 https://github.com/nvim-lua/plenary.nvim $(PLENARY)
@@ -47,6 +49,9 @@ $(TELESCOPE):
 
 $(COLORS):
 	git clone --depth 1 https://github.com/Foxinio/term-color-parser.nvim $(COLORS)
+
+$(GITSIGNS):
+	git clone --depth 1 https://github.com/lewis6991/gitsigns.nvim $(GITSIGNS)
 
 clean:
 	rm -rf $(DEPS) .tests

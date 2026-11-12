@@ -20,6 +20,32 @@ describe("fugitive:// reader", function()
     assert.same({ "echo 2" }, H.lines(0))
   end)
 
+  it("fires BufReadPost after reading, like a file, keeping the filetype", function()
+    local repo = H.repo({ files = { ["x.lua"] = "return 1\n" } })
+    local sha = repo:commit("two", { ["x.lua"] = "return 2\n" })
+    local fired = {}
+    local id = vim.api.nvim_create_autocmd("BufReadPost", {
+      pattern = "fugitive://*",
+      callback = function(ev)
+        table.insert(fired, ev.buf)
+      end,
+    })
+    local gd = repo.root .. "/.git"
+    for _, url in ipairs({
+      object.format(gd, sha, "x.lua"), -- a blob at a commit
+      object.format(gd, "0", "x.lua"), -- the index
+      object.format(gd, sha), -- a commit
+    }) do
+      vim.cmd("edit " .. vim.fn.fnameescape(url))
+      assert.equals(vim.api.nvim_get_current_buf(), fired[#fired], url)
+    end
+    vim.api.nvim_del_autocmd(id)
+    assert.equals(3, #fired)
+    assert.equals("git", vim.bo.filetype)
+    vim.cmd("buffer " .. fired[1])
+    assert.equals("lua", vim.bo.filetype)
+  end)
+
   it("reads trees and opens entries with <CR>", function()
     local repo = H.repo({ files = { ["dir/a"] = "a\n", ["top"] = "t\n" } })
     local head = repo:rev("HEAD")
