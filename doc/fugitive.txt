@@ -46,6 +46,24 @@ Optional: telescope.nvim, overseer.nvim, gitsigns.nvim,
 term-color-parser.nvim (git's colours, |fugitive-colours|), and any plugin
 that renders |vim.notify| (noice.nvim, nvim-notify, ...).
 
+                                                             *fugitive-health*
+When something doesn't work, start with: >vim
+  :checkhealth nvim-fugitive
+<
+It checks the Neovim and git versions, then shows:
+- your setup: whether |fugitive-config| setup() ran, every option you changed
+  from the default, and the error of a setup() that failed;
+- the repository of the current directory: work tree, git dir, HEAD,
+  whether .git is watched, and $GIT_* variables set in Neovim, which apply
+  to every git command fugitive runs;
+- the editor service (|fugitive-editor|): Neovim's server address and the
+  editor shim;
+- the git settings that change what fugitive does, each with the file it
+  comes from: a missing user.name or user.email, the editors fugitive
+  replaces, commit signing, pull/push/merge behaviour, colour settings, and
+  aliases git ignores because they are named like a built-in command;
+- the optional integrations: which are installed and used.
+
 ==============================================================================
 3. SETUP AND CONFIGURATION                                   *fugitive-config*
 
