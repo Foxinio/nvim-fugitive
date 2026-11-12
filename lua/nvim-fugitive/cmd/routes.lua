@@ -10,520 +10,13 @@
 ---only for the subcommands that list it.
 
 local M = {}
-
----Split a command line into words: whitespace separated, with '…', "…"
----and backslash escapes.
----@param str string
----@return string[]
-function M.split_args(str)
-  local args, cur, i, n = {}, nil, 1, #str
-  local quote
-  while i <= n do
-    local c = str:sub(i, i)
-    if quote then
-      if c == quote then
-        quote = nil
-      elseif c == "\\" and quote == '"' and i < n then
-        i = i + 1
-        cur = cur .. str:sub(i, i)
-      else
-        cur = cur .. c
-      end
-    elseif c == "'" or c == '"' then
-      quote = c
-      cur = cur or ""
-    elseif c == "\\" and i < n then
-      i = i + 1
-      cur = (cur or "") .. str:sub(i, i)
-    elseif c:match("%s") then
-      if cur then
-        table.insert(args, cur)
-        cur = nil
-      end
-    else
-      cur = (cur or "") .. c
-    end
-    i = i + 1
-  end
-  if cur then
-    table.insert(args, cur)
-  end
-  return args
-end
-
----Split a shell command at `&&`, `||`, `;` and newlines outside quotes; each
----part keeps only the first stage of a `|` pipeline.
----@param str string
----@return {text: string, piped: boolean}[]
-local function shell_segments(str)
-  local parts, cur, quote = {}, {}, nil
-  local i, n = 1, #str
-  local piped = false
-  local function cut()
-    local part = vim.trim(table.concat(cur))
-    if part ~= "" then
-      table.insert(parts, { text = part, piped = piped })
-    end
-    cur, piped = {}, false
-  end
-  while i <= n do
-    local c = str:sub(i, i)
-    local two = str:sub(i, i + 1)
-    if quote then
-      if c == "\\" and quote == '"' then
-        if not piped then
-          table.insert(cur, str:sub(i, i + 1))
-        end
-        i = i + 1
-      else
-        if c == quote then
-          quote = nil
-        end
-        if not piped then
-          table.insert(cur, c)
-        end
-      end
-    elseif c == "'" or c == '"' then
-      quote = c
-      if not piped then
-        table.insert(cur, c)
-      end
-    elseif c == "\\" then
-      if not piped then
-        table.insert(cur, str:sub(i, i + 1))
-      end
-      i = i + 1
-    elseif two == "&&" or two == "||" then
-      cut()
-      i = i + 1
-    elseif c == ";" or c == "\n" then
-      cut()
-    elseif c == "|" then
-      piped = true
-    elseif not piped then
-      table.insert(cur, c)
-    end
-    i = i + 1
-  end
-  cut()
-  return parts
-end
-
----The git command a shell (`!`) alias runs, as `:Git` arguments, when its
----body runs git exactly once (`!git log --graph`, `!f() { git log "$@"; }; f`,
----`!git log --oneline | head`); nil otherwise. `args` are the arguments the
----alias was given: they replace `"$@"`/`$1`…, or are appended like git does.
----@param body string the alias value, with or without its leading `!`
----@param args? string[]
----@return string[]?
-function M.shell_alias_command(body, args)
-  args = args or {}
-  local s = vim.trim((body:gsub("^!", "")))
-  -- the usual function wrapper: f() { …; }; f
-  local name, inner, call = s:match("^([%w_]+)%s*%(%)%s*{(.*)}%s*;?%s*([%w_]+)%s*$")
-  local wrapped = name ~= nil and name == call
-  if wrapped then
-    s = inner
-  end
-  if s:find("$(", 1, true) or s:find("`", 1, true) then
-    -- a command substitution may run git too
-    return nil
-  end
-  local found, last
-  local parts = shell_segments(s)
-  for k, part in ipairs(parts) do
-    local words = M.split_args(part.text)
-    if words[1] == "command" then
-      table.remove(words, 1)
-    end
-    if words[1] == "git" then
-      if found then
-        return nil
-      end
-      found = vim.list_slice(words, 2)
-      -- appended arguments reach git only at the end of the command line
-      last = k == #parts and not part.piped
-    end
-  end
-  if not found or #found == 0 then
-    return nil
-  end
-  local out, used = {}, false
-  for _, w in ipairs(found) do
-    if w == "$@" or w == "$*" then
-      vim.list_extend(out, args)
-      used = true
-    elseif w:match("^%$%d$") then
-      local v = args[tonumber(w:sub(2))]
-      if v then
-        table.insert(out, v)
-      end
-      used = true
-    elseif w:find("$", 1, true) then
-      -- other shell variables: cannot know what runs
-      return nil
-    else
-      table.insert(out, w)
-    end
-  end
-  -- git appends the arguments to the command line: they reach git when it
-  -- runs last, outside a function wrapper and a pipeline
-  if not used and not wrapped and last then
-    vim.list_extend(out, args)
-  end
-  return out
-end
+local argv = require("nvim-fugitive.cmd.argv")
 
 ---@alias fugitive.RouteName "float"|"notify"|"task"|"terminal"|"editor"|"blame"
 
----Global git options that take a separate argument.
-local global_with_arg = {
-  ["-c"] = true,
-  ["-C"] = true,
-  ["--git-dir"] = true,
-  ["--work-tree"] = true,
-  ["--namespace"] = true,
-  ["--config-env"] = true,
-  ["--super-prefix"] = true,
-  ["--exec-path"] = false, -- only the `=` form takes a value
-}
-
----@class fugitive.ParsedArgs
----@field globals string[] options before the subcommand
----@field sub string? subcommand
----@field rest string[] arguments after the subcommand
----@field paginate boolean -p/--paginate given
----@field no_pager boolean -P/--no-pager given
-
----Split `args` into global options, subcommand and the rest.
----@param args string[]
----@return fugitive.ParsedArgs
-function M.parse(args)
-  local r = { globals = {}, rest = {}, paginate = false, no_pager = false }
-  local i = 1
-  while i <= #args do
-    local a = args[i]
-    if a == "-p" or a == "--paginate" then
-      r.paginate = true
-      table.insert(r.globals, a)
-    elseif a == "-P" or a == "--no-pager" then
-      r.no_pager = true
-      table.insert(r.globals, a)
-    elseif global_with_arg[a] and args[i + 1] then
-      vim.list_extend(r.globals, { a, args[i + 1] })
-      i = i + 1
-    elseif a:sub(1, 1) == "-" then
-      table.insert(r.globals, a)
-    else
-      r.sub = a
-      r.rest = vim.list_slice(args, i + 1)
-      break
-    end
-    i = i + 1
-  end
-  return r
-end
-
----@class fugitive.OptionSpec
----@field short? string letters that take a value (`-mmsg`, `-m msg`)
----@field optional? string letters with an optional attached value (`-uno`)
----@field long? string[] long options that take a value (`--x=v`, `--x v`)
----@field blockers? string[] flags that mean no ref picker (picker commands)
-
----The options of each subcommand that take a value: they decide where a
----short cluster ends and which words are option values, not positionals.
----Every option not listed is a switch. A subcommand without an entry has no
----value-taking options (its flags are all switches).
----@type table<string, fugitive.OptionSpec>
-M.options = {
-  commit = {
-    short = "mFCct",
-    optional = "uS",
-    long = {
-      "--message",
-      "--file",
-      "--reuse-message",
-      "--reedit-message",
-      "--template",
-      "--author",
-      "--date",
-      "--cleanup",
-      "--fixup",
-      "--squash",
-      "--trailer",
-      "--pathspec-from-file",
-    },
-  },
-  merge = {
-    short = "mFsX",
-    optional = "S",
-    long = { "--message", "--file", "--strategy", "--strategy-option", "--into-name", "--cleanup" },
-    blockers = { "--abort", "--continue", "--quit" },
-  },
-  revert = {
-    short = "mX",
-    optional = "S",
-    long = { "--mainline", "--strategy", "--strategy-option", "--cleanup" },
-  },
-  ["cherry-pick"] = {
-    short = "mX",
-    optional = "S",
-    long = { "--mainline", "--strategy", "--strategy-option", "--cleanup" },
-  },
-  tag = {
-    short = "mFu",
-    long = {
-      "--message",
-      "--file",
-      "--local-user",
-      "--cleanup",
-      "--sort",
-      "--format",
-      "--points-at",
-      "--contains",
-      "--no-contains",
-      "--merged",
-      "--no-merged",
-    },
-  },
-  -- `--ref` comes before the notes subcommand
-  notes = {
-    short = "mFcC",
-    long = { "--ref", "--message", "--file", "--reedit-message", "--reuse-message" },
-  },
-  branch = {
-    short = "u",
-    long = {
-      "--set-upstream-to",
-      "--sort",
-      "--format",
-      "--points-at",
-      "--contains",
-      "--no-contains",
-      "--merged",
-      "--no-merged",
-    },
-  },
-  stash = { short = "m", long = { "--message", "--pathspec-from-file" } },
-  rebase = {
-    short = "sXx",
-    optional = "S",
-    long = { "--strategy", "--strategy-option", "--onto", "--exec" },
-    blockers = {
-      "--continue",
-      "--abort",
-      "--skip",
-      "--quit",
-      "--edit-todo",
-      "--show-current-patch",
-      "--root",
-    },
-  },
-  push = {
-    short = "o",
-    long = { "--repo", "--receive-pack", "--exec", "--push-option", "--recurse-submodules" },
-    -- these push without a refspec of their own choosing
-    blockers = { "--all", "--branches", "--mirror", "--tags", "-d", "--delete", "--prune" },
-  },
-  checkout = {
-    short = "bB",
-    long = { "--orphan", "--conflict", "--pathspec-from-file" },
-    blockers = { "-b", "-B", "--orphan", "-p", "--patch", "--pathspec-from-file" },
-  },
-  switch = {
-    short = "cC",
-    long = { "--create", "--force-create", "--orphan", "--conflict" },
-    blockers = { "-c", "-C", "--create", "--force-create", "--orphan" },
-  },
-  blame = {
-    short = "LS",
-    optional = "CM",
-    long = { "--contents", "--date", "--encoding", "--ignore-rev", "--ignore-revs-file" },
-  },
-  log = {
-    short = "nLSGO",
-    long = {
-      "--max-count",
-      "--skip",
-      "--since",
-      "--after",
-      "--until",
-      "--before",
-      "--author",
-      "--committer",
-      "--grep",
-      "--date",
-      "--encoding",
-    },
-  },
-  config = { short = "f", long = { "--file", "--blob", "--type", "--default" } },
-  add = { long = { "--pathspec-from-file" } },
-  reset = { long = { "--pathspec-from-file" } },
-  restore = { short = "s", long = { "--source", "--pathspec-from-file" } },
-  clean = { short = "e", long = { "--exclude" } },
-}
-
--- without a subcommand: the value letters common to the usual subcommands
-local generic = { short = "mFCcuSt" }
-local none = {}
-
----@type table<fugitive.OptionSpec, {short: table<string, boolean>, optional: table<string, boolean>, long: table<string, boolean>}>
-local compiled = setmetatable({}, { __mode = "k" })
-
-local function lookup(sub)
-  local spec = (sub == nil and generic) or M.options[sub] or none
-  local c = compiled[spec]
-  if not c then
-    c = { short = {}, optional = {}, long = {} }
-    for ch in (spec.short or ""):gmatch(".") do
-      c.short[ch] = true
-    end
-    for ch in (spec.optional or ""):gmatch(".") do
-      c.optional[ch] = true
-    end
-    for _, l in ipairs(spec.long or {}) do
-      c.long[l] = true
-    end
-    compiled[spec] = c
-  end
-  return c
-end
-
----@class fugitive.Scan
----@field opts {[1]: string, [2]: string?}[] options in order: name and value
----@field positionals string[] non-option arguments before `--`
----@field dashdash boolean `--` was given
----@field after string[] the arguments after `--`
-
----Read the arguments of `sub` (nil: no subcommand known) the way git's
----option parser does: short clusters split by `sub`'s value letters, long
----options with `=value` or a separate value, scanning up to `--`.
----@param sub string?
----@param rest string[]
----@return fugitive.Scan
-function M.scan(sub, rest)
-  local spec = lookup(sub)
-  local r = { opts = {}, positionals = {}, dashdash = false, after = {} }
-  local i = 1
-  while i <= #rest do
-    local a = rest[i]
-    if a == "--" then
-      r.dashdash = true
-      r.after = vim.list_slice(rest, i + 1)
-      break
-    elseif a:sub(1, 2) == "--" then
-      local name, value = a:match("^(%-%-[^=]+)=(.*)$")
-      if name then
-        table.insert(r.opts, { name, value })
-      elseif spec.long[a] and rest[i + 1] ~= nil then
-        table.insert(r.opts, { a, rest[i + 1] })
-        i = i + 1
-      else
-        table.insert(r.opts, { a })
-      end
-    elseif a:sub(1, 1) == "-" and #a > 1 then
-      local j = 2
-      while j <= #a do
-        local c = a:sub(j, j)
-        if not c:match("%a") then
-          -- a number (`-5`, `-U3`): the value of the letter before it
-          local last = r.opts[#r.opts]
-          if j == 2 or not last then
-            table.insert(r.opts, { a })
-          else
-            last[2] = a:sub(j)
-          end
-          break
-        elseif spec.short[c] then
-          local value = a:sub(j + 1)
-          if value == "" then
-            value = rest[i + 1]
-            if value ~= nil then
-              i = i + 1
-            end
-          end
-          table.insert(r.opts, { "-" .. c, value })
-          break
-        elseif spec.optional[c] then
-          local value = a:sub(j + 1)
-          table.insert(r.opts, { "-" .. c, value ~= "" and value or nil })
-          break
-        end
-        table.insert(r.opts, { "-" .. c })
-        j = j + 1
-      end
-    else
-      table.insert(r.positionals, a)
-    end
-    i = i + 1
-  end
-  return r
-end
-
----Does option `o` match `flag`? Entries ending in `=` or `:` match the
----`--name=value` form as a prefix (`--fixup=amend:`).
-local function matches(o, flag)
-  local last = flag:sub(-1)
-  if flag:sub(1, 2) == "--" and (last == "=" or last == ":") then
-    local full = o[2] and (o[1] .. "=" .. o[2]) or o[1]
-    return full:sub(1, #flag) == flag
-  end
-  return o[1] == flag
-end
-
----Does `rest` contain one of `flags`? Long flags match `--flag`,
----`--flag=value` and `--flag value`; short flags also match inside clusters
----(`-am`) and with an attached value (`-mmsg`). Scanning stops at `--`;
----`"--"` itself in `flags` matches the separator. Clusters are split with
----`sub`'s value letters (`M.options`); without `sub`, the common ones.
----@param rest string[]
----@param flags string[]
----@param sub? string
----@return boolean
-function M.has_flag(rest, flags, sub)
-  return M.last_flag(rest, { [true] = flags }, sub) ~= nil
-end
-
----Which group of flags appears last in `rest`? git lets the last of two
----opposite options win (`-e --no-edit`).
----@generic K
----@param rest string[]
----@param groups table<K, string[]>
----@param sub? string
----@return K?
-function M.last_flag(rest, groups, sub)
-  local s = M.scan(sub, rest)
-  for i = #s.opts, 1, -1 do
-    for key, flags in pairs(groups) do
-      for _, f in ipairs(flags) do
-        if matches(s.opts[i], f) then
-          return key
-        end
-      end
-    end
-  end
-  if s.dashdash then
-    for key, flags in pairs(groups) do
-      if vim.tbl_contains(flags, "--") then
-        return key
-      end
-    end
-  end
-  return nil
-end
-
----Positional (non-option) arguments of `sub`, up to `--`. Values of the
----options in `M.options[sub]` are not positionals.
----@param rest string[]
----@param sub? string
----@return string[]
-function M.positionals(rest, sub)
-  return M.scan(sub or "", rest).positionals
-end
-
 ---The first positional argument: a subcommand's own subcommand.
 local function first_sub(rest, sub)
-  return M.positionals(rest, sub)[1]
+  return argv.positionals(rest, sub)[1]
 end
 
 ---`spec`'s editor route: an explicit `-e`/`--edit` or `--no-edit` decides,
@@ -531,14 +24,14 @@ end
 ---`no_edit_flags`, and `default_edits`.
 local function edit_route(rest, spec, default_edits)
   local toggle =
-    M.last_flag(rest, { editor = { "-e", "--edit" }, notify = { "--no-edit" } }, spec.name)
+    argv.last_flag(rest, { editor = { "-e", "--edit" }, notify = { "--no-edit" } }, spec.name)
   if toggle then
     return toggle
   end
-  if spec.edit_flags and M.has_flag(rest, spec.edit_flags, spec.name) then
+  if spec.edit_flags and argv.has_flag(rest, spec.edit_flags, spec.name) then
     return "editor"
   end
-  if spec.no_edit_flags and M.has_flag(rest, spec.no_edit_flags, spec.name) then
+  if spec.no_edit_flags and argv.has_flag(rest, spec.no_edit_flags, spec.name) then
     return "notify"
   end
   return default_edits and "editor" or "notify"
@@ -549,7 +42,7 @@ end
 ---@field edit_flags? string[] flags that make the command open the editor
 ---@field no_edit_flags? string[] flags that prevent the editor
 ---@field pager? boolean git pages this command by default
----@field name? string the subcommand (set below), for its `M.options`
+---@field name? string the subcommand (set below), for its `argv.options`
 
 ---The data table `{subcommand -> {edit_flags, no_edit_flags, pager, route}}`.
 ---@type table<string, fugitive.SubcommandSpec>
@@ -560,7 +53,7 @@ M.subcommands = {
   diff = {
     pager = true,
     route = function(rest, spec)
-      return M.has_flag(rest, { "--quiet", "--exit-code" }, spec.name) and "notify" or "float"
+      return argv.has_flag(rest, { "--quiet", "--exit-code" }, spec.name) and "notify" or "float"
     end,
   },
   -- a bare `:Git blame` (flags only) opens the side window like upstream;
@@ -568,11 +61,11 @@ M.subcommands = {
   blame = {
     pager = true,
     route = function(rest, spec)
-      if #M.positionals(rest, spec.name) > 0 then
+      if #argv.positionals(rest, spec.name) > 0 then
         return "float"
       end
       if
-        M.has_flag(
+        argv.has_flag(
           rest,
           { "-L", "-p", "--porcelain", "--line-porcelain", "--incremental", "--", "--contents" },
           spec.name
@@ -602,7 +95,7 @@ M.subcommands = {
     pager = true,
     edit_flags = { "--edit-description" },
     route = function(rest, spec)
-      if M.has_flag(rest, spec.edit_flags, spec.name) then
+      if argv.has_flag(rest, spec.edit_flags, spec.name) then
         return "editor"
       end
       local mutate = {
@@ -625,7 +118,7 @@ M.subcommands = {
         "--no-track",
         "--show-current",
       }
-      if M.has_flag(rest, mutate, spec.name) then
+      if argv.has_flag(rest, mutate, spec.name) then
         return "notify"
       end
       local listing = {
@@ -645,7 +138,7 @@ M.subcommands = {
         "-v",
         "--verbose",
       }
-      if M.has_flag(rest, listing, spec.name) or #M.positionals(rest, spec.name) == 0 then
+      if argv.has_flag(rest, listing, spec.name) or #argv.positionals(rest, spec.name) == 0 then
         return "float"
       end
       return "notify" -- create
@@ -656,7 +149,7 @@ M.subcommands = {
     edit_flags = { "-e", "--edit" },
     no_edit_flags = { "-m", "--message", "-F", "--file" },
     route = function(rest, spec)
-      if M.has_flag(rest, { "-d", "--delete", "-v", "--verify" }, spec.name) then
+      if argv.has_flag(rest, { "-d", "--delete", "-v", "--verify" }, spec.name) then
         return "notify"
       end
       local listing = {
@@ -671,15 +164,17 @@ M.subcommands = {
         "--sort",
         "--format",
       }
-      if M.has_flag(rest, listing, spec.name) then
+      if argv.has_flag(rest, listing, spec.name) then
         return "float"
       end
-      if #M.positionals(rest, spec.name) == 0 then
+      if #argv.positionals(rest, spec.name) == 0 then
         return "float"
       end
       -- annotated tags open the editor unless a message is given
       local annotated = { "-a", "--annotate", "-s", "--sign", "-u", "--local-user" }
-      if M.has_flag(rest, annotated, spec.name) or M.has_flag(rest, spec.edit_flags, spec.name) then
+      if
+        argv.has_flag(rest, annotated, spec.name) or argv.has_flag(rest, spec.edit_flags, spec.name)
+      then
         return edit_route(rest, spec, true)
       end
       return "notify"
@@ -691,7 +186,7 @@ M.subcommands = {
       if s == "list" or s == "show" then
         return "float"
       end
-      if M.has_flag(rest, { "-p", "--patch" }, spec.name) then
+      if argv.has_flag(rest, { "-p", "--patch" }, spec.name) then
         return "terminal"
       end
       return "notify"
@@ -713,7 +208,7 @@ M.subcommands = {
       "--dry-run",
     },
     route = function(rest, spec)
-      if M.has_flag(rest, { "-p", "--patch", "--interactive" }, spec.name) then
+      if argv.has_flag(rest, { "-p", "--patch", "--interactive" }, spec.name) then
         return "terminal"
       end
       return edit_route(rest, spec, true)
@@ -774,37 +269,37 @@ M.subcommands = {
   rebase = {
     edit_flags = { "-i", "--interactive", "--edit-todo" },
     route = function(rest, spec)
-      return M.has_flag(rest, spec.edit_flags, spec.name) and "editor" or "notify"
+      return argv.has_flag(rest, spec.edit_flags, spec.name) and "editor" or "notify"
     end,
   },
 
   add = {
     edit_flags = { "-e", "--edit" },
     route = function(rest, spec)
-      if M.has_flag(rest, { "-p", "--patch", "-i", "--interactive" }, spec.name) then
+      if argv.has_flag(rest, { "-p", "--patch", "-i", "--interactive" }, spec.name) then
         return "terminal"
       end
-      return M.has_flag(rest, spec.edit_flags, spec.name) and "editor" or "notify"
+      return argv.has_flag(rest, spec.edit_flags, spec.name) and "editor" or "notify"
     end,
   },
   reset = {
     route = function(rest, spec)
-      return M.has_flag(rest, { "-p", "--patch" }, spec.name) and "terminal" or "notify"
+      return argv.has_flag(rest, { "-p", "--patch" }, spec.name) and "terminal" or "notify"
     end,
   },
   checkout = {
     route = function(rest, spec)
-      return M.has_flag(rest, { "-p", "--patch" }, spec.name) and "terminal" or "notify"
+      return argv.has_flag(rest, { "-p", "--patch" }, spec.name) and "terminal" or "notify"
     end,
   },
   restore = {
     route = function(rest, spec)
-      return M.has_flag(rest, { "-p", "--patch" }, spec.name) and "terminal" or "notify"
+      return argv.has_flag(rest, { "-p", "--patch" }, spec.name) and "terminal" or "notify"
     end,
   },
   clean = {
     route = function(rest, spec)
-      return M.has_flag(rest, { "-i", "--interactive" }, spec.name) and "terminal" or "notify"
+      return argv.has_flag(rest, { "-i", "--interactive" }, spec.name) and "terminal" or "notify"
     end,
   },
 }
@@ -819,7 +314,7 @@ end
 ---@return boolean
 function M.is_significant(args, list)
   list = list or require("nvim-fugitive.config").get().notify.significant
-  local parsed = M.parse(args)
+  local parsed = argv.parse(args)
   if not parsed.sub then
     return false
   end
@@ -894,7 +389,7 @@ function M.match_entry(entry, sub, rest)
     return false
   end
   if word:sub(1, 1) == "-" then
-    return M.has_flag(rest, { word }, sub)
+    return argv.has_flag(rest, { word }, sub)
   end
   return first_sub(rest, sub) == word
 end
@@ -936,7 +431,7 @@ function M.classify(args, opts)
   local cfg = package.loaded["nvim-fugitive.config"] and require("nvim-fugitive.config").get()
     or nil
   local overrides = opts.overrides or (cfg and cfg.routes) or {}
-  local parsed = M.parse(args)
+  local parsed = argv.parse(args)
   local sub, rest = parsed.sub, parsed.rest
   local result = { parsed = parsed }
   -- unfold aliases (of aliases …) like git does; a shell alias that runs a
@@ -953,7 +448,7 @@ function M.classify(args, opts)
     local words = expansion --[[@as string[]?]]
     if not expansion[1] then
       result.shell = true
-      words = body and M.shell_alias_command(body, rest)
+      words = body and argv.shell_alias_command(body, rest)
       if not words then
         shell_unknown = true
         break
@@ -961,7 +456,7 @@ function M.classify(args, opts)
     else
       words = vim.list_extend(vim.deepcopy(expansion), rest)
     end
-    local p = M.parse(words)
+    local p = argv.parse(words)
     if not p.sub then
       break
     end
@@ -1025,29 +520,29 @@ local pickers =
 
 ---Picker input (§5.3.2): which picker, if any, should supply the ref. A
 ---picker command given only flags (no positional, no `--`) asks for it,
----unless a flag of its `M.options` blockers means it wants no ref.
+---unless a flag of its `argv.options` blockers means it wants no ref.
 ---@param args string[]
 ---@return {picker: "refs"|"log"|"push", sub: string, args: string[], set_upstream?: boolean}?
 function M.picker_trigger(args)
-  local parsed = M.parse(args)
+  local parsed = argv.parse(args)
   local sub = parsed.sub
   local picker = sub and pickers[sub]
   if not picker then
     return nil
   end
   local rest = parsed.rest
-  local s = M.scan(sub, rest)
+  local s = argv.scan(sub, rest)
   if s.dashdash or #s.positionals > 0 then
     return nil
   end
-  local blockers = M.options[sub] and M.options[sub].blockers
-  if blockers and M.has_flag(rest, blockers, sub) then
+  local blockers = argv.options[sub] and argv.options[sub].blockers
+  if blockers and argv.has_flag(rest, blockers, sub) then
     return nil
   end
   local trigger = { picker = picker, sub = sub, args = args }
-  if sub == "rebase" and M.has_flag(rest, { "-i", "--interactive" }, sub) then
+  if sub == "rebase" and argv.has_flag(rest, { "-i", "--interactive" }, sub) then
     trigger.picker = "log"
-  elseif sub == "push" and M.has_flag(rest, { "-u", "--set-upstream" }, sub) then
+  elseif sub == "push" and argv.has_flag(rest, { "-u", "--set-upstream" }, sub) then
     -- choose the upstream once; later pushes use it without asking
     trigger.set_upstream = true
   end

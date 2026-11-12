@@ -185,7 +185,7 @@ function M.git(lead, cmdline, pos)
   if lead ~= "" then
     table.remove(words) -- the word being completed
   end
-  local parsed = require("nvim-fugitive.cmd.routes").parse(words)
+  local parsed = require("nvim-fugitive.cmd.argv").parse(words)
   if not parsed.sub then
     if lead:sub(1, 1) == "-" then
       return filter(
