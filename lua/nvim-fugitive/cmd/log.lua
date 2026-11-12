@@ -6,7 +6,7 @@
 
 local object = require("nvim-fugitive.object")
 local notify = require("nvim-fugitive.ui.notify")
-local routes = require("nvim-fugitive.cmd.routes")
+local argv = require("nvim-fugitive.cmd.argv")
 
 local M = {}
 
@@ -95,7 +95,7 @@ function M.log(opts)
     vim.list_extend(args, user)
     -- a single path argument: entries are that file at each commit
     -- (option values, like the 5 of `-n 5`, are not paths)
-    local scan = routes.scan("log", user)
+    local scan = argv.scan("log", user)
     local positional = scan.positionals
     if scan.dashdash then
       if #scan.after == 1 then

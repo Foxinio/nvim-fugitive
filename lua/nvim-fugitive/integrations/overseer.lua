@@ -60,7 +60,7 @@ local quickfix_subcommands = { push = true, fetch = true, pull = true }
 ---After a failed push/fetch/pull: errors into quickfix.
 ---@return boolean filled
 local function errors_to_quickfix(repo, args, text)
-  local sub = require("nvim-fugitive.cmd.routes").parse(args).sub
+  local sub = require("nvim-fugitive.cmd.argv").parse(args).sub
   if not sub or not quickfix_subcommands[sub] then
     return false
   end

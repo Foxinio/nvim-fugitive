@@ -5,14 +5,15 @@
 ---notify, float, task (overseer), terminal or editor-first. `:Git!` runs in
 ---the background, where the editor shim refuses to edit.
 
+local argv = require("nvim-fugitive.cmd.argv")
 local routes = require("nvim-fugitive.cmd.routes")
 local notify = require("nvim-fugitive.ui.notify")
 local output = require("nvim-fugitive.ui.output")
 
 local M = {}
 
----Split a command line into words (see routes.split_args).
-M.split_args = routes.split_args
+---Split a command line into words (see argv.split_args).
+M.split_args = argv.split_args
 
 ---The current buffer's path as git sees it: repo-relative work-tree path, or
 ---the object name for fugitive:// buffers.
@@ -60,7 +61,7 @@ function M.blame_file_args(repo, args, rest)
   if vim.tbl_contains(rest, "--") then
     return args
   end
-  local positionals = routes.positionals(rest, "blame")
+  local positionals = argv.positionals(rest, "blame")
   for _, p in ipairs(positionals) do
     local abs = p:match("^/") and p or (repo.worktree and repo.worktree .. "/" .. p)
     if (abs and vim.uv.fs_stat(abs)) or vim.uv.fs_stat(p) then
@@ -143,7 +144,7 @@ function M.run_notify(repo, args, opts)
   local job
   local entry
   -- `--no-pager` explicitly asks for the output as a notification
-  local significant = opts.significant or routes.is_significant(args) or routes.parse(args).no_pager
+  local significant = opts.significant or routes.is_significant(args) or argv.parse(args).no_pager
   job = repo:run(args, { editor = true, mods = opts.mods }, function(res)
     finish_notify(repo, res, entry, significant)
     if opts.on_done then
@@ -363,7 +364,7 @@ function M.default_args(repo, args, cls)
   end
   -- the subcommand (or alias) word, and its first positional
   local at = #cls.parsed.globals + 1
-  local first = routes.scan(cls.sub, cls.parsed.rest).at[1]
+  local first = argv.scan(cls.sub, cls.parsed.rest).at[1]
   local word_at = first and at + first
   local present = {}
   for i = 1, #args do
@@ -428,7 +429,7 @@ function M.run(args, opts)
     end
   end
 
-  local sub = routes.parse(args).sub
+  local sub = argv.parse(args).sub
   if sub and not M.is_command(repo, sub) then
     notify.error(string.format("'%s' is not a git command or a defined alias (alias.%s)", sub, sub))
     return nil

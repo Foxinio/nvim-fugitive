@@ -351,7 +351,9 @@ lua/nvim-fugitive/
   discard.lua                -- save-before-destroy, journal, restore (§4.2)
   conflict.lua               -- marker parsing, ]x/[x, choose ours/theirs/both/none, extmarks
   cmd/
-    git.lua                  -- :Git dispatcher: per-subcommand flag table → route; picker trigger
+    git.lua                  -- :Git dispatcher: classify, default args, send down a route
+    argv.lua                 -- reading arguments: words, shell aliases, per-subcommand options, scan
+    routes.lua               -- per-subcommand route table, classification, overrides, picker trigger
     grep.lua, move.lua, browse.lua, complete.lua
   ui/
     notify.lua               -- vim.notify wrapper (title, max-lines truncation)
