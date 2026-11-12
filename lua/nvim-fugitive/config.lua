@@ -270,6 +270,19 @@ M.defaults = {
 ---@type fugitive.Config
 M.values = vim.deepcopy(M.defaults)
 
+---Is `key` a "sub" or "sub word" key (of `routes` or `args`)? `flag_word`
+---allows a flag as the word ("reset --hard").
+local function sub_key(key, flag_word)
+  if type(key) ~= "string" then
+    return false
+  end
+  local word = key:match("^%S+%s+(%S+)$")
+  if not word then
+    return key:match("^%S+$") ~= nil
+  end
+  return flag_word or word:sub(1, 1) ~= "-"
+end
+
 local function validate(opts)
   vim.validate("opts", opts, "table")
   for key, spec in pairs({
@@ -291,7 +304,7 @@ local function validate(opts)
   end
   local routes = require("nvim-fugitive.cmd.routes")
   for key, target in pairs(opts.routes or {}) do
-    if type(key) ~= "string" or not key:match("^%S+%s*%S*$") then
+    if not sub_key(key, true) then
       error(
         string.format('fugitive: invalid routes key %q (use "sub" or "sub word")', tostring(key))
       )
@@ -317,9 +330,8 @@ local function validate(opts)
     end
   end
   for key, list in pairs(opts.args or {}) do
-    -- "sub" or "sub word": arguments go right after the last word, which a
-    -- flag cannot be
-    if type(key) ~= "string" or not (key:match("^%S+$") or key:match("^%S+%s+[^%s-]%S*$")) then
+    -- arguments go right after the last word, which a flag cannot be
+    if not sub_key(key, false) then
       error(string.format('fugitive: invalid args key %q (use "sub" or "sub word")', tostring(key)))
     end
     if type(list) ~= "table" or not vim.islist(list) then

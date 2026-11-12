@@ -242,8 +242,8 @@ function M.refresh(buf, cb)
   local generation = st.generation
   local exec = require("nvim-fugitive.git.exec")
   local repo = st.repo
-  require("plenary.async").run(function()
-    return pcall(snapshot.gather, repo, function(args)
+  exec.async(function()
+    return snapshot.gather(repo, function(args)
       return exec.await(args, { repo = repo })
     end, st.expanded)
   end, function(ok, snap)

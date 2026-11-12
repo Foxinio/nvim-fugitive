@@ -309,17 +309,34 @@ function M.chomp(args, opts)
   return (res.stdout:gsub("\n+$", ""))
 end
 
----Coroutine-friendly variant of `run` (plenary.async). Must be called from
----inside `require("plenary.async").run(...)`.
+---Run `fn` as a coroutine in which `M.await` can be called, then call
+---`done(ok, ...)` with its results, or with false and the error.
+---@param fn fun(): ...
+---@param done fun(ok: boolean, ...)
+function M.async(fn, done)
+  local co = coroutine.create(fn)
+  local function step(...)
+    local res = { coroutine.resume(co, ...) }
+    if not res[1] then
+      return done(false, res[2])
+    end
+    if coroutine.status(co) == "dead" then
+      return done(true, unpack(res, 2, table.maxn(res)))
+    end
+    -- `M.await` yielded a function that starts the work and resumes us
+    res[2](step)
+  end
+  step()
+end
+
+---`run`, waiting for the result inside `M.async`.
 ---@param args string[]
 ---@param opts? fugitive.ExecOpts
 ---@return fugitive.ExecResult
 function M.await(args, opts)
-  local async = require("plenary.async")
-  M._await = M._await or async.wrap(function(a, o, cb)
-    M.run(a, o, cb)
-  end, 3)
-  return M._await(args, opts)
+  return coroutine.yield(function(resume)
+    M.run(args, opts, resume)
+  end)
 end
 
 ---Format a result's error for display: stderr, or stdout, plus the exit code.

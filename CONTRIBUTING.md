@@ -3,7 +3,7 @@
 ## Setup
 
 ```sh
-make deps    # clones plenary.nvim and telescope.nvim into .deps/ (git-ignored)
+make deps    # clones the test dependencies (plenary.nvim, telescope.nvim, term-color-parser.nvim) into .deps/ (git-ignored)
 ```
 
 Requirements for development: Neovim ≥ 0.11, git ≥ 2.40, and for linting

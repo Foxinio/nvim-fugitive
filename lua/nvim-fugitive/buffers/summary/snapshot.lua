@@ -2,7 +2,7 @@
 ---
 ---Written against an abstract `run(args) -> ExecResult` so the same code
 ---serves the synchronous first read (BufReadCmd) and async refreshes
----(plenary.async + exec.await).
+---(exec.async + exec.await).
 
 local status_mod = require("nvim-fugitive.git.status")
 local diff_mod = require("nvim-fugitive.git.diff")

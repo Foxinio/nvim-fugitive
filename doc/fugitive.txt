@@ -36,7 +36,6 @@ exist. Features that are not implemented yet are listed in
 
 - Neovim 0.11 or later.
 - git 2.40 or later.
-- plenary.nvim.
 - Linux or macOS. Windows and WSL are not supported for now.
 
 Repositories are found from the buffer's file: work trees, linked

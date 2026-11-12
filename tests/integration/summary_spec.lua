@@ -48,6 +48,18 @@ describe("summary buffer", function()
     require("nvim-fugitive.watch").enable(true)
   end)
 
+  it("refreshes without plenary", function()
+    package.loaded["plenary.async"] = nil
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    local buf = open(repo)
+    repo:write("a", "changed\n")
+    after(buf, function()
+      summary.refresh(buf)
+    end)
+    assert.truthy(H.find_line("^M a"))
+    assert.is_nil(package.loaded["plenary.async"])
+  end)
+
   it("renders the upstream layout", function()
     local repo =
       H.repo({ files = { ["a.txt"] = "a\nb\nc\n", ["b.txt"] = "b\n", ["old.txt"] = "o\n" } })
