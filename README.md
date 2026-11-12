@@ -1,38 +1,67 @@
 # nvim-fugitive
 
-A Lua, Neovim-only rewrite of [vim-fugitive](https://github.com/tpope/vim-fugitive).
-The core is drop-in compatible: the same commands, the same `:Git` summary
-buffer and maps, and the same `fugitive://` URLs. On top of that it
-integrates with `vim.notify`/noice, telescope.nvim, overseer.nvim and
-gitsigns.nvim, none of which is required.
+A Lua, Neovim-only rewrite of [vim-fugitive](https://github.com/tpope/vim-fugitive):
+the same commands, the same `:Git` summary buffer and maps, the same
+`fugitive://` URLs and Vimscript API, so your muscle memory and the plugins
+built on vim-fugitive (vim-rhubarb, fugitive-gitlab, …) keep working.
 
-The user manual is [`:help fugitive`](doc/fugitive.txt); the design document
-is [project.md](project.md); development notes are in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+On top of that:
+
+- **Output where it belongs.** `:Git log` and friends open in a float,
+  short commands report through `vim.notify` (noice, nvim-notify), long
+  ones run as [overseer](https://github.com/stevearc/overseer.nvim) tasks.
+  Every command can be routed elsewhere.
+- **Commit messages in this Neovim, from anywhere**, including tasks and
+  rebases started in the background.
+- **Nothing lost to `X`.** Every discarded change is saved first and can be
+  restored.
+- **Pickers.** Log, refs, stashes, file and line history, and remote and
+  branch pickers for `:Git push`, with
+  [telescope](https://github.com/nvim-telescope/telescope.nvim) or
+  `vim.ui.select`.
+- **gitsigns** shows a commit's changes in the files you open from it.
+- **git's colours** in the float, with
+  [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim).
+
+The manual is [`:help fugitive`](doc/fugitive.txt).
 
 ## Requirements
 
-- Neovim ≥ 0.11, git ≥ 2.40, Linux or macOS
-- optional: telescope.nvim, overseer.nvim, gitsigns.nvim, noice.nvim, [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim) (git's colours in the float)
+- Neovim 0.11 or later, git 2.40 or later, Linux or macOS.
+- Nothing else. These optional plugins add to it when installed:
+
+| Plugin | Adds |
+|---|---|
+| [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) | pickers (otherwise `vim.ui.select`) |
+| [overseer.nvim](https://github.com/stevearc/overseer.nvim) | pull, push, fetch & co. as tasks (otherwise background jobs) |
+| [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) | hunk maps, signs in `fugitive://` buffers |
+| [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim) | git's colours in the float |
+| [noice.nvim](https://github.com/folke/noice.nvim) / [nvim-notify](https://github.com/rcarriga/nvim-notify) | nicer notifications (anything that renders `vim.notify`) |
 
 ## Installation
 
-With [lazy.nvim](https://github.com/folke/lazy.nvim):
+[lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
-{
-  "Foxinio/nvim-fugitive",
-  cmd = { "Git", "G", "Gedit", "Gsplit", "Gvsplit", "Gtabedit", "Gpedit", "Gdrop",
-          "Gread", "Gwrite", "Gwq", "Gclog", "Gllog", "Gcd", "Glcd",
-          "Gdiffsplit", "Gvdiffsplit", "Ghdiffsplit", "Ggrep", "Glgrep",
-          "GMove", "GRename", "GDelete", "GRemove", "GUnlink", "GBrowse",
-          "FugitiveOutput", "FugitiveRestore", "FugitivePick" },
-  opts = {}, -- optional, see "Configuration" below
-}
+{ "Foxinio/nvim-fugitive", opts = {} }
 ```
 
-Calling `require("nvim-fugitive").setup()` is optional; everything loads
-lazily on first use.
+Neovim 0.12's built-in `vim.pack`:
+
+```lua
+vim.pack.add({ "https://github.com/Foxinio/nvim-fugitive" })
+```
+
+There's nothing to gain from lazy-loading it on its commands. Loading takes
+under a millisecond and loads none of its modules, which come in on first
+use. Lazy-loading would leave `fugitive://` files unreadable and
+`FugitiveHead()` undefined in your statusline until the first `:Git`.
+
+`setup()` is optional: without it, the defaults apply.
+
+**Coming from vim-fugitive?** Remove it: both plugins define the same
+commands, and only one of them loads. Your maps, `fugitive://` URLs,
+statusline and fugitive-based plugins keep working.
 
 ## Quick start
 
@@ -49,237 +78,108 @@ lazily on first use.
 | `:GBrowse` | open the file on GitHub/GitLab/… (`:GBrowse!` copies the URL) |
 | `g?` | every map of the buffer you are in |
 
-## Features
+### Suggested maps
 
-| Feature | Notes |
-|---|---|
-| `:Git` summary | Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled and Stashes (`=` expands a commit or stash); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
-| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); successful commands notify their output, or a short note when significant; failed pushes put rejected refs and hook errors in quickfix |
-| Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
-| `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
-| `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |
-| `:Git blame` | upstream's scroll-bound side window; `<CR>` jumps to the commit's hunk, `-`/`~`/`P` reblame; `<CR>` in a blob opens the line's commit |
-| Editable index | `:w` in an index buffer stages it; `:Gread`, `:Gwrite`, `:Gwq`; `do`/`dp` + `:w` in a `:Gdiffsplit` stage single hunks |
-| Diffs & conflicts | `:Gdiffsplit` family, upstream 3-way `:Gdiffsplit!` with `d2o`/`d3o`, conflict-marker maps `]x [x co ct cb c0` |
-| `:Git difftool`/`mergetool` | changed hunks or conflicts in quickfix; `-y` opens a diff per file in tabs; plus `:Gcd`/`:Glcd` |
-| `:Gclog`/`:Gllog` | commit history in quickfix/loclist; `:{range}Gclog` follows lines with `git log -L` |
-| `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
-| `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
-| `:GBrowse` | upstream-identical handler dict (vim-rhubarb, fugitive-gitlab keep working), built-in GitHub/GitLab/Bitbucket/Gitea/Forgejo/Codeberg/sourcehut providers, custom hosts |
-| Pickers | `:Telescope fugitive log` / `refs` / `stash` / `file_history` / `line_history` / `blame_line`, or `:FugitivePick` (falls back to `vim.ui.select`); picker input for `:Git checkout`, `switch`, `merge` or `rebase` given only flags, and remote + branch pickers for `:Git push` without an upstream (or `:Git push -u`, which keeps the choice) |
-| Work-tree hunks | opt-in maps for next/prev/stage/reset hunk, using gitsigns when installed and fugitive's own hunks otherwise |
-| Repositories | work trees, linked worktrees, submodules, bare repos, `core.worktree`, `$GIT_DIR`/`$GIT_WORK_TREE` dotfile setups |
-| Vimscript API | `FugitiveHead()`, `FugitiveStatusline()`, `FugitiveGitDir()`, `FugitiveFind()`, `FugitiveExecute()`, … and upstream's `User` events, so plugins written for vim-fugitive keep working; `gf` on objects |
-| `:FugitiveOutput` | full output of recent commands; notifications are truncated and point here |
+fugitive maps nothing outside its own buffers. A starting point:
 
-See `:help fugitive-differences` for the deliberate differences from
-vim-fugitive.
+```lua
+vim.keymap.set("n", "<leader>gg", "<Cmd>Git<CR>", { desc = "Git summary" })
+vim.keymap.set("n", "<leader>gb", "<Cmd>Git blame<CR>", { desc = "Git blame" })
+vim.keymap.set("n", "<leader>gl", "<Cmd>Gclog %<CR>", { desc = "File history" })
+vim.keymap.set("n", "<leader>gd", "<Cmd>Gvdiffsplit<CR>", { desc = "Diff with the index" })
+vim.keymap.set("n", "<leader>gp", "<Cmd>Git push<CR>", { desc = "Git push" })
+```
+
+And the branch in your statusline:
+
+```lua
+vim.o.statusline = "%f %h%m%r %{FugitiveHead()}%=%l,%c %P"
+```
 
 ## Configuration
 
-Everything is optional. Pass only what you want to change; tables are merged
-with the defaults, map tables key by key, and lists replace the default
-list. A few common changes:
+Pass only what you want to change. Tables merge with the defaults, maps key
+by key, and lists replace the default list.
+
+### Recipes
+
+Sign off every commit (default arguments per git command,
+`:h fugitive-args`):
+
+```lua
+require("nvim-fugitive").setup({
+  args = { commit = { "--signoff" } },
+})
+```
+
+Send a command's output somewhere else (`:h fugitive-output`): `float`,
+`split`, `vert`, `tab`, `inplace`, `notification`, `overseer` or `term`:
+
+```lua
+require("nvim-fugitive").setup({
+  routes = {
+    status = "float", -- :Git status in the float
+    ["log --graph"] = "vert", -- graphs in a vertical split
+    pull = "term", -- watch pulls in a terminal
+  },
+})
+```
+
+Change, add or remove maps; an action name or a function
+(`g?` in a buffer lists its maps):
 
 ```lua
 require("nvim-fugitive").setup({
   maps = {
     summary = {
-      ["X"] = false,        -- disable a map
-      ["<leader>s"] = "stage", -- add a map for any action name
+      ["X"] = false, -- no discard on X
+      ["<leader>s"] = "stage",
+      ["<leader>l"] = function()
+        vim.cmd("Git log --oneline -20")
+      end,
     },
   },
-  routes = {
-    status = "float",                     -- show `:Git status` in the float
-    ["log --graph"] = "vert",             -- graphs in a vertical split
-    pull = "term",                        -- watch pulls in a terminal
-  },
-  notify = { max_lines = 5 },
-  float = { width = 0.8, height = 0.8, border = "single" },
-  integrations = { overseer = false },    -- run pull/push as plain jobs
+})
+```
+
+Open the summary in a tab, and commit messages in a vertical split:
+
+```lua
+require("nvim-fugitive").setup({
+  summary = { window = "tab" },
+  editor = { window = "vsplit" },
+})
+```
+
+A smaller float, with a square border:
+
+```lua
+require("nvim-fugitive").setup({
+  float = { width = 0.7, height = 0.7, border = "single" },
+})
+```
+
+Run pull and push as plain background jobs even with overseer installed:
+
+```lua
+require("nvim-fugitive").setup({
+  integrations = { overseer = false },
+})
+```
+
+`:GBrowse` for a self-hosted GitLab (`:h fugitive-browse`):
+
+```lua
+require("nvim-fugitive").setup({
   browse = { hosts = { ["git.example.com"] = "gitlab" } },
 })
 ```
 
 <details>
-<summary><b>Default configuration</b> (every option with its default)</summary>
+<summary><b>All options and their defaults</b> (key maps: <code>g?</code> in each buffer, and <code>:h fugitive-summary-maps</code>)</summary>
 
 ```lua
 require("nvim-fugitive").setup({
-  -- Map tables per buffer type: lhs = action name. `false` disables a map;
-  -- `g?` in a buffer lists its maps. :help fugitive-summary-maps
-  maps = {
-    summary = {
-      ["bb"] = "bisect_bad",
-      ["bg"] = "bisect_good",
-      ["br"] = "bisect_reset",
-      ["bs"] = "bisect_skip",
-      ["cb<CR>"] = "branch_bare",
-      ["cb<Space>"] = "branch_prompt",
-      ["gf"] = "cfile_edit",
-      ["<C-W><C-F>"] = "cfile_split",
-      ["<C-W>f"] = "cfile_split",
-      ["<C-W>gf"] = "cfile_tab",
-      ["coo"] = "checkout",
-      ["co<CR>"] = "checkout_bare",
-      ["co<Space>"] = "checkout_prompt",
-      ["gq"] = "close",
-      ["."] = "cmdline",
-      ["c<CR>"] = "commit",
-      ["cc"] = "commit",
-      ["ca"] = "commit_amend",
-      ["cva"] = "commit_amend_verbose",
-      ["ce"] = "commit_extend",
-      ["cf"] = "commit_fixup",
-      ["cF"] = "commit_fixup_rebase",
-      ["c<Space>"] = "commit_prompt",
-      ["cRa"] = "commit_reset_author",
-      ["cRe"] = "commit_reset_author_extend",
-      ["cRw"] = "commit_reset_author_reword",
-      ["cw"] = "commit_reword",
-      ["cs"] = "commit_squash",
-      ["cn"] = "commit_squash_edit",
-      ["cS"] = "commit_squash_rebase",
-      ["cv<CR>"] = "commit_verbose",
-      ["cvc"] = "commit_verbose",
-      ["cv<Space>"] = "commit_verbose_prompt",
-      ["dd"] = "diff",
-      ["dq"] = "diff_close",
-      ["dh"] = "diff_horizontal",
-      ["ds"] = "diff_horizontal",
-      ["dp"] = "diff_patch",
-      ["dv"] = "diff_vertical",
-      ["X"] = "discard",
-      ["<F1>"] = "help",
-      ["g?"] = "help",
-      ["gI"] = "ignore",
-      ["<"] = "inline_hide",
-      [">"] = "inline_show",
-      ["="] = "inline_toggle",
-      ["gr"] = "jump_rebasing",
-      ["gs"] = "jump_staged",
-      ["gP"] = "jump_unpulled",
-      ["gp"] = "jump_unpushed",
-      ["gU"] = "jump_unstaged",
-      ["gu"] = "jump_untracked",
-      ["cm<CR>"] = "merge_bare",
-      ["cm<Space>"] = "merge_prompt",
-      ["i"] = "next_expanded_hunk",
-      ["]/"] = "next_file",
-      ["]m"] = "next_file",
-      ["J"] = "next_hunk",
-      ["]c"] = "next_hunk",
-      [")"] = "next_item",
-      ["]]"] = "next_section",
-      ["]["] = "next_section_end",
-      ["<2-LeftMouse>"] = "open",
-      ["<CR>"] = "open",
-      ["gi"] = "open_exclude",
-      ["f"] = "open_float",
-      ["p"] = "open_preview",
-      ["o"] = "open_split",
-      ["O"] = "open_tab",
-      ["gO"] = "open_vsplit",
-      ["I"] = "patch",
-      ["P"] = "patch",
-      ["[/"] = "prev_file",
-      ["[m"] = "prev_file",
-      ["K"] = "prev_hunk",
-      ["[c"] = "prev_hunk",
-      ["("] = "prev_item",
-      ["[["] = "prev_section",
-      ["[]"] = "prev_section_end",
-      ["ra"] = "rebase_abort",
-      ["rf"] = "rebase_autosquash",
-      ["r<CR>"] = "rebase_bare",
-      ["rr"] = "rebase_continue",
-      ["rd"] = "rebase_drop",
-      ["rm"] = "rebase_edit",
-      ["re"] = "rebase_edit_todo",
-      ["ri"] = "rebase_interactive",
-      ["r<Space>"] = "rebase_prompt",
-      ["rp"] = "rebase_push",
-      ["rw"] = "rebase_reword",
-      ["rs"] = "rebase_skip",
-      ["ru"] = "rebase_upstream",
-      ["R"] = "reload",
-      ["g-"] = "restore_discard",
-      ["crc"] = "revert",
-      ["cr<CR>"] = "revert_bare",
-      ["crn"] = "revert_no_commit",
-      ["cr<Space>"] = "revert_prompt",
-      ["s"] = "stage",
-      ["czA"] = "stash_apply",
-      ["cza"] = "stash_apply_index",
-      ["cz<CR>"] = "stash_bare",
-      ["czP"] = "stash_pop",
-      ["czp"] = "stash_pop_index",
-      ["cz<Space>"] = "stash_prompt",
-      ["czz"] = "stash_push",
-      ["czw"] = "stash_push_keep_index",
-      ["czs"] = "stash_push_staged",
-      ["czv"] = "stash_view",
-      ["cu"] = "submodule_update",
-      ["cU"] = "submodule_update_recursive",
-      ["-"] = "toggle",
-      ["u"] = "unstage",
-      ["U"] = "unstage_all",
-    },
-    object = {
-      ["~"] = "ancestor",
-      ["gf"] = "cfile_edit",
-      ["<C-W><C-F>"] = "cfile_split",
-      ["<C-W>f"] = "cfile_split",
-      ["<C-W>gf"] = "cfile_tab",
-      ["gq"] = "close",
-      ["."] = "cmdline",
-      ["C"] = "containing_commit",
-      ["dq"] = "diff_close",
-      ["g?"] = "help",
-      ["-"] = "navigate_up",
-      ["]c"] = "next_hunk",
-      [")"] = "next_item",
-      ["<CR>"] = "open",
-      ["p"] = "open_preview",
-      ["o"] = "open_split",
-      ["O"] = "open_tab",
-      ["gO"] = "open_vsplit",
-      ["P"] = "parent",
-      ["[c"] = "prev_hunk",
-      ["("] = "prev_item",
-    },
-    blame = {
-      ["gq"] = "close",
-      ["."] = "cmdline",
-      ["<F1>"] = "help",
-      ["g?"] = "help",
-      ["<2-LeftMouse>"] = "open",
-      ["<CR>"] = "open",
-      ["p"] = "open_preview",
-      ["o"] = "open_split",
-      ["O"] = "open_tab",
-      ["-"] = "reblame",
-      ["~"] = "reblame_ancestor",
-      ["P"] = "reblame_parent",
-      ["A"] = "resize_author",
-      ["C"] = "resize_commit",
-      ["D"] = "resize_date",
-    },
-    conflict = {
-      ["cb"] = "choose_both",
-      ["c0"] = "choose_none",
-      ["co"] = "choose_ours",
-      ["ct"] = "choose_theirs",
-      ["]x"] = "next_conflict",
-      ["[x"] = "prev_conflict",
-    },
-    worktree = {},
-    pager = {
-      ["<C-c>"] = "cancel",
-      ["<Esc>"] = "close",
-      ["q"] = "close",
-    },
-  },
   -- Where each command's output goes, by "subcommand" or "subcommand word"
   -- (e.g. ["stash list"], ["log --graph"]). Targets: "float", "inplace",
   -- "split", "vert", "tab" (output in a buffer), "notification", "overseer",
@@ -339,7 +239,42 @@ require("nvim-fugitive").setup({
 
 </details>
 
+## Features
+
+| Feature | Notes |
+|---|---|
+| `:Git` summary | Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled and Stashes (`=` expands a commit or stash); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
+| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); successful commands notify their output, or a short note when significant; failed pushes put rejected refs and hook errors in quickfix |
+| Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
+| `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
+| `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |
+| `:Git blame` | upstream's scroll-bound side window; `<CR>` jumps to the commit's hunk, `-`/`~`/`P` reblame; `<CR>` in a blob opens the line's commit |
+| Editable index | `:w` in an index buffer stages it; `:Gread`, `:Gwrite`, `:Gwq`; `do`/`dp` + `:w` in a `:Gdiffsplit` stage single hunks |
+| Diffs & conflicts | `:Gdiffsplit` family, upstream 3-way `:Gdiffsplit!` with `d2o`/`d3o`, conflict-marker maps `]x [x co ct cb c0` |
+| `:Git difftool`/`mergetool` | changed hunks or conflicts in quickfix; `-y` opens a diff per file in tabs; plus `:Gcd`/`:Glcd` |
+| `:Gclog`/`:Gllog` | commit history in quickfix/loclist; `:{range}Gclog` follows lines with `git log -L` |
+| `:Ggrep`/`:Glgrep` | telescope picker when available, quickfix/loclist otherwise |
+| `:GMove` & co. | `:GMove :GRename :GDelete :GRemove :GUnlink` |
+| `:GBrowse` | upstream-identical handler dict (vim-rhubarb, fugitive-gitlab keep working), built-in GitHub/GitLab/Bitbucket/Gitea/Forgejo/Codeberg/sourcehut providers, custom hosts |
+| Pickers | `:Telescope fugitive log` / `refs` / `stash` / `file_history` / `line_history` / `blame_line`, or `:FugitivePick` (falls back to `vim.ui.select`); picker input for `:Git checkout`, `switch`, `merge` or `rebase` given only flags, and remote + branch pickers for `:Git push` without an upstream (or `:Git push -u`, which keeps the choice) |
+| Work-tree hunks | opt-in maps for next/prev/stage/reset hunk, using gitsigns when installed and fugitive's own hunks otherwise |
+| Repositories | work trees, linked worktrees, submodules, bare repos, `core.worktree`, `$GIT_DIR`/`$GIT_WORK_TREE` dotfile setups |
+| Vimscript API | `FugitiveHead()`, `FugitiveStatusline()`, `FugitiveGitDir()`, `FugitiveFind()`, `FugitiveExecute()`, … and upstream's `User` events, so plugins written for vim-fugitive keep working; `gf` on objects |
+| `:FugitiveOutput` | full output of recent commands; notifications are truncated and point here |
+
+See `:help fugitive-differences` for the deliberate differences from
+vim-fugitive.
+
+## Troubleshooting
+
+- `:checkhealth nvim-fugitive` shows what fugitive found: versions, your
+  options, the repository, the git settings that affect it (with the file
+  each comes from) and the optional plugins.
+- `:FugitiveOutput` has the full output of recent commands; notifications
+  are cut short.
+- `:help fugitive` is the manual.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md): `make deps && make test` runs the
-whole (hermetic) test suite.
+whole (hermetic) test suite. The design notes are in [project.md](project.md).
