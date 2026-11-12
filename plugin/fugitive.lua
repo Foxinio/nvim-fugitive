@@ -281,6 +281,13 @@ vim.api.nvim_create_autocmd("BufReadCmd", {
   nested = true,
   callback = function(ev)
     require("nvim-fugitive.buffers.reader").read(ev.buf)
+    -- a BufReadCmd replaces the read, so Neovim fires no BufReadPost: fire
+    -- it like upstream does, so plugins that attach on it (gitsigns shows
+    -- the changes of a commit's blob, or the staged ones in the index) see
+    -- fugitive:// buffers too
+    if vim.api.nvim_buf_is_valid(ev.buf) then
+      vim.api.nvim_exec_autocmds("BufReadPost", { buffer = ev.buf, modeline = false })
+    end
   end,
 })
 
