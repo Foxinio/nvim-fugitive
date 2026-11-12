@@ -372,9 +372,22 @@ function M.merge(opts)
   return merged
 end
 
+---The options of the last `set()` and its validation error, for
+---`:checkhealth nvim-fugitive`.
+---@type table?
+M.user = nil
+---@type string?
+M.error = nil
+
 ---@param opts? table
 function M.set(opts)
-  M.values = M.merge(opts)
+  M.user, M.error = opts, nil
+  local ok, merged = pcall(M.merge, opts)
+  if not ok then
+    M.error = tostring(merged)
+    error(merged, 0)
+  end
+  M.values = merged
   return M.values
 end
 
