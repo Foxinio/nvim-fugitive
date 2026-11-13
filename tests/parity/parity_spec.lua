@@ -30,6 +30,19 @@ describe("parity with upstream vim-fugitive", function()
       end,
     },
     {
+      "files in subdirectories (the tree view's case, flat here)",
+      function()
+        local repo =
+          P.repo({ ["src/a.lua"] = "a\n", ["src/b.lua"] = "b\n", ["src/sub/c.lua"] = "c\n" })
+        repo:write("src/a.lua", "A\n")
+        repo:write("src/b.lua", "B\n")
+        repo:write("src/sub/c.lua", "C\n")
+        repo:write("src/new.lua", "n\n")
+        repo:write("src/new2.lua", "n\n")
+        return repo
+      end,
+    },
+    {
       "unborn branch",
       function()
         local repo = P.repo()

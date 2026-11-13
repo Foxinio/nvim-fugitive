@@ -5,12 +5,12 @@
 ---text we keep a parallel array describing every line so actions never have
 ---to parse buffer text.
 
-local status_mod = require("nvim-fugitive.git.status")
+local tree = require("nvim-fugitive.buffers.summary.tree")
 
 local M = {}
 
 ---@class fugitive.LineInfo
----@field kind "header"|"section"|"file"|"diffmeta"|"hunk"|"diffline"|"commit"|"rebase"|"stash"|"blank"|"discarded"
+---@field kind "header"|"section"|"file"|"dir"|"diffmeta"|"hunk"|"diffline"|"commit"|"rebase"|"stash"|"blank"|"discarded"
 ---@field section? string Untracked/Unstaged/Staged/Unmerged/Unpushed/Unpulled/Rebasing/Sequencing/Stash
 ---@field key? string header key
 ---@field value? string header value
@@ -24,6 +24,23 @@ local M = {}
 ---@field label? string section heading text
 ---@field note? string virtual text shown after the line (submodule state)
 ---@field path? string submodule path (uninitialized section)
+---@field depth? integer file or directory: how many directory lines enclose it
+---@field dir? string directory: its path, with a trailing slash
+---@field entries? fugitive.StatusEntry[] directory: every file under it
+---@field collapsed? boolean directory: folded, its files not shown
+---@field name_col? integer file or directory: byte column where its name starts
+---@field name_end? integer file or directory: byte column after its name
+---@field marker_col? integer directory: byte column of its ▾/▸ marker
+
+---@class fugitive.RenderOpts
+---@field tree? boolean files as a directory tree
+---@field compact? boolean no level for a lone file or a single-subdirectory chain
+---@field paths? "name"|"full" files under a directory: name only, or full path
+---@field status? "letter"|"color" status letter, or colour on the name
+---@field collapsed? table<string, boolean> folded directories, by expand_key(section, dir)
+
+M.marker_open = "▾"
+M.marker_closed = "▸"
 
 ---Key of an expandable file.
 ---@param section string
@@ -58,8 +75,13 @@ end
 
 ---@param snap fugitive.Snapshot
 ---@param expanded table<string, boolean>
+---@param opts? fugitive.RenderOpts
 ---@return string[] lines, fugitive.LineInfo[] info
-function M.render(snap, expanded)
+function M.render(snap, expanded, opts)
+  opts = opts or {}
+  local collapsed = opts.collapsed or {}
+  local color = opts.status == "color"
+  local full = opts.paths == "full"
   local lines, info = {}, {}
   local function add(text, i)
     table.insert(lines, text)
@@ -94,7 +116,7 @@ function M.render(snap, expanded)
     )
   end
 
-  local function add_diff(sec, entry)
+  local function add_diff(sec, entry, depth)
     local f = snap.diffs[sec] and snap.diffs[sec][entry.path]
     if not expanded[M.expand_key(sec, entry.path)] or not f then
       return
@@ -105,12 +127,15 @@ function M.render(snap, expanded)
       if
         not (h:match("^diff ") or h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ "))
       then
-        add(h, { kind = "diffmeta", section = sec, entry = entry, file = f })
+        add(h, { kind = "diffmeta", section = sec, entry = entry, file = f, depth = depth })
       end
     end
     for hi, hunk in ipairs(f.hunks) do
       if hunk.header ~= "" then
-        add(hunk.header, { kind = "hunk", section = sec, entry = entry, file = f, hunk_index = hi })
+        add(
+          hunk.header,
+          { kind = "hunk", section = sec, entry = entry, file = f, hunk_index = hi, depth = depth }
+        )
       end
       for li, l in ipairs(hunk.lines) do
         add(l, {
@@ -120,6 +145,7 @@ function M.render(snap, expanded)
           file = f,
           hunk_index = hi,
           line_index = li,
+          depth = depth,
         })
       end
     end
@@ -144,23 +170,78 @@ function M.render(snap, expanded)
   rebase_section("Bisecting", snap.bisecting)
 
   local st = snap.status
+  ---A file line: the status letter (or, coloured, two blanks), the indent,
+  ---then its name; `name_col`/`name_end` mark the name for highlighting.
+  local function add_file(name, e, depth, label)
+    -- the flat (upstream) list never indents
+    local indent = string.rep("  ", (opts.tree and not full) and depth or 0)
+    local prefix = (color and "  " or (e.status .. " ")) .. indent
+    add(prefix .. label, {
+      kind = "file",
+      section = name,
+      entry = e,
+      note = M.submodule_note(e),
+      depth = depth,
+      name_col = #prefix,
+      name_end = #prefix + #label,
+    })
+    add_diff(name, e, depth)
+  end
+  local function flat_label(e)
+    return e.orig and (e.orig .. " -> " .. e.path) or e.path
+  end
+  ---An untracked directory expanded with `=`: its files, each its own entry.
+  local function add_children(name, e, depth)
+    local children = snap.untracked_children and snap.untracked_children[e.path]
+    if name ~= "Untracked" or not children then
+      return
+    end
+    for _, c in ipairs(children) do
+      local label = (opts.tree and not full) and c.path:sub(#e.path + 1) or c.path
+      add_file(name, c, depth + 1, label)
+    end
+  end
   local function file_section(name, list)
     if #list == 0 then
       return
     end
     section(name, name, #list)
-    for _, e in ipairs(list) do
-      add(
-        status_mod.format(e),
-        { kind = "file", section = name, entry = e, note = M.submodule_note(e) }
-      )
-      add_diff(name, e)
-      -- an untracked directory expanded with `=`: its files, each its own entry
-      local children = snap.untracked_children and snap.untracked_children[e.path]
-      if name == "Untracked" and children then
-        for _, c in ipairs(children) do
-          add(status_mod.format(c), { kind = "file", section = name, entry = c })
-          add_diff(name, c)
+    if not opts.tree then
+      for _, e in ipairs(list) do
+        add_file(name, e, 0, flat_label(e))
+        add_children(name, e, 0)
+      end
+      return
+    end
+    local hidden_below -- depth under a folded directory: its lines are skipped
+    for _, node in ipairs(tree.build(list, { compact = opts.compact ~= false })) do
+      if hidden_below and node.depth <= hidden_below then
+        hidden_below = nil
+      end
+      if not hidden_below then
+        local label = tree.label(node, full and "full" or "name")
+        if node.type == "dir" then
+          local folded = collapsed[M.expand_key(name, node.dir)] or false
+          local indent = string.rep("  ", node.depth)
+          local marker = folded and M.marker_closed or M.marker_open
+          local text = indent .. marker .. " " .. label
+          add(text .. (folded and string.format(" (%d)", #node.entries) or ""), {
+            kind = "dir",
+            section = name,
+            dir = node.dir,
+            depth = node.depth,
+            entries = node.entries,
+            collapsed = folded,
+            marker_col = #indent,
+            name_col = #indent + #marker + 1,
+            name_end = #text,
+          })
+          if folded then
+            hidden_below = node.depth
+          end
+        else
+          add_file(name, node.entry, node.depth, label)
+          add_children(name, node.entry, node.depth)
         end
       end
     end

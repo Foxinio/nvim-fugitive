@@ -60,6 +60,11 @@ function M.selection(buf, l1, l2)
       }
     elseif i.kind == "file" or i.kind == "diffmeta" then
       return { { type = "file", section = i.section, entry = i.entry, info = i } }
+    elseif i.kind == "dir" then
+      -- a directory (tree view): each of its files, shown or folded
+      return vim.tbl_map(function(e)
+        return { type = "file", section = i.section, entry = e, info = i }
+      end, i.entries)
     elseif i.kind == "hunk" or i.kind == "diffline" then
       return {
         {
@@ -87,11 +92,13 @@ function M.selection(buf, l1, l2)
   local patches, order = {}, {}
   for lnum = l1, l2 do
     local i = st.info[lnum]
-    if i and i.kind == "file" then
-      local k = i.section .. "\0" .. i.entry.path
-      if not seen[k] then
-        seen[k] = true
-        table.insert(files, { type = "file", section = i.section, entry = i.entry, info = i })
+    if i and (i.kind == "file" or i.kind == "dir") then
+      for _, e in ipairs(i.kind == "dir" and i.entries or { i.entry }) do
+        local k = i.section .. "\0" .. e.path
+        if not seen[k] then
+          seen[k] = true
+          table.insert(files, { type = "file", section = i.section, entry = e, info = i })
+        end
       end
     elseif i and i.kind == "section" then
       table.insert(files, {
@@ -506,6 +513,21 @@ function M.inline(buf, mode, visual)
   local changed = false
   local cursor_to_file
   for lnum = l1, l2 do
+    local dirline = st.info[lnum]
+    if dirline and dirline.kind == "dir" then
+      -- a directory: = toggles, < folds, > (or any unfold) unfolds it
+      local key = render.expand_key(dirline.section, dirline.dir)
+      local want
+      if mode == "toggle" then
+        want = not dirline.collapsed
+      else
+        want = mode == "hide"
+      end
+      if want ~= dirline.collapsed then
+        st.collapsed[key] = want or nil
+        changed = true
+      end
+    end
     local i = file_item_at(st, lnum)
     if i then
       local key = render.expand_key(i.section, expand_id(i))

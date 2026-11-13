@@ -102,6 +102,8 @@ end
 ---Our summary lines for `repo`.
 function M.our_summary(repo)
   H.reset_ui()
+  -- upstream's look: a flat list with status letters (the default is a tree)
+  require("nvim-fugitive.config").set({ summary = { tree = false, status = "letter" } })
   vim.cmd("cd " .. vim.fn.fnameescape(repo.root))
   vim.cmd("Git")
   return H.lines(0)

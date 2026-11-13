@@ -33,834 +33,1197 @@ local function goto_line(pattern)
   return l
 end
 
-describe("summary buffer", function()
+-- Every test runs in both looks: the default tree, and upstream's flat list.
+local looks = {
+  { name = "tree", summary = {} },
+  { name = "upstream", summary = { tree = false, status = "letter" } },
+}
+
+for _, look in ipairs(looks) do
+  describe("summary buffer (" .. look.name .. " look)", function()
+    local log, restore
+    before_each(function()
+      H.reset_ui()
+      require("nvim-fugitive.config").set({ summary = look.summary })
+      log, restore = H.capture_notify()
+      -- The watcher's debounced refresh can land while an action's git command
+      -- is still running, and `after` would then see a render of the old state.
+      -- Only the watcher test needs it.
+      require("nvim-fugitive.watch").enable(false)
+    end)
+    after_each(function()
+      restore()
+      require("nvim-fugitive.watch").enable(true)
+      require("nvim-fugitive.config").set({})
+    end)
+
+    it("refreshes without plenary", function()
+      package.loaded["plenary.async"] = nil
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      local buf = open(repo)
+      repo:write("a", "changed\n")
+      after(buf, function()
+        summary.refresh(buf)
+      end)
+      assert.truthy(H.find_line("^M a"))
+      assert.is_nil(package.loaded["plenary.async"])
+    end)
+
+    it("renders the upstream layout", function()
+      local repo =
+        H.repo({ files = { ["a.txt"] = "a\nb\nc\n", ["b.txt"] = "b\n", ["old.txt"] = "o\n" } })
+      repo:write("a.txt", "a\nB\nc\n")
+      repo:write("new.txt", "n\n")
+      repo:write("b.txt", "bb\n")
+      repo:git("add", "b.txt")
+      repo:git("mv", "old.txt", "renamed.txt")
+      local buf = open(repo)
+      assert.same({
+        "Head: main",
+        "Help: g?",
+        "",
+        "Untracked (1)",
+        "? new.txt",
+        "",
+        "Unstaged (1)",
+        "M a.txt",
+        "",
+        "Staged (2)",
+        "M b.txt",
+        "R old.txt -> renamed.txt",
+      }, H.lines(buf))
+      local ns = vim.api.nvim_get_namespaces().fugitive_summary
+      local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 0, -1 }, { details = true })
+      assert.equals(1, #marks)
+      assert.same({ { "(new)", "Comment" } }, marks[1][4].virt_text)
+      assert.equals("eol", marks[1][4].virt_text_pos)
+      assert.equals("fugitive", vim.bo[buf].filetype)
+      assert.equals("fugitive://" .. repo.root .. "/.git//", vim.api.nvim_buf_get_name(buf))
+      assert.equals(repo.root .. "/.git", vim.b[buf].git_dir)
+      -- cursor starts on the first file
+      assert.equals("? new.txt", vim.api.nvim_get_current_line())
+    end)
+
+    -- reads flat paths; the tree look has its own version below
+    local it_flat = look.name == "upstream" and it or function() end
+    it_flat(
+      "lists the files of an untracked directory with = and stages them one by one",
+      function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        repo:write("dir/one.txt", "1\n")
+        repo:write("dir/sub/two.txt", "2\n")
+        repo:write("dir/ignored.log", "x\n")
+        repo:write(".gitignore", "*.log\n")
+        local buf = open(repo)
+        local l = goto_line("^%? dir/$")
+        after(buf, function()
+          H.feed("=")
+        end)
+        assert.same(
+          { "? dir/", "? dir/one.txt", "? dir/sub/two.txt" },
+          vim.list_slice(H.lines(buf), l, l + 2)
+        )
+        -- folded under the directory (whose line starts the fold)
+        assert.equals(2, vim.fn.foldlevel(l))
+        assert.equals(2, vim.fn.foldlevel(l + 1))
+        assert.equals(1, vim.fn.foldlevel(H.find_line("^%? %.gitignore$")))
+        -- a file of it shows its contents with =, one level deeper
+        goto_line("^%? dir/one.txt$")
+        after(buf, function()
+          H.feed("=")
+        end)
+        assert.same(
+          { "? dir/one.txt", "new file mode 100644", "@@ -0,0 +1 @@", "+1", "? dir/sub/two.txt" },
+          vim.list_slice(H.lines(buf), l + 1, l + 5)
+        )
+        assert.equals(3, vim.fn.foldlevel(l + 4))
+        -- and is staged on its own; the rest of the directory stays listed
+        goto_line("^%? dir/one.txt$")
+        after(buf, function()
+          H.feed("s")
+        end)
+        assert.truthy(repo:status():match("^A  dir/one.txt\n"))
+        assert.truthy(repo:status():match("%?%? dir/sub/two.txt\n"))
+        assert.truthy(H.find_line("^A dir/one.txt$"))
+        assert.truthy(H.find_line("^%? dir/sub/two.txt$"))
+        assert.is_nil(H.find_line("^%? dir/one.txt$"))
+        -- the cursor moved on to the next untracked file
+        assert.equals("? dir/sub/two.txt", vim.api.nvim_get_current_line())
+        -- git now reports the rest as dir/sub/: it stays expanded, and = still
+        -- collapses it
+        local sub = goto_line("^%? dir/sub/$")
+        assert.equals("? dir/sub/two.txt", H.lines(buf)[sub + 1])
+        after(buf, function()
+          H.feed("=")
+        end)
+        assert.is_nil(H.find_line("^%? dir/sub/two.txt$"))
+        -- s on a directory line stages all of it
+        goto_line("^%? dir/sub/$")
+        after(buf, function()
+          H.feed("s")
+        end)
+        assert.truthy(H.find_line("^A dir/sub/two.txt$"))
+        assert.is_nil(H.find_line("^%? dir/"))
+      end
+    )
+
+    it("stages and unstages files with s, u and -", function()
+      local repo = H.repo({ files = { ["a.txt"] = "a\n" } })
+      repo:write("a.txt", "A\n")
+      repo:write("u.txt", "u\n")
+      local buf = open(repo)
+      goto_line("^M a.txt")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.equals("M  a.txt\n?? u.txt\n", repo:status())
+      assert.truthy(H.find_line("^Staged %(1%)"))
+      goto_line("^M a.txt")
+      after(buf, function()
+        H.feed("u")
+      end)
+      assert.equals(" M a.txt\n?? u.txt\n", repo:status())
+      goto_line("^%? u.txt")
+      after(buf, function()
+        H.feed("-")
+      end)
+      assert.equals(" M a.txt\nA  u.txt\n", repo:status())
+      -- staging is routine: no notification for any of these keypresses
+      assert.same({}, log)
+    end)
+
+    it("moves on when a hunk staged from an expanded file empties it", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "1\n2\n3\n4\n5\n6\n7\n8\n9\n" } })
+      repo:write("a", "A\n")
+      local buf = open(repo)
+      goto_line("^M a$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      -- - on a diff line stages that hunk, the whole change of a
+      goto_line("^%+A$")
+      after(buf, function()
+        H.feed("-")
+      end)
+      assert.equals("M  a\n", repo:status())
+      -- Unstaged is empty, Staged is where a went: nowhere else to go but a
+      assert.equals("M a", vim.api.nvim_get_current_line())
+
+      -- two hunks: the first one leaves the file where it was
+      repo:write("b", "ONE\n2\n3\n4\n5\n6\n7\n8\nNINE\n")
+      repo:write("c", "c\n")
+      vim.cmd("Git")
+      H.wait(function()
+        return H.find_line("^%? c$") ~= nil
+      end)
+      goto_line("^M b$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      goto_line("^%+ONE$")
+      after(buf, function()
+        H.feed("-")
+      end)
+      assert.truthy(repo:status():match("MM b"))
+      assert.equals("Unstaged", summary.state(buf).info[vim.fn.line(".")].section)
+      -- the second one empties it: on to the next section, not Staged
+      goto_line("^%+NINE$")
+      after(buf, function()
+        H.feed("-")
+      end)
+      assert.truthy(repo:status():match("M  b"))
+      assert.equals("? c", vim.api.nvim_get_current_line())
+    end)
+
+    it("moves on to the next section when the last file of one is staged", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      repo:write("a", "A\n")
+      repo:write("b", "B\n")
+      repo:write("u.txt", "u\n")
+      local buf = open(repo)
+      goto_line("^%? u.txt$")
+      after(buf, function()
+        H.feed("-")
+      end)
+      assert.truthy(repo:status():match("A  u.txt"))
+      -- not A u.txt in Staged: the first file of Unstaged
+      assert.equals("M a", vim.api.nvim_get_current_line())
+      -- unstaging the only staged file: it lands in Untracked, and Unstaged
+      -- or Untracked are where unstaged files go, so the cursor follows it
+      goto_line("^A u.txt$")
+      after(buf, function()
+        H.feed("u")
+      end)
+      assert.equals("? u.txt", vim.api.nvim_get_current_line())
+    end)
+
+    it("moves on to the next file of the section after staging or unstaging one", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n", ["c"] = "c\n" } })
+      repo:write("a", "A\n")
+      repo:write("b", "B\n")
+      repo:write("c", "C\n")
+      local buf = open(repo)
+      goto_line("^M b$")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.equals(" M a\nM  b\n M c\n", repo:status())
+      -- next unstaged file, not b in Staged
+      assert.equals("M c", vim.api.nvim_get_current_line())
+      assert.equals("Unstaged", summary.state(buf).info[vim.fn.line(".")].section)
+      -- the last one of a section: on to the previous one
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.equals("M a", vim.api.nvim_get_current_line())
+      -- and the other way around
+      goto_line("^Staged")
+      vim.cmd("normal! j")
+      assert.equals("M b", vim.api.nvim_get_current_line())
+      after(buf, function()
+        H.feed("u")
+      end)
+      assert.equals("M c", vim.api.nvim_get_current_line())
+      assert.equals("Staged", summary.state(buf).info[vim.fn.line(".")].section)
+    end)
+
+    it("folds a file when staging or unstaging it", function()
+      local repo = H.repo({ files = { ["f"] = "1\n", ["g"] = "1\n" } })
+      repo:write("f", "2\n")
+      repo:write("g", "2\n")
+      local buf = open(repo)
+      goto_line("^M f")
+      after(buf, function()
+        H.feed("=")
+      end)
+      assert.truthy(H.find_line("^@@"))
+      goto_line("^M f")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.is_nil(H.find_line("^@@"))
+      -- unfolded in Staged, then unstaged: comes back folded
+      goto_line("^Staged")
+      vim.cmd("normal! j")
+      after(buf, function()
+        H.feed("=")
+      end)
+      assert.truthy(H.find_line("^@@"))
+      goto_line("^Staged")
+      vim.cmd("normal! j")
+      after(buf, function()
+        H.feed("u")
+      end)
+      assert.is_nil(H.find_line("^@@"))
+      -- and staging it again does not bring back the old Staged expansion
+      goto_line("^M f")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.is_nil(H.find_line("^@@"))
+    end)
+
+    it("stages a whole section from its heading and unstages all with U", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      repo:write("a", "A\n")
+      repo:write("b", "B\n")
+      local buf = open(repo)
+      goto_line("^Unstaged")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.equals("M  a\nM  b\n", repo:status())
+      after(buf, function()
+        H.feed("U")
+      end)
+      assert.equals(" M a\n M b\n", repo:status())
+    end)
+
+    it("shows inline diffs with = and folds them", function()
+      local repo = H.repo({ files = { ["f"] = "1\n2\n3\n" } })
+      repo:write("f", "1\nTWO\n3\n")
+      local buf = open(repo)
+      goto_line("^M f")
+      after(buf, function()
+        H.feed("=")
+      end)
+      local l = H.find_line("^M f")
+      assert.same(
+        { "M f", "@@ -1,3 +1,3 @@", " 1", "-2", "+TWO", " 3" },
+        vim.list_slice(H.lines(buf), l, l + 5)
+      )
+      assert.equals("expr", vim.wo.foldmethod)
+      assert.equals(2, vim.fn.foldlevel(l + 2))
+      assert.equals(1, vim.fn.foldlevel(H.find_line("^Unstaged")))
+      -- < hides it again from a diff line, cursor back on the file
+      vim.api.nvim_win_set_cursor(0, { l + 3, 0 })
+      after(buf, function()
+        H.feed("<")
+      end)
+      assert.equals("M f", vim.api.nvim_get_current_line())
+      assert.is_nil(H.find_line("^@@"))
+    end)
+
+    it("stages a single hunk and selected lines (visual)", function()
+      local content = {}
+      for i = 1, 30 do
+        content[i] = "line " .. i
+      end
+      local repo = H.repo({ files = { ["f"] = table.concat(content, "\n") .. "\n" } })
+      content[2] = "CHANGED 2"
+      content[3] = "CHANGED 3"
+      content[28] = "CHANGED 28"
+      repo:write("f", table.concat(content, "\n") .. "\n")
+      local buf = open(repo)
+      goto_line("^M f")
+      after(buf, function()
+        H.feed(">")
+      end)
+      -- stage only the second hunk (cursor on a line inside it)
+      goto_line("^%+CHANGED 28")
+      after(buf, function()
+        H.feed("s")
+      end)
+      local staged = repo:git("diff", "--cached")
+      assert.truthy(staged:match("%+CHANGED 28"))
+      assert.falsy(staged:match("CHANGED 2\n"))
+      -- now stage only "-line 2"/"+CHANGED 2" from the first hunk
+      local first = goto_line("^%-line 2$")
+      local plus = assert(H.find_line("^%+CHANGED 2$"))
+      vim.api.nvim_win_set_cursor(0, { first, 0 })
+      after(buf, function()
+        H.feed("V" .. (plus - first) .. "js")
+      end)
+      staged = repo:git("diff", "--cached")
+      assert.truthy(staged:match("%+CHANGED 2\n"))
+      assert.falsy(staged:match("%+CHANGED 3"))
+      assert.truthy(repo:git("diff"):match("%+CHANGED 3"))
+      -- unstage one line from the Staged section
+      goto_line("^M f") -- unstaged file
+      local sl = assert(H.find_line("^Staged"))
+      vim.api.nvim_win_set_cursor(0, { sl + 1, 0 })
+      after(buf, function()
+        H.feed(">")
+      end)
+      local line28
+      for l, i in ipairs(summary.state(buf).info) do
+        if i.section == "Staged" and H.lines(buf)[l] == "+CHANGED 28" then
+          line28 = l
+        end
+      end
+      vim.api.nvim_win_set_cursor(0, { line28, 0 })
+      after(buf, function()
+        H.feed("u")
+      end)
+      staged = repo:git("diff", "--cached")
+      assert.falsy(staged:match("CHANGED 28"))
+      assert.truthy(staged:match("%+CHANGED 2\n"))
+    end)
+
+    it("snaps the cursor past blank separator lines", function()
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      repo:write("a", "A\n")
+      repo:write("u", "u\n")
+      local buf = open(repo)
+      -- headless tests never reach the main loop that fires CursorMoved;
+      -- move, then fire the buffer's own CursorMoved handler
+      local function move(keys)
+        H.feed(keys)
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        return vim.api.nvim_get_current_line()
+      end
+      goto_line("^%? u")
+      move("")
+      assert.equals("Unstaged (1)", move("j"))
+      assert.equals("? u", move("k"))
+      goto_line("^Help:")
+      move("")
+      assert.equals("Untracked (1)", move("j"))
+      assert.equals("M a", move("G"))
+      -- visual mode is left alone
+      goto_line("^%? u")
+      move("")
+      H.feed("Vj")
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      assert.equals("", vim.api.nvim_get_current_line())
+      H.feed("<Esc>")
+    end)
+
+    it("navigates with ( ) ]] [[ gu gs and i", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      repo:write("a", "A\n")
+      repo:write("b", "B\n")
+      repo:git("add", "b")
+      repo:write("u", "u\n")
+      local buf = open(repo)
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      H.feed(")")
+      assert.equals("? u", vim.api.nvim_get_current_line())
+      H.feed(")")
+      assert.equals("M a", vim.api.nvim_get_current_line())
+      H.feed("(")
+      assert.equals("? u", vim.api.nvim_get_current_line())
+      H.feed("]]")
+      assert.equals("Unstaged (1)", vim.api.nvim_get_current_line())
+      H.feed("gs")
+      assert.equals("M b", vim.api.nvim_get_current_line())
+      H.feed("gu")
+      assert.equals("? u", vim.api.nvim_get_current_line())
+      goto_line("^M a")
+      after(buf, function()
+        H.feed("i")
+      end)
+      assert.equals("@@ -1 +1 @@", vim.api.nvim_get_current_line())
+    end)
+
+    it("opens files, index versions and commits with <CR>", function()
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      repo:write("a", "A\n")
+      repo:git("add", "a")
+      repo:write("a", "AA\n")
+      local buf = open(repo)
+      local sl = H.find_line("^Staged")
+      vim.api.nvim_win_set_cursor(0, { sl + 1, 0 })
+      H.feed("<CR>")
+      assert.equals("fugitive://" .. repo.root .. "/.git//0/a", vim.api.nvim_buf_get_name(0))
+      assert.same({ "A" }, H.lines(0))
+      vim.cmd("buffer " .. buf)
+      goto_line("^Unstaged")
+      vim.api.nvim_win_set_cursor(0, { H.find_line("^Unstaged") + 1, 0 })
+      H.feed("<CR>")
+      assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
+    end)
+
+    describe("picks the window to open in", function()
+      local function wins()
+        return vim.api.nvim_tabpage_list_wins(0)
+      end
+      local function row(win)
+        return vim.api.nvim_win_get_position(win)[1]
+      end
+
+      it("<CR>: a split below when the summary is the only window", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        repo:write("a", "A\n")
+        vim.cmd("only")
+        local buf = open(repo)
+        vim.cmd("only")
+        local summary_win = vim.api.nvim_get_current_win()
+        vim.o.splitbelow = false
+        goto_line("^M a")
+        H.feed("<CR>")
+        assert.equals(2, #wins())
+        assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
+        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+        assert.is_true(row(vim.api.nvim_get_current_win()) > row(summary_win))
+      end)
+
+      it("<CR>: the window visited last, keeping the summary", function()
+        local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+        repo:write("a", "A\n")
+        vim.cmd("only")
+        vim.cmd("cd " .. repo.root)
+        vim.cmd("edit b")
+        local file_win = vim.api.nvim_get_current_win()
+        vim.cmd("vertical Git")
+        local buf = vim.api.nvim_get_current_buf()
+        H.wait(function()
+          return summary.state(buf) ~= nil and summary.state(buf).tick > 0
+        end)
+        local summary_win = vim.api.nvim_get_current_win()
+        goto_line("^M a")
+        H.feed("<CR>")
+        assert.equals(2, #wins())
+        assert.equals(file_win, vim.api.nvim_get_current_win())
+        assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
+        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+      end)
+
+      it("o: a split below the summary, whatever 'splitbelow' says", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        repo:write("a", "A\n")
+        vim.cmd("only")
+        local buf = open(repo)
+        vim.cmd("only")
+        local summary_win = vim.api.nvim_get_current_win()
+        vim.o.splitbelow = false
+        goto_line("^M a")
+        H.feed("o")
+        assert.equals(2, #wins())
+        assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
+        assert.is_true(row(vim.api.nvim_get_current_win()) > row(summary_win))
+        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+      end)
+
+      it("two- and three-way diffs: a split below, keeping the other windows", function()
+        local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
+        repo:git("checkout", "-q", "-b", "topic")
+        repo:commit("topic", { ["c"] = "topic\n" })
+        repo:git("checkout", "-q", "main")
+        repo:commit("main", { ["c"] = "main\n" })
+        repo:git("merge", "topic", { allow_fail = true })
+        repo:write("d", "D\n")
+        vim.cmd("only")
+        vim.cmd("cd " .. repo.root)
+        vim.cmd("edit o")
+        local original = vim.api.nvim_get_current_win()
+        vim.cmd("vertical Git")
+        local buf = vim.api.nvim_get_current_buf()
+        H.wait(function()
+          return summary.state(buf) ~= nil and summary.state(buf).tick > 0
+        end)
+        local summary_win = vim.api.nvim_get_current_win()
+        local function untouched()
+          assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+          assert.equals(
+            repo:path("o"),
+            vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original))
+          )
+        end
+
+        goto_line("^U c$")
+        H.feed("dd")
+        -- original + summary + ours, work tree, theirs below the summary
+        assert.equals(5, #wins())
+        untouched()
+        local merge = {}
+        for _, w in ipairs(wins()) do
+          if w ~= summary_win and w ~= original then
+            assert.is_true(row(w) > row(summary_win))
+            assert.is_true(vim.wo[w].diff)
+            table.insert(merge, w)
+          end
+        end
+        assert.equals(3, #merge)
+        -- closing any one of the three closes the others
+        vim.api.nvim_win_close(merge[1], false)
+        H.wait(function()
+          return #wins() == 2
+        end, "merge windows closed")
+        untouched()
+
+        -- dq closes the sides only, keeping the work tree file
+        vim.api.nvim_set_current_win(summary_win)
+        goto_line("^U c$")
+        H.feed("dd")
+        assert.equals(5, #wins())
+        local work = vim.api.nvim_get_current_win()
+        vim.api.nvim_set_current_win(summary_win)
+        H.feed("dq")
+        vim.wait(50)
+        assert.equals(3, #wins())
+        assert.equals(repo:path("c"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(work)))
+        assert.is_false(vim.wo[work].diff)
+        vim.api.nvim_win_close(work, false)
+        untouched()
+
+        -- a two-way diff: a split below too
+        vim.api.nvim_set_current_win(summary_win)
+        goto_line("^M d$")
+        H.feed("dv")
+        -- index | work tree, below the summary
+        assert.equals(4, #wins())
+        untouched()
+        local found = 0
+        for _, w in ipairs(wins()) do
+          if w ~= summary_win and w ~= original then
+            found = found + 1
+            assert.is_true(vim.wo[w].diff)
+            assert.is_true(row(w) > row(summary_win))
+          end
+        end
+        assert.equals(2, found)
+        assert.truthy(vim.fn.bufwinid(repo:path("d")) ~= -1)
+      end)
+
+      it("a new diff replaces the one already open", function()
+        local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
+        repo:git("checkout", "-q", "-b", "topic")
+        repo:commit("topic", { ["c"] = "topic\n" })
+        repo:git("checkout", "-q", "main")
+        repo:commit("main", { ["c"] = "main\n" })
+        repo:git("merge", "topic", { allow_fail = true })
+        repo:write("d", "D\n")
+        vim.cmd("only")
+        vim.cmd("cd " .. repo.root)
+        vim.cmd("edit o")
+        local original = vim.api.nvim_get_current_win()
+        vim.cmd("vertical Git")
+        local buf = vim.api.nvim_get_current_buf()
+        H.wait(function()
+          return summary.state(buf) ~= nil and summary.state(buf).tick > 0
+        end)
+        local summary_win = vim.api.nvim_get_current_win()
+        local function diff_wins()
+          local n = 0
+          for _, w in ipairs(wins()) do
+            if w ~= summary_win and w ~= original then
+              assert.is_true(vim.wo[w].diff)
+              n = n + 1
+            end
+          end
+          return n
+        end
+        local function again(pattern, keys)
+          vim.api.nvim_set_current_win(summary_win)
+          goto_line(pattern)
+          H.feed(keys)
+          vim.wait(50)
+          assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+          assert.equals(
+            repo:path("o"),
+            vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original))
+          )
+        end
+
+        -- the three-way diff twice: one layout of three windows, not two
+        again("^U c$", "dd")
+        assert.equals(3, diff_wins())
+        again("^U c$", "dd")
+        assert.equals(3, diff_wins())
+        assert.equals(5, #wins())
+        -- a two-way diff replaces it
+        again("^M d$", "dv")
+        assert.equals(2, diff_wins())
+        assert.equals(4, #wins())
+        -- and the three-way diff replaces that
+        again("^U c$", "dd")
+        assert.equals(3, diff_wins())
+        assert.equals(5, #wins())
+      end)
+    end)
+
+    it("opens the thing under the cursor in a float with f", function()
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      repo:write("a", "A\n")
+      repo:git("add", "a")
+      repo:write("a", "AA\n")
+      local buf = open(repo)
+      local summary_win = vim.api.nvim_get_current_win()
+      local function floating()
+        return vim.api.nvim_win_get_config(0).relative ~= ""
+      end
+      -- the index version of a staged file
+      vim.api.nvim_win_set_cursor(0, { H.find_line("^Staged") + 1, 0 })
+      H.feed("f")
+      assert.is_true(floating())
+      assert.equals("fugitive://" .. repo.root .. "/.git//0/a", vim.api.nvim_buf_get_name(0))
+      assert.same({ "A" }, H.lines(0))
+      -- leaving it closes it
+      local float_win = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(summary_win)
+      H.wait(function()
+        return not vim.api.nvim_win_is_valid(float_win)
+      end, "float closed")
+      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+      -- the work-tree file, and the summary stays where it was
+      vim.api.nvim_win_set_cursor(0, { H.find_line("^Unstaged") + 1, 0 })
+      H.feed("f")
+      assert.is_true(floating())
+      assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
+      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
+      -- a commit (one float at a time)
+      vim.cmd("close")
+      goto_line("^Head:")
+      H.feed("f")
+      assert.is_true(floating())
+      assert.equals("commit", vim.b.fugitive_type)
+      assert.equals(1, #vim.tbl_filter(function(w)
+        return vim.api.nvim_win_get_config(w).relative ~= ""
+      end, vim.api.nvim_list_wins()))
+    end)
+
+    it("shows Unpushed/Unpulled against the upstream and a Push header", function()
+      local origin = H.repo({ files = { ["f"] = "1\n" } })
+      local clone = H.clone(origin)
+      origin:commit("upstream change", { ["g"] = "g\n" })
+      clone:git("fetch", "-q")
+      clone:commit("local change", { ["h"] = "h\n" })
+      local buf = open(clone)
+      local lines = H.lines(buf)
+      assert.equals("Head: main", lines[1])
+      assert.equals("Merge: origin/main", lines[2])
+      assert.truthy(H.find_line("^Unpushed to origin/main %(1%)$"))
+      assert.truthy(H.find_line("^%x+ local change$"))
+      assert.truthy(H.find_line("^Unpulled from origin/main %(1%)$"))
+      -- <CR> on a commit opens the commit object
+      goto_line("local change$")
+      H.feed("<CR>")
+      assert.truthy(vim.api.nvim_buf_get_name(0):match("^fugitive://.*//%x+$"))
+      assert.equals("commit", vim.b.fugitive_type)
+      assert.truthy(H.find_line("^diff %-%-git a/h b/h"))
+    end)
+
+    it("shows a commit's diff inline with =", function()
+      local origin = H.repo({ files = { ["f"] = "1\n2\n3\n" } })
+      local clone = H.clone(origin)
+      clone:commit("local change", { ["f"] = "1\nTWO\n3\n", ["new"] = "n\n" })
+      local buf = open(clone)
+      local l = goto_line("local change$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      local lines = H.lines(buf)
+      assert.same({
+        "diff --git a/f b/f",
+        "@@ -1,3 +1,3 @@",
+        " 1",
+        "-2",
+        "+TWO",
+        " 3",
+        "diff --git a/new b/new",
+        "new file mode 100644",
+        "@@ -0,0 +1 @@",
+        "+n",
+      }, vim.list_slice(lines, l + 1, l + 10))
+      -- folded under the commit line
+      assert.equals(2, vim.fn.foldlevel(l + 3))
+      -- <CR> on a diff line opens the file at that commit, at that line
+      vim.api.nvim_win_set_cursor(0, { l + 5, 0 })
+      H.feed("<CR>")
+      local commit = clone:rev("HEAD")
+      assert.equals(
+        "fugitive://" .. clone.root .. "/.git//" .. commit .. "/f",
+        vim.api.nvim_buf_get_name(0)
+      )
+      assert.equals(2, vim.fn.line("."))
+      vim.cmd("buffer " .. buf)
+      -- < from inside the diff hides it, back on the commit line
+      vim.api.nvim_win_set_cursor(0, { l + 4, 0 })
+      after(buf, function()
+        H.feed("<")
+      end)
+      assert.equals(l, vim.fn.line("."))
+      assert.is_nil(H.find_line("^@@"))
+    end)
+
+    it("works in an unborn repository", function()
+      local repo = H.repo()
+      repo:write("first", "1\n")
+      repo:git("add", "first")
+      local buf = open(repo)
+      assert.equals("Head: main", H.lines(buf)[1])
+      goto_line("^A first")
+      after(buf, function()
+        H.feed("u")
+      end)
+      assert.equals("?? first\n", repo:status())
+    end)
+
+    it("shows submodules as entries and opens their own summary", function()
+      local sub = H.repo({ files = { ["s.txt"] = "s\n" } })
+      local parent = H.repo({ files = { ["p.txt"] = "p\n" } })
+      parent:git("-c", "protocol.file.allow=always", "submodule", "add", "-q", sub.root, "sm")
+      parent:commit("add submodule")
+      local inner = setmetatable({ root = parent:path("sm") }, getmetatable(sub))
+      inner:git("config", "user.name", "T")
+      inner:git("config", "user.email", "t@e")
+      inner:commit("move submodule", { ["s.txt"] = "s2\n" })
+      local buf = open(parent)
+      goto_line("^M sm$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      assert.truthy(H.find_line("move submodule"))
+      goto_line("^M sm$")
+      H.feed("<CR>")
+      assert.equals(
+        "fugitive://" .. parent.root .. "/.git/modules/sm//",
+        vim.api.nvim_buf_get_name(0)
+      )
+      -- stage the new pointer from the parent
+      vim.cmd("buffer " .. buf)
+      goto_line("^M sm$")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.equals("M  sm\n", parent:status())
+    end)
+
+    it("refreshes when the repository changes outside (watcher)", function()
+      require("nvim-fugitive.watch").enable(true)
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      local buf = open(repo)
+      assert.is_nil(H.find_line("^Untracked"))
+      repo:write("new", "x\n")
+      repo:git("add", "new")
+      H.wait(function()
+        return H.find_line("^A new", buf) ~= nil
+      end, "watcher refresh", 5000)
+    end)
+
+    it("puts conflicts in an Unmerged section", function()
+      local repo = H.repo({ files = { ["c"] = "base\n" } })
+      repo:git("checkout", "-q", "-b", "topic")
+      repo:commit("topic", { ["c"] = "topic\n" })
+      repo:git("checkout", "-q", "main")
+      repo:commit("main", { ["c"] = "main\n" })
+      repo:git("merge", "topic", { allow_fail = true })
+      local buf = open(repo)
+      assert.truthy(H.find_line("^Unmerged %(1%)$", buf))
+      goto_line("^U c$")
+      -- s marks it resolved
+      repo:write("c", "resolved\n")
+      after(buf, function()
+        H.feed("s")
+      end)
+      assert.equals("M  c\n", repo:status())
+    end)
+
+    it("is configurable: maps can be disabled and remapped", function()
+      require("nvim-fugitive").setup({ maps = { summary = { s = false, a = "stage" } } })
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      repo:write("a", "A\n")
+      local buf = open(repo)
+      assert.equals("", vim.fn.maparg("s", "n"))
+      goto_line("^M a")
+      after(buf, function()
+        H.feed("a")
+      end)
+      assert.equals("M  a\n", repo:status())
+      require("nvim-fugitive").setup({})
+    end)
+  end)
+end
+
+describe("summary tree", function()
   local log, restore
   before_each(function()
     H.reset_ui()
     log, restore = H.capture_notify()
-    -- The watcher's debounced refresh can land while an action's git command
-    -- is still running, and `after` would then see a render of the old state.
-    -- Only the watcher test needs it.
     require("nvim-fugitive.watch").enable(false)
   end)
   after_each(function()
     restore()
     require("nvim-fugitive.watch").enable(true)
+    require("nvim-fugitive.config").set({})
   end)
 
-  it("refreshes without plenary", function()
-    package.loaded["plenary.async"] = nil
-    local repo = H.repo({ files = { ["a"] = "a\n" } })
-    local buf = open(repo)
-    repo:write("a", "changed\n")
-    after(buf, function()
-      summary.refresh(buf)
-    end)
-    assert.truthy(H.find_line("^M a"))
-    assert.is_nil(package.loaded["plenary.async"])
-  end)
+  ---Unstaged: README.md, lua/f/{init.lua, cmd/git.lua, cmd/log.lua (deleted)},
+  ---tests/unit/x.lua; Untracked: docs/ (git lists a wholly untracked
+  ---directory as one entry), tests/{a,b}.txt, notes.txt; Staged:
+  ---Makefile, lua/f/health.lua (new), lua/f/ui/old.lua -> lua/f/ui/new.lua.
+  local function fixture(summary)
+    require("nvim-fugitive.config").set({ summary = summary or {} })
+    local repo = H.repo({
+      files = {
+        ["README.md"] = "r\n",
+        ["Makefile"] = "m\n",
+        ["lua/f/init.lua"] = "i\n",
+        ["lua/f/cmd/git.lua"] = "g\n",
+        ["lua/f/cmd/log.lua"] = "l\n",
+        ["lua/f/ui/old.lua"] = "o\n",
+        ["tests/unit/x.lua"] = "x\n",
+      },
+    })
+    for _, f in ipairs({ "README.md", "lua/f/init.lua", "lua/f/cmd/git.lua", "tests/unit/x.lua" }) do
+      repo:write(f, "changed\n")
+    end
+    os.remove(repo:path("lua/f/cmd/log.lua"))
+    repo:write("Makefile", "M\n")
+    repo:write("lua/f/health.lua", "h\n")
+    repo:git("add", "Makefile", "lua/f/health.lua")
+    repo:git("mv", "lua/f/ui/old.lua", "lua/f/ui/new.lua")
+    repo:write("docs/a.md", "a\n")
+    repo:write("tests/a.txt", "a\n")
+    repo:write("tests/b.txt", "b\n")
+    repo:write("notes.txt", "n\n")
+    return repo, open(repo)
+  end
 
-  it("renders the upstream layout", function()
-    local repo =
-      H.repo({ files = { ["a.txt"] = "a\nb\nc\n", ["b.txt"] = "b\n", ["old.txt"] = "o\n" } })
-    repo:write("a.txt", "a\nB\nc\n")
-    repo:write("new.txt", "n\n")
-    repo:write("b.txt", "bb\n")
-    repo:git("add", "b.txt")
-    repo:git("mv", "old.txt", "renamed.txt")
-    local buf = open(repo)
+  local function section_lines(buf, name)
+    local lines = H.lines(buf)
+    local first = assert(H.find_line("^" .. name .. " %("))
+    local out = {}
+    for l = first, #lines do
+      if lines[l] == "" then
+        break
+      end
+      table.insert(out, lines[l])
+    end
+    return out
+  end
+
+  it("shows each section as a tree, with lone files and single-child chains on one line", function()
+    local _, buf = fixture()
     assert.same({
-      "Head: main",
-      "Help: g?",
-      "",
-      "Untracked (1)",
-      "? new.txt",
-      "",
-      "Unstaged (1)",
-      "M a.txt",
-      "",
-      "Staged (2)",
-      "M b.txt",
-      "R old.txt -> renamed.txt",
-    }, H.lines(buf))
-    local ns = vim.api.nvim_get_namespaces().fugitive_summary
-    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 0, -1 }, { details = true })
-    assert.equals(1, #marks)
-    assert.same({ { "(new)", "Comment" } }, marks[1][4].virt_text)
-    assert.equals("eol", marks[1][4].virt_text_pos)
-    assert.equals("fugitive", vim.bo[buf].filetype)
-    assert.equals("fugitive://" .. repo.root .. "/.git//", vim.api.nvim_buf_get_name(buf))
-    assert.equals(repo.root .. "/.git", vim.b[buf].git_dir)
-    -- cursor starts on the first file
-    assert.equals("? new.txt", vim.api.nvim_get_current_line())
+      "Untracked (4)",
+      "? docs/",
+      "? notes.txt",
+      "▾ tests/",
+      "?   a.txt",
+      "?   b.txt",
+    }, section_lines(buf, "Untracked"))
+    assert.same({
+      "Unstaged (5)",
+      "M README.md",
+      "▾ lua/f/",
+      "  ▾ cmd/",
+      "M     git.lua",
+      "D     log.lua",
+      "M   init.lua",
+      "M tests/unit/x.lua",
+    }, section_lines(buf, "Unstaged"))
+    assert.same({
+      "Staged (3)",
+      "M Makefile",
+      "▾ lua/f/",
+      "A   health.lua",
+      "R   ui/old.lua -> ui/new.lua",
+    }, section_lines(buf, "Staged"))
   end)
 
-  it("lists the files of an untracked directory with = and stages them one by one", function()
+  it("shows full paths under the directory lines with paths = full", function()
+    local _, buf = fixture({ paths = "full" })
+    assert.same({
+      "Unstaged (5)",
+      "M README.md",
+      "▾ lua/f/",
+      "  ▾ lua/f/cmd/",
+      "M lua/f/cmd/git.lua",
+      "D lua/f/cmd/log.lua",
+      "M lua/f/init.lua",
+      "M tests/unit/x.lua",
+    }, section_lines(buf, "Unstaged"))
+  end)
+
+  it("puts every level on its own line with compact = false", function()
+    local _, buf = fixture({ compact = false })
+    assert.same({
+      "Unstaged (5)",
+      "M README.md",
+      "▾ lua/",
+      "  ▾ f/",
+      "    ▾ cmd/",
+      "M       git.lua",
+      "D       log.lua",
+      "M     init.lua",
+      "▾ tests/",
+      "  ▾ unit/",
+      "M     x.lua",
+    }, section_lines(buf, "Unstaged"))
+  end)
+
+  it("colours the names instead of the letters with status = color", function()
+    local _, buf = fixture({ status = "color" })
+    assert.same({
+      "Staged (3)",
+      "  Makefile",
+      "▾ lua/f/",
+      "    health.lua",
+      "    ui/old.lua -> ui/new.lua",
+    }, section_lines(buf, "Staged"))
+    local ns = vim.api.nvim_get_namespaces().fugitive_summary
+    local function groups_on(pattern)
+      local l = assert(H.find_line(pattern)) - 1
+      local out = {}
+      for _, m in
+        ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { l, 0 }, { l, -1 }, { details = true }))
+      do
+        if m[4].hl_group then
+          out[m[4].hl_group] = { m[3], m[4].end_col }
+        end
+      end
+      return out
+    end
+    assert.same({ FugitiveStatusModified = { 2, 10 } }, groups_on("^  Makefile$"))
+    assert.same({ FugitiveStatusAdded = { 4, 14 } }, groups_on("^    health.lua$"))
+    assert.same({ FugitiveStatusRenamed = { 4, 28 } }, groups_on("ui/new.lua$"))
+    assert.truthy(groups_on("^  README.md$").FugitiveStatusModified)
+    assert.truthy(groups_on("log.lua$").FugitiveStatusDeleted)
+    assert.truthy(groups_on("^  notes.txt$").FugitiveStatusUntracked)
+    local dir = groups_on("^▾ lua/f/$")
+    assert.truthy(dir.FugitiveDirectory)
+    assert.truthy(dir.FugitiveFoldMarker)
+    assert.truthy(vim.api.nvim_get_hl(0, { name = "FugitiveStatusModified" }).bg)
+  end)
+
+  it("folds and unfolds a directory with <, > and =", function()
+    local _, buf = fixture()
+    local l = goto_line("^  ▾ cmd/$")
+    after(buf, function()
+      H.feed("<")
+    end)
+    assert.equals("  ▸ cmd/ (2)", H.lines(buf)[l])
+    assert.equals("M   init.lua", H.lines(buf)[l + 1])
+    -- stays folded across a refresh
+    after(buf, function()
+      H.feed("R")
+    end)
+    assert.equals("  ▸ cmd/ (2)", H.lines(buf)[l])
+    -- > unfolds it; = folds and unfolds
+    goto_line("^  ▸ cmd/")
+    after(buf, function()
+      H.feed(">")
+    end)
+    assert.equals("M     git.lua", H.lines(buf)[l + 1])
+    goto_line("^▾ lua/f/$")
+    after(buf, function()
+      H.feed("=")
+    end)
+    assert.same(
+      { "▸ lua/f/ (3)", "M tests/unit/x.lua" },
+      { H.lines(buf)[l - 1], H.lines(buf)[l] }
+    )
+    -- only in that section: the Staged lua/f/ is still open
+    assert.truthy(H.find_line("^A   health.lua$"))
+    after(buf, function()
+      H.feed("=")
+    end)
+    assert.equals("  ▾ cmd/", H.lines(buf)[l])
+  end)
+
+  it("nests a directory's files and their diffs in Vim folds", function()
+    local _, buf = fixture()
+    local d = goto_line("^  ▾ cmd/$")
+    goto_line("^M     git.lua$")
+    after(buf, function()
+      H.feed("=")
+    end)
+    local f = H.find_line("^M     git.lua$")
+    assert.equals(2, vim.fn.foldlevel(d - 1)) -- lua/f/
+    assert.equals(3, vim.fn.foldlevel(d)) -- cmd/
+    assert.equals(4, vim.fn.foldlevel(f)) -- starts the fold of its diff
+    assert.equals(4, vim.fn.foldlevel(f + 1))
+    assert.equals(1, vim.fn.foldlevel(H.find_line("^M README.md$")))
+  end)
+
+  it("stages, unstages and toggles all of a directory's files", function()
+    local repo, buf = fixture()
+    goto_line("^  ▾ cmd/$")
+    after(buf, function()
+      H.feed("s")
+    end)
+    local status = repo:status()
+    assert.truthy(status:match("M  lua/f/cmd/git.lua"))
+    assert.truthy(status:match("D  lua/f/cmd/log.lua"))
+    assert.truthy(status:match(" M lua/f/init.lua"))
+    -- the cursor moved on to the next file of the section, which is now the
+    -- only one in lua/f/: back on one line
+    assert.equals("M lua/f/init.lua", vim.api.nvim_get_current_line())
+    -- u on the Staged lua/f/ unstages all of it
+    local l = H.find_line("^Staged") + 1
+    while not H.lines(buf)[l]:match("^▾ lua/f/$") do
+      l = l + 1
+    end
+    vim.api.nvim_win_set_cursor(0, { l, 0 })
+    after(buf, function()
+      H.feed("u")
+    end)
+    status = repo:status()
+    assert.truthy(status:match(" M lua/f/cmd/git.lua"))
+    assert.truthy(status:match("%?%? lua/f/health.lua"))
+    -- - on the Untracked tests/ stages its files
+    goto_line("^▾ tests/$")
+    after(buf, function()
+      H.feed("-")
+    end)
+    status = repo:status()
+    assert.truthy(status:match("A  tests/a.txt"))
+    assert.truthy(status:match("A  tests/b.txt"))
+  end)
+
+  it("discards a directory's files with X, recoverably", function()
+    local repo, buf = fixture()
+    goto_line("^  ▾ cmd/$")
+    after(buf, function()
+      H.feed("X")
+    end)
+    assert.equals("g\n", repo:read("lua/f/cmd/git.lua"))
+    assert.equals("l\n", repo:read("lua/f/cmd/log.lua"))
+    assert.equals("changed\n", repo:read("lua/f/init.lua"))
+    assert.truthy(H.find_line("^Discarded: "))
+  end)
+
+  it("ignores the directory itself with gI on a directory line", function()
+    local repo, buf = fixture()
+    goto_line("^▾ tests/$")
+    H.feed("gI")
+    assert.truthy(vim.api.nvim_buf_get_name(0):match("/%.git/info/exclude$"))
+    assert.truthy(repo)
+    assert.equals("/tests/", vim.api.nvim_buf_get_lines(0, -2, -1, false)[1])
+    assert.truthy(buf)
+  end)
+
+  it("diffs a directory with dp and patches its files with I", function()
+    local _, buf = fixture()
+    goto_line("^  ▾ cmd/$")
+    local git = require("nvim-fugitive.cmd.git")
+    local term = require("nvim-fugitive.ui.terminal")
+    local run, term_run = git.run, term.run
+    local diffed, patched
+    git.run = function(args)
+      diffed = args
+    end
+    term.run = function(_, args)
+      patched = args
+    end
+    H.feed("dp")
+    H.feed("I")
+    git.run, term.run = run, term_run
+    assert.same({ "diff", "--", "lua/f/cmd/" }, diffed)
+    assert.same({ "add", "--patch", "--", "lua/f/cmd/git.lua", "lua/f/cmd/log.lua" }, patched)
+    assert.truthy(buf)
+  end)
+
+  it("takes a directory's files into a visual range", function()
+    local repo, buf = fixture()
+    local l = goto_line("^M README.md$")
+    after(buf, function()
+      H.feed("Vjs")
+    end)
+    local status = repo:status()
+    assert.truthy(status:match("M  README.md"))
+    assert.truthy(status:match("M  lua/f/init.lua"))
+    assert.truthy(status:match("M  lua/f/cmd/git.lua"))
+    assert.truthy(status:match(" M tests/unit/x.lua"))
+    assert.truthy(l)
+  end)
+
+  it("says a directory can't be opened by maps that need one file", function()
+    local _, buf = fixture()
+    goto_line("^  ▾ cmd/$")
+    H.feed("<CR>")
+    assert.equals(buf, vim.api.nvim_get_current_buf())
+    local found = false
+    for _, m in ipairs(log) do
+      if m.msg:match("directory") then
+        found = true
+      end
+    end
+    assert.is_true(found)
+  end)
+
+  it("moves to directories with ( ) and past them with ]/ [/", function()
+    local _, buf = fixture()
+    goto_line("^M README.md$")
+    H.feed(")")
+    assert.equals("▾ lua/f/", vim.api.nvim_get_current_line())
+    goto_line("^M README.md$")
+    H.feed("]/")
+    assert.equals("M     git.lua", vim.api.nvim_get_current_line())
+    assert.truthy(buf)
+  end)
+
+  it("lists an expanded untracked directory's files under it, by name", function()
+    require("nvim-fugitive.config").set({ summary = {} })
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     repo:write("dir/one.txt", "1\n")
     repo:write("dir/sub/two.txt", "2\n")
-    repo:write("dir/ignored.log", "x\n")
-    repo:write(".gitignore", "*.log\n")
     local buf = open(repo)
     local l = goto_line("^%? dir/$")
     after(buf, function()
       H.feed("=")
     end)
     assert.same(
-      { "? dir/", "? dir/one.txt", "? dir/sub/two.txt" },
+      { "? dir/", "?   one.txt", "?   sub/two.txt" },
       vim.list_slice(H.lines(buf), l, l + 2)
     )
-    -- folded under the directory (whose line starts the fold)
-    assert.equals(2, vim.fn.foldlevel(l))
     assert.equals(2, vim.fn.foldlevel(l + 1))
-    assert.equals(1, vim.fn.foldlevel(H.find_line("^%? %.gitignore$")))
-    -- a file of it shows its contents with =, one level deeper
-    goto_line("^%? dir/one.txt$")
-    after(buf, function()
-      H.feed("=")
-    end)
-    assert.same(
-      { "? dir/one.txt", "new file mode 100644", "@@ -0,0 +1 @@", "+1", "? dir/sub/two.txt" },
-      vim.list_slice(H.lines(buf), l + 1, l + 5)
-    )
-    assert.equals(3, vim.fn.foldlevel(l + 4))
-    -- and is staged on its own; the rest of the directory stays listed
-    goto_line("^%? dir/one.txt$")
+    goto_line("^%?   one.txt$")
     after(buf, function()
       H.feed("s")
     end)
-    assert.truthy(repo:status():match("^A  dir/one.txt\n"))
-    assert.truthy(repo:status():match("%?%? dir/sub/two.txt\n"))
-    assert.truthy(H.find_line("^A dir/one.txt$"))
-    assert.truthy(H.find_line("^%? dir/sub/two.txt$"))
-    assert.is_nil(H.find_line("^%? dir/one.txt$"))
-    -- the cursor moved on to the next untracked file
-    assert.equals("? dir/sub/two.txt", vim.api.nvim_get_current_line())
-    -- git now reports the rest as dir/sub/: it stays expanded, and = still
-    -- collapses it
-    local sub = goto_line("^%? dir/sub/$")
-    assert.equals("? dir/sub/two.txt", H.lines(buf)[sub + 1])
-    after(buf, function()
-      H.feed("=")
-    end)
-    assert.is_nil(H.find_line("^%? dir/sub/two.txt$"))
-    -- s on a directory line stages all of it
-    goto_line("^%? dir/sub/$")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.truthy(H.find_line("^A dir/sub/two.txt$"))
-    assert.is_nil(H.find_line("^%? dir/"))
-  end)
-
-  it("stages and unstages files with s, u and -", function()
-    local repo = H.repo({ files = { ["a.txt"] = "a\n" } })
-    repo:write("a.txt", "A\n")
-    repo:write("u.txt", "u\n")
-    local buf = open(repo)
-    goto_line("^M a.txt")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.equals("M  a.txt\n?? u.txt\n", repo:status())
-    assert.truthy(H.find_line("^Staged %(1%)"))
-    goto_line("^M a.txt")
-    after(buf, function()
-      H.feed("u")
-    end)
-    assert.equals(" M a.txt\n?? u.txt\n", repo:status())
-    goto_line("^%? u.txt")
-    after(buf, function()
-      H.feed("-")
-    end)
-    assert.equals(" M a.txt\nA  u.txt\n", repo:status())
-    -- staging is routine: no notification for any of these keypresses
-    assert.same({}, log)
-  end)
-
-  it("moves on when a hunk staged from an expanded file empties it", function()
-    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "1\n2\n3\n4\n5\n6\n7\n8\n9\n" } })
-    repo:write("a", "A\n")
-    local buf = open(repo)
-    goto_line("^M a$")
-    after(buf, function()
-      H.feed("=")
-    end)
-    -- - on a diff line stages that hunk, the whole change of a
-    goto_line("^%+A$")
-    after(buf, function()
-      H.feed("-")
-    end)
-    assert.equals("M  a\n", repo:status())
-    -- Unstaged is empty, Staged is where a went: nowhere else to go but a
-    assert.equals("M a", vim.api.nvim_get_current_line())
-
-    -- two hunks: the first one leaves the file where it was
-    repo:write("b", "ONE\n2\n3\n4\n5\n6\n7\n8\nNINE\n")
-    repo:write("c", "c\n")
-    vim.cmd("Git")
-    H.wait(function()
-      return H.find_line("^%? c$") ~= nil
-    end)
-    goto_line("^M b$")
-    after(buf, function()
-      H.feed("=")
-    end)
-    goto_line("^%+ONE$")
-    after(buf, function()
-      H.feed("-")
-    end)
-    assert.truthy(repo:status():match("MM b"))
-    assert.equals("Unstaged", summary.state(buf).info[vim.fn.line(".")].section)
-    -- the second one empties it: on to the next section, not Staged
-    goto_line("^%+NINE$")
-    after(buf, function()
-      H.feed("-")
-    end)
-    assert.truthy(repo:status():match("M  b"))
-    assert.equals("? c", vim.api.nvim_get_current_line())
-  end)
-
-  it("moves on to the next section when the last file of one is staged", function()
-    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
-    repo:write("a", "A\n")
-    repo:write("b", "B\n")
-    repo:write("u.txt", "u\n")
-    local buf = open(repo)
-    goto_line("^%? u.txt$")
-    after(buf, function()
-      H.feed("-")
-    end)
-    assert.truthy(repo:status():match("A  u.txt"))
-    -- not A u.txt in Staged: the first file of Unstaged
-    assert.equals("M a", vim.api.nvim_get_current_line())
-    -- unstaging the only staged file: it lands in Untracked, and Unstaged
-    -- or Untracked are where unstaged files go, so the cursor follows it
-    goto_line("^A u.txt$")
-    after(buf, function()
-      H.feed("u")
-    end)
-    assert.equals("? u.txt", vim.api.nvim_get_current_line())
-  end)
-
-  it("moves on to the next file of the section after staging or unstaging one", function()
-    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n", ["c"] = "c\n" } })
-    repo:write("a", "A\n")
-    repo:write("b", "B\n")
-    repo:write("c", "C\n")
-    local buf = open(repo)
-    goto_line("^M b$")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.equals(" M a\nM  b\n M c\n", repo:status())
-    -- next unstaged file, not b in Staged
-    assert.equals("M c", vim.api.nvim_get_current_line())
-    assert.equals("Unstaged", summary.state(buf).info[vim.fn.line(".")].section)
-    -- the last one of a section: on to the previous one
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.equals("M a", vim.api.nvim_get_current_line())
-    -- and the other way around
-    goto_line("^Staged")
-    vim.cmd("normal! j")
-    assert.equals("M b", vim.api.nvim_get_current_line())
-    after(buf, function()
-      H.feed("u")
-    end)
-    assert.equals("M c", vim.api.nvim_get_current_line())
-    assert.equals("Staged", summary.state(buf).info[vim.fn.line(".")].section)
-  end)
-
-  it("folds a file when staging or unstaging it", function()
-    local repo = H.repo({ files = { ["f"] = "1\n", ["g"] = "1\n" } })
-    repo:write("f", "2\n")
-    repo:write("g", "2\n")
-    local buf = open(repo)
-    goto_line("^M f")
-    after(buf, function()
-      H.feed("=")
-    end)
-    assert.truthy(H.find_line("^@@"))
-    goto_line("^M f")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.is_nil(H.find_line("^@@"))
-    -- unfolded in Staged, then unstaged: comes back folded
-    goto_line("^Staged")
-    vim.cmd("normal! j")
-    after(buf, function()
-      H.feed("=")
-    end)
-    assert.truthy(H.find_line("^@@"))
-    goto_line("^Staged")
-    vim.cmd("normal! j")
-    after(buf, function()
-      H.feed("u")
-    end)
-    assert.is_nil(H.find_line("^@@"))
-    -- and staging it again does not bring back the old Staged expansion
-    goto_line("^M f")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.is_nil(H.find_line("^@@"))
-  end)
-
-  it("stages a whole section from its heading and unstages all with U", function()
-    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
-    repo:write("a", "A\n")
-    repo:write("b", "B\n")
-    local buf = open(repo)
-    goto_line("^Unstaged")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.equals("M  a\nM  b\n", repo:status())
-    after(buf, function()
-      H.feed("U")
-    end)
-    assert.equals(" M a\n M b\n", repo:status())
-  end)
-
-  it("shows inline diffs with = and folds them", function()
-    local repo = H.repo({ files = { ["f"] = "1\n2\n3\n" } })
-    repo:write("f", "1\nTWO\n3\n")
-    local buf = open(repo)
-    goto_line("^M f")
-    after(buf, function()
-      H.feed("=")
-    end)
-    local l = H.find_line("^M f")
-    assert.same(
-      { "M f", "@@ -1,3 +1,3 @@", " 1", "-2", "+TWO", " 3" },
-      vim.list_slice(H.lines(buf), l, l + 5)
-    )
-    assert.equals("expr", vim.wo.foldmethod)
-    assert.equals(2, vim.fn.foldlevel(l + 2))
-    assert.equals(1, vim.fn.foldlevel(H.find_line("^Unstaged")))
-    -- < hides it again from a diff line, cursor back on the file
-    vim.api.nvim_win_set_cursor(0, { l + 3, 0 })
-    after(buf, function()
-      H.feed("<")
-    end)
-    assert.equals("M f", vim.api.nvim_get_current_line())
-    assert.is_nil(H.find_line("^@@"))
-  end)
-
-  it("stages a single hunk and selected lines (visual)", function()
-    local content = {}
-    for i = 1, 30 do
-      content[i] = "line " .. i
-    end
-    local repo = H.repo({ files = { ["f"] = table.concat(content, "\n") .. "\n" } })
-    content[2] = "CHANGED 2"
-    content[3] = "CHANGED 3"
-    content[28] = "CHANGED 28"
-    repo:write("f", table.concat(content, "\n") .. "\n")
-    local buf = open(repo)
-    goto_line("^M f")
-    after(buf, function()
-      H.feed(">")
-    end)
-    -- stage only the second hunk (cursor on a line inside it)
-    goto_line("^%+CHANGED 28")
-    after(buf, function()
-      H.feed("s")
-    end)
-    local staged = repo:git("diff", "--cached")
-    assert.truthy(staged:match("%+CHANGED 28"))
-    assert.falsy(staged:match("CHANGED 2\n"))
-    -- now stage only "-line 2"/"+CHANGED 2" from the first hunk
-    local first = goto_line("^%-line 2$")
-    local plus = assert(H.find_line("^%+CHANGED 2$"))
-    vim.api.nvim_win_set_cursor(0, { first, 0 })
-    after(buf, function()
-      H.feed("V" .. (plus - first) .. "js")
-    end)
-    staged = repo:git("diff", "--cached")
-    assert.truthy(staged:match("%+CHANGED 2\n"))
-    assert.falsy(staged:match("%+CHANGED 3"))
-    assert.truthy(repo:git("diff"):match("%+CHANGED 3"))
-    -- unstage one line from the Staged section
-    goto_line("^M f") -- unstaged file
-    local sl = assert(H.find_line("^Staged"))
-    vim.api.nvim_win_set_cursor(0, { sl + 1, 0 })
-    after(buf, function()
-      H.feed(">")
-    end)
-    local line28
-    for l, i in ipairs(summary.state(buf).info) do
-      if i.section == "Staged" and H.lines(buf)[l] == "+CHANGED 28" then
-        line28 = l
-      end
-    end
-    vim.api.nvim_win_set_cursor(0, { line28, 0 })
-    after(buf, function()
-      H.feed("u")
-    end)
-    staged = repo:git("diff", "--cached")
-    assert.falsy(staged:match("CHANGED 28"))
-    assert.truthy(staged:match("%+CHANGED 2\n"))
-  end)
-
-  it("snaps the cursor past blank separator lines", function()
-    local repo = H.repo({ files = { ["a"] = "a\n" } })
-    repo:write("a", "A\n")
-    repo:write("u", "u\n")
-    local buf = open(repo)
-    -- headless tests never reach the main loop that fires CursorMoved;
-    -- move, then fire the buffer's own CursorMoved handler
-    local function move(keys)
-      H.feed(keys)
-      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-      return vim.api.nvim_get_current_line()
-    end
-    goto_line("^%? u")
-    move("")
-    assert.equals("Unstaged (1)", move("j"))
-    assert.equals("? u", move("k"))
-    goto_line("^Help:")
-    move("")
-    assert.equals("Untracked (1)", move("j"))
-    assert.equals("M a", move("G"))
-    -- visual mode is left alone
-    goto_line("^%? u")
-    move("")
-    H.feed("Vj")
-    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-    assert.equals("", vim.api.nvim_get_current_line())
-    H.feed("<Esc>")
-  end)
-
-  it("navigates with ( ) ]] [[ gu gs and i", function()
-    local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
-    repo:write("a", "A\n")
-    repo:write("b", "B\n")
-    repo:git("add", "b")
-    repo:write("u", "u\n")
-    local buf = open(repo)
-    vim.api.nvim_win_set_cursor(0, { 1, 0 })
-    H.feed(")")
-    assert.equals("? u", vim.api.nvim_get_current_line())
-    H.feed(")")
-    assert.equals("M a", vim.api.nvim_get_current_line())
-    H.feed("(")
-    assert.equals("? u", vim.api.nvim_get_current_line())
-    H.feed("]]")
-    assert.equals("Unstaged (1)", vim.api.nvim_get_current_line())
-    H.feed("gs")
-    assert.equals("M b", vim.api.nvim_get_current_line())
-    H.feed("gu")
-    assert.equals("? u", vim.api.nvim_get_current_line())
-    goto_line("^M a")
-    after(buf, function()
-      H.feed("i")
-    end)
-    assert.equals("@@ -1 +1 @@", vim.api.nvim_get_current_line())
-  end)
-
-  it("opens files, index versions and commits with <CR>", function()
-    local repo = H.repo({ files = { ["a"] = "a\n" } })
-    repo:write("a", "A\n")
-    repo:git("add", "a")
-    repo:write("a", "AA\n")
-    local buf = open(repo)
-    local sl = H.find_line("^Staged")
-    vim.api.nvim_win_set_cursor(0, { sl + 1, 0 })
-    H.feed("<CR>")
-    assert.equals("fugitive://" .. repo.root .. "/.git//0/a", vim.api.nvim_buf_get_name(0))
-    assert.same({ "A" }, H.lines(0))
-    vim.cmd("buffer " .. buf)
-    goto_line("^Unstaged")
-    vim.api.nvim_win_set_cursor(0, { H.find_line("^Unstaged") + 1, 0 })
-    H.feed("<CR>")
-    assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
-  end)
-
-  describe("picks the window to open in", function()
-    local function wins()
-      return vim.api.nvim_tabpage_list_wins(0)
-    end
-    local function row(win)
-      return vim.api.nvim_win_get_position(win)[1]
-    end
-
-    it("<CR>: a split below when the summary is the only window", function()
-      local repo = H.repo({ files = { ["a"] = "a\n" } })
-      repo:write("a", "A\n")
-      vim.cmd("only")
-      local buf = open(repo)
-      vim.cmd("only")
-      local summary_win = vim.api.nvim_get_current_win()
-      vim.o.splitbelow = false
-      goto_line("^M a")
-      H.feed("<CR>")
-      assert.equals(2, #wins())
-      assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
-      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-      assert.is_true(row(vim.api.nvim_get_current_win()) > row(summary_win))
-    end)
-
-    it("<CR>: the window visited last, keeping the summary", function()
-      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
-      repo:write("a", "A\n")
-      vim.cmd("only")
-      vim.cmd("cd " .. repo.root)
-      vim.cmd("edit b")
-      local file_win = vim.api.nvim_get_current_win()
-      vim.cmd("vertical Git")
-      local buf = vim.api.nvim_get_current_buf()
-      H.wait(function()
-        return summary.state(buf) ~= nil and summary.state(buf).tick > 0
-      end)
-      local summary_win = vim.api.nvim_get_current_win()
-      goto_line("^M a")
-      H.feed("<CR>")
-      assert.equals(2, #wins())
-      assert.equals(file_win, vim.api.nvim_get_current_win())
-      assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
-      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-    end)
-
-    it("o: a split below the summary, whatever 'splitbelow' says", function()
-      local repo = H.repo({ files = { ["a"] = "a\n" } })
-      repo:write("a", "A\n")
-      vim.cmd("only")
-      local buf = open(repo)
-      vim.cmd("only")
-      local summary_win = vim.api.nvim_get_current_win()
-      vim.o.splitbelow = false
-      goto_line("^M a")
-      H.feed("o")
-      assert.equals(2, #wins())
-      assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
-      assert.is_true(row(vim.api.nvim_get_current_win()) > row(summary_win))
-      assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-    end)
-
-    it("two- and three-way diffs: a split below, keeping the other windows", function()
-      local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
-      repo:git("checkout", "-q", "-b", "topic")
-      repo:commit("topic", { ["c"] = "topic\n" })
-      repo:git("checkout", "-q", "main")
-      repo:commit("main", { ["c"] = "main\n" })
-      repo:git("merge", "topic", { allow_fail = true })
-      repo:write("d", "D\n")
-      vim.cmd("only")
-      vim.cmd("cd " .. repo.root)
-      vim.cmd("edit o")
-      local original = vim.api.nvim_get_current_win()
-      vim.cmd("vertical Git")
-      local buf = vim.api.nvim_get_current_buf()
-      H.wait(function()
-        return summary.state(buf) ~= nil and summary.state(buf).tick > 0
-      end)
-      local summary_win = vim.api.nvim_get_current_win()
-      local function untouched()
-        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-        assert.equals(repo:path("o"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original)))
-      end
-
-      goto_line("^U c$")
-      H.feed("dd")
-      -- original + summary + ours, work tree, theirs below the summary
-      assert.equals(5, #wins())
-      untouched()
-      local merge = {}
-      for _, w in ipairs(wins()) do
-        if w ~= summary_win and w ~= original then
-          assert.is_true(row(w) > row(summary_win))
-          assert.is_true(vim.wo[w].diff)
-          table.insert(merge, w)
-        end
-      end
-      assert.equals(3, #merge)
-      -- closing any one of the three closes the others
-      vim.api.nvim_win_close(merge[1], false)
-      H.wait(function()
-        return #wins() == 2
-      end, "merge windows closed")
-      untouched()
-
-      -- dq closes the sides only, keeping the work tree file
-      vim.api.nvim_set_current_win(summary_win)
-      goto_line("^U c$")
-      H.feed("dd")
-      assert.equals(5, #wins())
-      local work = vim.api.nvim_get_current_win()
-      vim.api.nvim_set_current_win(summary_win)
-      H.feed("dq")
-      vim.wait(50)
-      assert.equals(3, #wins())
-      assert.equals(repo:path("c"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(work)))
-      assert.is_false(vim.wo[work].diff)
-      vim.api.nvim_win_close(work, false)
-      untouched()
-
-      -- a two-way diff: a split below too
-      vim.api.nvim_set_current_win(summary_win)
-      goto_line("^M d$")
-      H.feed("dv")
-      -- index | work tree, below the summary
-      assert.equals(4, #wins())
-      untouched()
-      local found = 0
-      for _, w in ipairs(wins()) do
-        if w ~= summary_win and w ~= original then
-          found = found + 1
-          assert.is_true(vim.wo[w].diff)
-          assert.is_true(row(w) > row(summary_win))
-        end
-      end
-      assert.equals(2, found)
-      assert.truthy(vim.fn.bufwinid(repo:path("d")) ~= -1)
-    end)
-
-    it("a new diff replaces the one already open", function()
-      local repo = H.repo({ files = { ["c"] = "base\n", ["d"] = "d\n", ["o"] = "o\n" } })
-      repo:git("checkout", "-q", "-b", "topic")
-      repo:commit("topic", { ["c"] = "topic\n" })
-      repo:git("checkout", "-q", "main")
-      repo:commit("main", { ["c"] = "main\n" })
-      repo:git("merge", "topic", { allow_fail = true })
-      repo:write("d", "D\n")
-      vim.cmd("only")
-      vim.cmd("cd " .. repo.root)
-      vim.cmd("edit o")
-      local original = vim.api.nvim_get_current_win()
-      vim.cmd("vertical Git")
-      local buf = vim.api.nvim_get_current_buf()
-      H.wait(function()
-        return summary.state(buf) ~= nil and summary.state(buf).tick > 0
-      end)
-      local summary_win = vim.api.nvim_get_current_win()
-      local function diff_wins()
-        local n = 0
-        for _, w in ipairs(wins()) do
-          if w ~= summary_win and w ~= original then
-            assert.is_true(vim.wo[w].diff)
-            n = n + 1
-          end
-        end
-        return n
-      end
-      local function again(pattern, keys)
-        vim.api.nvim_set_current_win(summary_win)
-        goto_line(pattern)
-        H.feed(keys)
-        vim.wait(50)
-        assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-        assert.equals(repo:path("o"), vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(original)))
-      end
-
-      -- the three-way diff twice: one layout of three windows, not two
-      again("^U c$", "dd")
-      assert.equals(3, diff_wins())
-      again("^U c$", "dd")
-      assert.equals(3, diff_wins())
-      assert.equals(5, #wins())
-      -- a two-way diff replaces it
-      again("^M d$", "dv")
-      assert.equals(2, diff_wins())
-      assert.equals(4, #wins())
-      -- and the three-way diff replaces that
-      again("^U c$", "dd")
-      assert.equals(3, diff_wins())
-      assert.equals(5, #wins())
-    end)
-  end)
-
-  it("opens the thing under the cursor in a float with f", function()
-    local repo = H.repo({ files = { ["a"] = "a\n" } })
-    repo:write("a", "A\n")
-    repo:git("add", "a")
-    repo:write("a", "AA\n")
-    local buf = open(repo)
-    local summary_win = vim.api.nvim_get_current_win()
-    local function floating()
-      return vim.api.nvim_win_get_config(0).relative ~= ""
-    end
-    -- the index version of a staged file
-    vim.api.nvim_win_set_cursor(0, { H.find_line("^Staged") + 1, 0 })
-    H.feed("f")
-    assert.is_true(floating())
-    assert.equals("fugitive://" .. repo.root .. "/.git//0/a", vim.api.nvim_buf_get_name(0))
-    assert.same({ "A" }, H.lines(0))
-    -- leaving it closes it
-    local float_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(summary_win)
-    H.wait(function()
-      return not vim.api.nvim_win_is_valid(float_win)
-    end, "float closed")
-    assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-    -- the work-tree file, and the summary stays where it was
-    vim.api.nvim_win_set_cursor(0, { H.find_line("^Unstaged") + 1, 0 })
-    H.feed("f")
-    assert.is_true(floating())
-    assert.equals(repo:path("a"), vim.api.nvim_buf_get_name(0))
-    assert.equals(buf, vim.api.nvim_win_get_buf(summary_win))
-    -- a commit (one float at a time)
-    vim.cmd("close")
-    goto_line("^Head:")
-    H.feed("f")
-    assert.is_true(floating())
-    assert.equals("commit", vim.b.fugitive_type)
-    assert.equals(1, #vim.tbl_filter(function(w)
-      return vim.api.nvim_win_get_config(w).relative ~= ""
-    end, vim.api.nvim_list_wins()))
-  end)
-
-  it("shows Unpushed/Unpulled against the upstream and a Push header", function()
-    local origin = H.repo({ files = { ["f"] = "1\n" } })
-    local clone = H.clone(origin)
-    origin:commit("upstream change", { ["g"] = "g\n" })
-    clone:git("fetch", "-q")
-    clone:commit("local change", { ["h"] = "h\n" })
-    local buf = open(clone)
-    local lines = H.lines(buf)
-    assert.equals("Head: main", lines[1])
-    assert.equals("Merge: origin/main", lines[2])
-    assert.truthy(H.find_line("^Unpushed to origin/main %(1%)$"))
-    assert.truthy(H.find_line("^%x+ local change$"))
-    assert.truthy(H.find_line("^Unpulled from origin/main %(1%)$"))
-    -- <CR> on a commit opens the commit object
-    goto_line("local change$")
-    H.feed("<CR>")
-    assert.truthy(vim.api.nvim_buf_get_name(0):match("^fugitive://.*//%x+$"))
-    assert.equals("commit", vim.b.fugitive_type)
-    assert.truthy(H.find_line("^diff %-%-git a/h b/h"))
-  end)
-
-  it("shows a commit's diff inline with =", function()
-    local origin = H.repo({ files = { ["f"] = "1\n2\n3\n" } })
-    local clone = H.clone(origin)
-    clone:commit("local change", { ["f"] = "1\nTWO\n3\n", ["new"] = "n\n" })
-    local buf = open(clone)
-    local l = goto_line("local change$")
-    after(buf, function()
-      H.feed("=")
-    end)
-    local lines = H.lines(buf)
-    assert.same({
-      "diff --git a/f b/f",
-      "@@ -1,3 +1,3 @@",
-      " 1",
-      "-2",
-      "+TWO",
-      " 3",
-      "diff --git a/new b/new",
-      "new file mode 100644",
-      "@@ -0,0 +1 @@",
-      "+n",
-    }, vim.list_slice(lines, l + 1, l + 10))
-    -- folded under the commit line
-    assert.equals(2, vim.fn.foldlevel(l + 3))
-    -- <CR> on a diff line opens the file at that commit, at that line
-    vim.api.nvim_win_set_cursor(0, { l + 5, 0 })
-    H.feed("<CR>")
-    local commit = clone:rev("HEAD")
-    assert.equals(
-      "fugitive://" .. clone.root .. "/.git//" .. commit .. "/f",
-      vim.api.nvim_buf_get_name(0)
-    )
-    assert.equals(2, vim.fn.line("."))
-    vim.cmd("buffer " .. buf)
-    -- < from inside the diff hides it, back on the commit line
-    vim.api.nvim_win_set_cursor(0, { l + 4, 0 })
-    after(buf, function()
-      H.feed("<")
-    end)
-    assert.equals(l, vim.fn.line("."))
-    assert.is_nil(H.find_line("^@@"))
-  end)
-
-  it("works in an unborn repository", function()
-    local repo = H.repo()
-    repo:write("first", "1\n")
-    repo:git("add", "first")
-    local buf = open(repo)
-    assert.equals("Head: main", H.lines(buf)[1])
-    goto_line("^A first")
-    after(buf, function()
-      H.feed("u")
-    end)
-    assert.equals("?? first\n", repo:status())
-  end)
-
-  it("shows submodules as entries and opens their own summary", function()
-    local sub = H.repo({ files = { ["s.txt"] = "s\n" } })
-    local parent = H.repo({ files = { ["p.txt"] = "p\n" } })
-    parent:git("-c", "protocol.file.allow=always", "submodule", "add", "-q", sub.root, "sm")
-    parent:commit("add submodule")
-    local inner = setmetatable({ root = parent:path("sm") }, getmetatable(sub))
-    inner:git("config", "user.name", "T")
-    inner:git("config", "user.email", "t@e")
-    inner:commit("move submodule", { ["s.txt"] = "s2\n" })
-    local buf = open(parent)
-    goto_line("^M sm$")
-    after(buf, function()
-      H.feed("=")
-    end)
-    assert.truthy(H.find_line("move submodule"))
-    goto_line("^M sm$")
-    H.feed("<CR>")
-    assert.equals(
-      "fugitive://" .. parent.root .. "/.git/modules/sm//",
-      vim.api.nvim_buf_get_name(0)
-    )
-    -- stage the new pointer from the parent
-    vim.cmd("buffer " .. buf)
-    goto_line("^M sm$")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.equals("M  sm\n", parent:status())
-  end)
-
-  it("refreshes when the repository changes outside (watcher)", function()
-    require("nvim-fugitive.watch").enable(true)
-    local repo = H.repo({ files = { ["a"] = "a\n" } })
-    local buf = open(repo)
-    assert.is_nil(H.find_line("^Untracked"))
-    repo:write("new", "x\n")
-    repo:git("add", "new")
-    H.wait(function()
-      return H.find_line("^A new", buf) ~= nil
-    end, "watcher refresh", 5000)
-  end)
-
-  it("puts conflicts in an Unmerged section", function()
-    local repo = H.repo({ files = { ["c"] = "base\n" } })
-    repo:git("checkout", "-q", "-b", "topic")
-    repo:commit("topic", { ["c"] = "topic\n" })
-    repo:git("checkout", "-q", "main")
-    repo:commit("main", { ["c"] = "main\n" })
-    repo:git("merge", "topic", { allow_fail = true })
-    local buf = open(repo)
-    assert.truthy(H.find_line("^Unmerged %(1%)$", buf))
-    goto_line("^U c$")
-    -- s marks it resolved
-    repo:write("c", "resolved\n")
-    after(buf, function()
-      H.feed("s")
-    end)
-    assert.equals("M  c\n", repo:status())
-  end)
-
-  it("is configurable: maps can be disabled and remapped", function()
-    require("nvim-fugitive").setup({ maps = { summary = { s = false, a = "stage" } } })
-    local repo = H.repo({ files = { ["a"] = "a\n" } })
-    repo:write("a", "A\n")
-    local buf = open(repo)
-    assert.equals("", vim.fn.maparg("s", "n"))
-    goto_line("^M a")
-    after(buf, function()
-      H.feed("a")
-    end)
-    assert.equals("M  a\n", repo:status())
-    require("nvim-fugitive").setup({})
+    assert.truthy(repo:status():match("A  dir/one.txt"))
   end)
 end)

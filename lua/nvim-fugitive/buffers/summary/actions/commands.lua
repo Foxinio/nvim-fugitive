@@ -49,10 +49,14 @@ end
 function M.ignore(buf, visual)
   local st = state(buf)
   local l1, l2 = range(visual)
-  local paths = {}
+  local paths, seen = {}, {}
   for _, it in ipairs(stage.selection(buf, l1, l2)) do
-    if it.type == "file" then
-      table.insert(paths, it.entry.path)
+    -- a directory line (tree view) ignores the directory, not each file
+    local p = it.info and it.info.kind == "dir" and it.info.dir
+      or (it.type == "file" and it.entry.path)
+    if p and not seen[p] then
+      seen[p] = true
+      table.insert(paths, p)
     end
   end
   local file = exclude_path(st.repo, vim.v.count)

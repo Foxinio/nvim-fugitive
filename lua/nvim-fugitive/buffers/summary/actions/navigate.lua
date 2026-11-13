@@ -35,8 +35,15 @@ local function jump_kind(buf, kinds, dir, count)
   return found
 end
 
-local item_kinds =
-  { file = true, commit = true, rebase = true, stash = true, hunk = true, submodule = true }
+local item_kinds = {
+  file = true,
+  dir = true,
+  commit = true,
+  rebase = true,
+  stash = true,
+  hunk = true,
+  submodule = true,
+}
 
 function M.next_item(buf)
   jump_kind(buf, item_kinds, 1)
