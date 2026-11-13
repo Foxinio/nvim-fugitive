@@ -19,6 +19,9 @@ On top of that:
   branch pickers for `:Git push`, with
   [telescope](https://github.com/nvim-telescope/telescope.nvim) or
   `vim.ui.select`.
+- **Changes as a tree.** In the summary, files that share a directory
+  group under it, and a directory folds like a file's diff. Or keep
+  vim-fugitive's flat list: see [Upstream parity](#upstream-parity).
 - **gitsigns** shows a commit's changes in the files you open from it.
 - **git's colours** in the float, with
   [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim).
@@ -70,6 +73,7 @@ statusline and fugitive-based plugins keep working.
 | `:Git` | the summary buffer: staged/unstaged/untracked files, unpushed commits, stashes |
 | `s` / `u` / `-` on a file | stage / unstage / toggle it (in Visual mode on diff lines: just those lines) |
 | `=` on a file | show its diff inline |
+| `=` on a directory | fold or unfold its files (`s`, `u`, `-`, `X` on a directory act on all of them) |
 | `cc` | commit: the message opens in this Neovim, `:wq` to commit, `:q!` to abort |
 | `X` on a file | discard the change (it is saved first; undo with `g-` or `:Git restore-discard`) |
 | `dd` on a file | `:Gdiffsplit` against the index (three-way for conflicts) |
@@ -151,6 +155,24 @@ require("nvim-fugitive").setup({
 })
 ```
 
+Show each file's status as the background colour of its name instead of a
+letter (the colours are the `FugitiveStatus*` highlight groups,
+`:h fugitive-summary-tree`):
+
+```lua
+require("nvim-fugitive").setup({
+  summary = { status = "color" },
+})
+```
+
+Full paths under the directory lines, and a line for every directory level:
+
+```lua
+require("nvim-fugitive").setup({
+  summary = { paths = "full", compact = false },
+})
+```
+
 A smaller float, with a square border:
 
 ```lua
@@ -227,9 +249,21 @@ require("nvim-fugitive").setup({
   browse = { hosts = {}, providers = {} },
   -- optional plugins; each falls back gracefully when not installed
   integrations = { telescope = true, overseer = true, gitsigns = true },
-  -- the summary window ("split", "vsplit", "tab", "current") and how many
-  -- commits the Unpushed/Unpulled sections show
-  summary = { window = "split", log_limit = 256 },
+  summary = {
+    -- the summary window: "split", "vsplit", "tab" or "current"
+    window = "split",
+    -- how many commits the Unpushed/Unpulled sections show
+    log_limit = 256,
+    -- files as a directory tree; = < > fold a directory (:h fugitive-summary-tree)
+    tree = true,
+    -- no line for a directory with one changed file, or for a directory whose
+    -- only content is one subdirectory (lua/nvim-fugitive/ is one line)
+    compact = true,
+    -- files under a directory line: "name" (indented) or "full" (whole path)
+    paths = "name",
+    -- "letter" (M, A, D, ?, …) or "color" (the name's background shows it)
+    status = "letter",
+  },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it for every command fugitive runs except :Git! (typed commands,
   -- summary maps, aliases), e.g. { commit = { "--signoff" } }
@@ -239,11 +273,31 @@ require("nvim-fugitive").setup({
 
 </details>
 
+## Upstream parity
+
+The commands, maps, `fugitive://` URLs and Vimscript API work as in
+vim-fugitive. By default the summary shows its files as a tree. For
+vim-fugitive's flat list with status letters:
+
+```lua
+require("nvim-fugitive").setup({
+  summary = { tree = false, status = "letter" },
+})
+```
+
+`status = "letter"` is already the default; it's there so the snippet also
+undoes a `status = "color"` set elsewhere.
+
+With these settings the summary's text is the same as vim-fugitive's; the
+test suite checks it against vim-fugitive itself. The other deliberate
+differences, such as where command output goes and the editor service, are
+listed in `:help fugitive-differences`.
+
 ## Features
 
 | Feature | Notes |
 |---|---|
-| `:Git` summary | Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled and Stashes (`=` expands a commit or stash); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
+| `:Git` summary | files as a foldable directory tree (or upstream's flat list); Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled and Stashes (`=` expands a commit or stash); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
 | `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); successful commands notify their output, or a short note when significant; failed pushes put rejected refs and hook errors in quickfix |
 | Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
 | `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |

@@ -91,7 +91,9 @@ Calling setup is optional; without it the defaults below apply. >lua
                      "submodule update", "lfs" },
     browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
     integrations = { telescope = true, overseer = true, gitsigns = true },
-    summary = { window = "split", log_limit = 256 },
+    summary = { window = "split", log_limit = 256, tree = true,
+                compact = true, paths = "name", status = "letter" },
+                                        -- |fugitive-summary-tree|
     args = {},                          -- |fugitive-args|
   })
 <
@@ -329,6 +331,71 @@ file of the section they left, else the previous one, else (the section is
 empty now) the first file of the next section the files do not land in.
 Whole files that move are folded.
 
+                                                     *fugitive-summary-tree*
+The files of the Unmerged, Untracked, Unstaged and Staged sections show as
+a directory tree. With the default `compact`, a directory gets its own line
+when it holds two or more of the section's files, counting those in its
+subdirectories; its files are indented under it, by their path from it: >
+
+  Unstaged (5)
+  M README.md
+  ▾ lua/nvim-fugitive/
+    ▾ cmd/
+  M     git.lua
+  D     log.lua
+  M   init.lua
+  M tests/unit/argv_spec.lua
+<
+`▾` marks an open directory and `▸` a folded one, which also shows how
+many files it hides: `▸ cmd/ (2)`. Files and directories keep the order of
+their paths, as git lists them. A directory with only one changed file is
+not a line of its own: the file keeps its path (tests/unit/argv_spec.lua
+above; with src/a.lua and src/x/b.lua, `src/` is a line with `a.lua` and
+`x/b.lua` under it). A directory whose only content is one subdirectory
+merges with it (lua/nvim-fugitive/). Both are the `compact` option, on by
+default; without it every directory level is a line.
+
+On a directory line:
+- `=` folds or unfolds it, `<` folds it and `>` unfolds it, in that section
+  only: its lines are hidden, not just closed. It stays folded until you
+  unfold it, across refreshes.
+- `s`, `u`, `-`, `X` and `I`/`P` act on all its files, as on a section
+  heading; `gI` ignores the directory itself; `dp` diffs it.
+- `<CR>`, `o`, `f` and `dd` need one file and say so.
+- `(` and `)` stop on it; `[/` and `]/` go past it to the files.
+Vim's own folds (|zc|, |zo|) work too, on the lines that are shown: they
+nest sections, then directories, then files and their inline diffs.
+
+The `summary` options (|fugitive-config|):
+  tree        true: the tree; false: a flat list of full paths (`compact`
+              and `paths` then change nothing).
+  compact     true: as above; false: a line for every directory level.
+  paths       "name": files under a directory show their path from it,
+              indented; "full": their path from the repository root,
+              unindented, after the status letter (directory lines keep
+              their indent).
+  status      "letter": a status letter (M A D R ? U T) before each file;
+              "color": no letter, the name's background shows the status.
+
+The colours of "color" are highlight groups, defined with `default` so a
+colorscheme or your own |:highlight| wins:
+  FugitiveStatusModified     orange
+  FugitiveStatusAdded        green
+  FugitiveStatusDeleted      red
+  FugitiveStatusRenamed      blue (renames and copies)
+  FugitiveStatusUntracked    grey
+  FugitiveStatusUnmerged     magenta
+  FugitiveStatusTypechange   purple
+Directory names use FugitiveDirectory (linked to |hl-Directory|) and the
+markers FugitiveFoldMarker (linked to Special). The colour is the name's
+background; to change one, set the group after |:colorscheme| (which clears
+it) or in a |ColorScheme| autocommand: >lua
+  vim.api.nvim_set_hl(0, "FugitiveStatusModified",
+    { bg = "#d7af00", fg = "#000000" })
+<
+
+vim-fugitive's flat look is `summary = { tree = false, status = "letter" }`.
+
                                                      *fugitive-summary-maps*
 Staging maps ~
   s           Stage the file or hunk under the cursor (or the selection).
@@ -345,11 +412,14 @@ Staging maps ~
               stash entry or an Unpushed/Unpulled commit: show its changes
               (read only; <CR> on a line opens the file there). On an
               untracked directory: list its files, each one staged, shown
-              or discarded on its own.
-  >  <        Show or hide the inline diff.
+              or discarded on its own. On a directory line: fold or unfold
+              it (|fugitive-summary-tree|).
+  >  <        Show or hide the inline diff; on a directory line, unfold or
+              fold it.
   I  P        Stage or unstage interactively (`git add --patch`) in a
               terminal.
-  gI          Add the file to .git/info/exclude (with a count: .gitignore).
+  gI          Add the file to .git/info/exclude (with a count: .gitignore);
+              on a directory line, the directory.
   gi          Open .git/info/exclude (with a count: .gitignore).
 
 In an inline diff, `s`, `u` and `X` act on the hunk under the cursor. In
@@ -839,6 +909,9 @@ Disabled with |g:fugitive_no_maps|.
 Deliberate changes:
 - Unmerged files have their own section in the summary; stashes,
   bisect state and uninitialized submodules are listed too.
+- The summary shows files as a directory tree (|fugitive-summary-tree|);
+  `summary = { tree = false, status = "letter" }` gives upstream's flat
+  list.
 - `:Ggrep` opens a telescope picker when telescope is installed.
 - Output goes to notifications or a float instead of temporary buffers,
   configurable per command (|fugitive-routes|); successful routine
