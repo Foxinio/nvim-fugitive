@@ -22,6 +22,13 @@ describe("config.merge", function()
     assert.equals(0.85, c.float.height)
   end)
 
+  it("keeps the defaults of an option given as an empty table", function()
+    local c = config.merge({ summary = {}, float = {} })
+    assert.equals(256, c.summary.log_limit)
+    assert.equals(0.85, c.float.height)
+    assert.same({}, config.merge({ long_running = {} }).long_running)
+  end)
+
   it("does not mutate the defaults", function()
     config.merge({ maps = { summary = { s = false } } })
     assert.equals("stage", config.defaults.maps.summary["s"])
@@ -48,5 +55,26 @@ describe("config.merge", function()
     }) do
       assert.is_false(pcall(config.merge, { args = bad }), vim.inspect(bad))
     end
+    for _, bad in ipairs({
+      { tree = "yes" },
+      { compact = 1 },
+      { paths = "relative" },
+      { status = "colour" },
+    }) do
+      assert.is_false(pcall(config.merge, { summary = bad }), vim.inspect(bad))
+    end
+  end)
+
+  it("defaults to the tree look, and takes the upstream one", function()
+    local s = config.merge().summary
+    assert.same(
+      { tree = true, compact = true, paths = "name", status = "letter" },
+      { tree = s.tree, compact = s.compact, paths = s.paths, status = s.status }
+    )
+    s = config.merge({ summary = { tree = false, paths = "full", status = "color" } }).summary
+    assert.is_false(s.tree)
+    assert.equals("full", s.paths)
+    assert.equals("color", s.status)
+    assert.equals("split", s.window)
   end)
 end)

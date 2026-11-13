@@ -16,7 +16,7 @@ local M = {}
 ---@field long_running string[] subcommands that run as overseer tasks
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
----@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer}
+---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: "letter"|"color"}
 ---@field args table<string, string[]> default arguments per subcommand ("sub" or "sub word")
 
 ---@type fugitive.Config
@@ -261,7 +261,14 @@ M.defaults = {
   long_running = { "pull", "fetch", "push", "clone", "submodule update", "lfs" },
   browse = { hosts = {}, providers = {} },
   integrations = { telescope = true, overseer = true, gitsigns = true },
-  summary = { window = "split", log_limit = 256 },
+  summary = {
+    window = "split",
+    log_limit = 256,
+    tree = true,
+    compact = true,
+    paths = "name",
+    status = "letter",
+  },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it, e.g. { commit = { "--signoff" } }; not for :Git!
   args = {},
@@ -343,6 +350,24 @@ local function validate(opts)
       end
     end
   end
+  local summary = opts.summary or {}
+  for key, kind in pairs({ tree = "boolean", compact = "boolean" }) do
+    if summary[key] ~= nil then
+      vim.validate("opts.summary." .. key, summary[key], kind)
+    end
+  end
+  for key, allowed in pairs({ paths = { "name", "full" }, status = { "letter", "color" } }) do
+    if summary[key] ~= nil and not vim.tbl_contains(allowed, summary[key]) then
+      error(
+        string.format(
+          'fugitive: summary.%s must be "%s", not %s',
+          key,
+          table.concat(allowed, '" or "'),
+          vim.inspect(summary[key])
+        )
+      )
+    end
+  end
   if opts.notify and opts.notify.max_lines ~= nil then
     vim.validate("opts.notify.max_lines", opts.notify.max_lines, "number")
   end
@@ -363,7 +388,9 @@ function M.merge(opts)
           merged.maps[buftype][lhs] = action
         end
       end
-    elseif vim.islist(value) or type(value) ~= "table" then
+    elseif type(value) ~= "table" or vim.islist(M.defaults[key]) then
+      -- a list option (long_running) is replaced; tables merge, an empty
+      -- one included (vim.islist({}) is true)
       merged[key] = value
     else
       merged[key] = vim.tbl_deep_extend("force", merged[key] or {}, value)

@@ -14,6 +14,7 @@ local M = {}
 ---@field repo fugitive.Repo
 ---@field info fugitive.LineInfo[]
 ---@field expanded table<string, boolean>
+---@field collapsed table<string, boolean> folded directories (tree view), by render.expand_key
 ---@field generation integer
 ---@field running boolean
 ---@field dirty boolean
@@ -55,6 +56,7 @@ local function identity(i)
     commit = i.commit,
     ref = i.ref,
     key = i.key,
+    dir = i.dir,
   }
 end
 
@@ -73,6 +75,7 @@ local function find_identity(info, id)
         and i.commit == id.commit
         and i.ref == id.ref
         and i.key == id.key
+        and i.dir == id.dir
       then
         return lnum
       end
@@ -103,7 +106,14 @@ local function apply(buf, st, snap)
     return
   end
   -- prune expansion state of files that are gone
-  local lines, info = render.render(snap, st.expanded)
+  local cfg = require("nvim-fugitive.config").get().summary
+  local lines, info = render.render(snap, st.expanded, {
+    tree = cfg.tree,
+    compact = cfg.compact,
+    paths = cfg.paths,
+    status = cfg.status,
+    collapsed = st.collapsed,
+  })
   local wins = vim.fn.win_findbuf(buf)
   local cursors = {}
   for _, win in ipairs(wins) do
@@ -155,10 +165,66 @@ local function apply(buf, st, snap)
   )
 end
 
+---Colours of the `status = "color"` style, by status letter; each is a
+---highlight group the user (or a colorscheme) can override.
+M.status_groups = {
+  M = "FugitiveStatusModified",
+  A = "FugitiveStatusAdded",
+  D = "FugitiveStatusDeleted",
+  R = "FugitiveStatusRenamed",
+  C = "FugitiveStatusRenamed",
+  ["?"] = "FugitiveStatusUntracked",
+  U = "FugitiveStatusUnmerged",
+  T = "FugitiveStatusTypechange",
+}
+local status_colors = {
+  FugitiveStatusModified = { "#d78700", 172 },
+  FugitiveStatusAdded = { "#5faf5f", 71 },
+  FugitiveStatusDeleted = { "#d75f5f", 167 },
+  FugitiveStatusRenamed = { "#5f87d7", 68 },
+  FugitiveStatusUntracked = { "#8a8a8a", 245 },
+  FugitiveStatusUnmerged = { "#d75fd7", 170 },
+  FugitiveStatusTypechange = { "#af87d7", 140 },
+}
+
+---Define the summary's highlight groups (`default`: a colorscheme's or the
+---user's own definition wins). Cheap, so done on every render: a
+---`:colorscheme` that clears them is undone by the next one.
+function M.define_highlights()
+  for name, c in pairs(status_colors) do
+    vim.api.nvim_set_hl(
+      0,
+      name,
+      { bg = c[1], ctermbg = c[2], fg = "#000000", ctermfg = 0, default = true }
+    )
+  end
+  vim.api.nvim_set_hl(0, "FugitiveDirectory", { link = "Directory", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveFoldMarker", { link = "Special", default = true })
+end
+
+---The colour group of a file line in the colour style.
+---@param i fugitive.LineInfo
+---@return string?
+function M.status_group(i)
+  if i.section == "Unmerged" then
+    return "FugitiveStatusUnmerged"
+  end
+  return M.status_groups[i.entry.status]
+end
+
 ---Extmark highlights for sigils and diff lines (the syntax file covers the
 ---rest; extmarks are robust against text that looks like a header).
 function M.highlight(buf, info)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  M.define_highlights()
+  local color = require("nvim-fugitive.config").get().summary.status == "color"
+  local function mark(lnum, col, end_col, group)
+    pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, col, {
+      end_col = end_col,
+      hl_group = group,
+      priority = 150,
+    })
+  end
   vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
     virt_text = { { "(new)", "Comment" } },
     virt_text_pos = "eol",
@@ -184,6 +250,19 @@ function M.highlight(buf, info)
         { line_hl_group = group, priority = 100 }
       )
     end
+    if i.kind == "dir" then
+      mark(lnum, i.marker_col, i.name_col - 1, "FugitiveFoldMarker")
+      mark(lnum, i.name_col, i.name_end, "FugitiveDirectory")
+      if i.collapsed then
+        local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
+        mark(lnum, i.name_end, #line, "Comment")
+      end
+    elseif i.kind == "file" and color and i.name_col then
+      local g = M.status_group(i)
+      if g then
+        mark(lnum, i.name_col, i.name_end, g)
+      end
+    end
     if i.note then
       pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, 0, {
         virt_text = { { "(" .. i.note .. ")", "Comment" } },
@@ -203,6 +282,7 @@ function M.load(buf, repo)
       repo = repo,
       info = {},
       expanded = {},
+      collapsed = {},
       generation = 0,
       running = false,
       dirty = false,
@@ -285,7 +365,9 @@ function M.refresh_all(git_dir)
   end
 end
 
----Folding (F26): sections and each expanded file's inline diff.
+---Folding (F26): sections, directories (tree view) and each expanded
+---file's inline diff. An item enclosed by `depth` directory lines sits at
+---level 1 + depth; what it shows below it (files, a diff) one deeper.
 ---@param lnum integer
 ---@return string|integer
 function M.foldexpr(lnum)
@@ -298,23 +380,26 @@ function M.foldexpr(lnum)
     return ">1"
   elseif i.kind == "blank" or i.kind == "header" or i.kind == "discarded" then
     return 0
+  end
+  local level = 1 + (i.depth or 0)
+  if i.kind == "dir" then
+    return i.collapsed and level or (">" .. (level + 1))
   elseif
     i.kind == "file"
     or i.kind == "stash"
     or (i.kind == "commit" and i.section ~= "Rebasing")
   then
     local nxt = st.info[lnum + 1]
-    -- files listed under an expanded untracked directory nest one deeper
-    local level = (i.entry and i.entry.parent) and 2 or 1
     if nxt and (nxt.kind == "hunk" or nxt.kind == "diffmeta" or nxt.kind == "diffline") then
       return ">" .. (level + 1)
     end
-    if nxt and nxt.kind == "file" and i.entry and nxt.entry.parent == i.entry.path then
-      return ">2"
+    -- the files of an expanded untracked directory nest under it
+    if nxt and nxt.kind == "file" and (nxt.depth or 0) > (i.depth or 0) then
+      return ">" .. (level + 1)
     end
     return level
   elseif i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta" then
-    return (i.entry and i.entry.parent) and 3 or 2
+    return level + 1
   end
   return 1
 end

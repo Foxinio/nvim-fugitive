@@ -137,6 +137,11 @@ function M.open(buf, how)
     return summary().open(sub, { mods = mods ~= "" and mods or "aboveleft" })
   end
   if not t.target then
+    local d = state(buf).info[vim.fn.line(".")]
+    if d and d.kind == "dir" then
+      notify.warn(d.dir .. " is a directory: open one of its files (= folds it)")
+      return
+    end
     if how == "edit" then
       local i = state(buf).info[vim.fn.line(".")]
       if i and i.kind == "header" and i.key == "Help" then
@@ -164,6 +169,10 @@ end
 function M.diff(buf, layout)
   local st = state(buf)
   local i = st.info[vim.fn.line(".")]
+  if i and i.kind == "dir" then
+    notify.warn(i.dir .. " is a directory: diff one of its files, or dp for all of them")
+    return
+  end
   if not i or not i.entry then
     notify.warn("no file under the cursor")
     return
@@ -211,6 +220,8 @@ function M.diff_patch(buf)
   end
   if i and i.entry then
     vim.list_extend(args, { "--", i.entry.path })
+  elseif i and i.kind == "dir" then
+    vim.list_extend(args, { "--", i.dir })
   end
   require("nvim-fugitive.cmd.git").run(args, { repo = st.repo })
 end
