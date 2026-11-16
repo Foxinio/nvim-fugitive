@@ -377,22 +377,37 @@ The `summary` options (|fugitive-config|):
   status      "letter": a status letter (M A D R ? U T) before each file;
               "color": no letter, the name's background shows the status.
 
-The colours of "color" are highlight groups, defined with `default` so a
-colorscheme or your own |:highlight| wins:
-  FugitiveStatusModified     orange
-  FugitiveStatusAdded        green
-  FugitiveStatusDeleted      red
-  FugitiveStatusRenamed      blue (renames and copies)
-  FugitiveStatusUntracked    grey
-  FugitiveStatusUnmerged     magenta
-  FugitiveStatusTypechange   purple
-Directory names use FugitiveDirectory (linked to |hl-Directory|) and the
-markers FugitiveFoldMarker (linked to Special). The colour is the name's
-background; to change one, set the group after |:colorscheme| (which clears
-it) or in a |ColorScheme| autocommand: >lua
-  vim.api.nvim_set_hl(0, "FugitiveStatusModified",
-    { bg = "#d7af00", fg = "#000000" })
+The colours of "color" come from your colorscheme: each file name's
+background is the colour your inline diffs use for the same kind of change,
+so a modified file matches its diff's changed lines, an added one the `+`
+lines and a deleted one the `-` lines. Each group's background is the
+foreground (text) colour of the first source group below that has one; if
+none does, the group links to the last one in its list instead:
+  FugitiveStatusAdded        diffAdded, Added, GitSignsAdd; |hl-DiffAdd|
+  FugitiveStatusModified     diffChanged, Changed, GitSignsChange;
+                             |hl-DiffChange|
+  FugitiveStatusDeleted      diffRemoved, Removed, GitSignsDelete;
+                             |hl-DiffDelete|
+  FugitiveStatusRenamed      as Modified (renames and copies)
+  FugitiveStatusTypechange   as Modified
+  FugitiveStatusUnmerged     DiagnosticWarn, WarningMsg; |hl-DiffText|
+  FugitiveStatusUntracked    always linked to Comment: no background
+The text on a coloured name is your |hl-Normal| background colour; when
+Normal has none (a transparent setup), black or white, whichever contrasts
+more with the name's background. Without 'termguicolors' the same groups'
+cterm colours are used the same way.
+
+The groups follow a |:colorscheme| change. A group you set yourself, or that
+your colorscheme defines, is left as it is, and is used exactly as you set
+it (set both `fg` and `bg`). |:colorscheme| clears all highlights first, so
+set yours after it, or in a |ColorScheme| autocommand: >lua
+  vim.api.nvim_create_autocmd("ColorScheme", { callback = function()
+    vim.api.nvim_set_hl(0, "FugitiveStatusModified",
+      { bg = "#d7af00", fg = "#000000" })
+  end })
 <
+Directory names use FugitiveDirectory (linked to |hl-Directory|) and the
+markers FugitiveFoldMarker (linked to Special).
 
 vim-fugitive's flat look is `summary = { tree = false, status = "letter" }`.
 
