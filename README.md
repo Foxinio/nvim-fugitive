@@ -20,8 +20,9 @@ On top of that:
   [telescope](https://github.com/nvim-telescope/telescope.nvim) or
   `vim.ui.select`.
 - **Changes as a tree.** In the summary, files that share a directory
-  group under it, and a directory folds like a file's diff. Or keep
-  vim-fugitive's flat list: see [Upstream parity](#upstream-parity).
+  group under it, each name coloured by its status, and a directory folds
+  like a file's diff. Or keep vim-fugitive's flat list: see
+  [Upstream parity](#upstream-parity).
 - **gitsigns** shows a commit's changes in the files you open from it.
 - **git's colours** in the float, with
   [term-color-parser.nvim](https://github.com/Foxinio/term-color-parser.nvim).
@@ -74,6 +75,7 @@ statusline and fugitive-based plugins keep working.
 | `s` / `u` / `-` on a file | stage / unstage / toggle it (in Visual mode on diff lines: just those lines) |
 | `=` on a file | show its diff inline |
 | `=` on a directory | fold or unfold its files (`s`, `u`, `-`, `X` on a directory act on all of them) |
+| `<BS>` on a file or directory | fold the directory it is in, or that directory (on a diff line: just that diff) |
 | `cc` | commit: the message opens in this Neovim, `:wq` to commit, `:q!` to abort |
 | `X` on a file | discard the change (it is saved first; undo with `g-` or `:Git restore-discard`) |
 | `dd` on a file | `:Gdiffsplit` against the index (three-way for conflicts) |
@@ -155,21 +157,20 @@ require("nvim-fugitive").setup({
 })
 ```
 
-Show each file's status as the background colour of its name instead of a
-letter (the colours are the `FugitiveStatus*` highlight groups,
-`:h fugitive-summary-tree`):
+Status letters instead of coloured names, and only the file names under a
+directory line, indented:
 
 ```lua
 require("nvim-fugitive").setup({
-  summary = { status = "color" },
+  summary = { status = "letter", paths = "name" },
 })
 ```
 
-Full paths under the directory lines, and a line for every directory level:
+A line for every directory level, even one holding a single changed file:
 
 ```lua
 require("nvim-fugitive").setup({
-  summary = { paths = "full", compact = false },
+  summary = { compact = false },
 })
 ```
 
@@ -259,10 +260,11 @@ require("nvim-fugitive").setup({
     -- no line for a directory with one changed file, or for a directory whose
     -- only content is one subdirectory (lua/nvim-fugitive/ is one line)
     compact = true,
-    -- files under a directory line: "name" (indented) or "full" (whole path)
-    paths = "name",
-    -- "letter" (M, A, D, ?, …) or "color" (the name's background shows it)
-    status = "letter",
+    -- files under a directory line: "full" (whole path) or "name" (indented)
+    paths = "full",
+    -- "color" (the name's background shows it, :h fugitive-summary-tree)
+    -- or "letter" (M, A, D, ?, …)
+    status = "color",
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it for every command fugitive runs except :Git! (typed commands,
@@ -276,8 +278,8 @@ require("nvim-fugitive").setup({
 ## Upstream parity
 
 The commands, maps, `fugitive://` URLs and Vimscript API work as in
-vim-fugitive. By default the summary shows its files as a tree. For
-vim-fugitive's flat list with status letters:
+vim-fugitive. By default the summary shows its files as a tree, with
+coloured names. For vim-fugitive's flat list with status letters:
 
 ```lua
 require("nvim-fugitive").setup({
@@ -285,8 +287,9 @@ require("nvim-fugitive").setup({
 })
 ```
 
-`status = "letter"` is already the default; it's there so the snippet also
-undoes a `status = "color"` set elsewhere.
+Both are needed: `tree = false` gives the flat list (`paths` and `compact`
+then change nothing), and `status = "letter"` puts back the letters in place
+of the default colours.
 
 With these settings the summary's text is the same as vim-fugitive's; the
 test suite checks it against vim-fugitive itself. The other deliberate

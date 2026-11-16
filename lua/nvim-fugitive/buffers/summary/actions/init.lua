@@ -69,6 +69,7 @@ function M.actions(buf)
     inline_hide = nx(function(b, v)
       M.inline(b, "hide", v)
     end),
+    fold_dir = nx(M.fold_dir),
     patch = nx(M.patch),
     ignore = nx(M.ignore),
     open_exclude = n(M.open_exclude),

@@ -35,6 +35,7 @@ M.defaults = {
       ["="] = "inline_toggle",
       ["<"] = "inline_hide",
       [">"] = "inline_show",
+      ["<BS>"] = "fold_dir",
       ["I"] = "patch",
       ["P"] = "patch",
       ["gI"] = "ignore",
@@ -266,8 +267,8 @@ M.defaults = {
     log_limit = 256,
     tree = true,
     compact = true,
-    paths = "name",
-    status = "letter",
+    paths = "full",
+    status = "color",
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it, e.g. { commit = { "--signoff" } }; not for :Git!

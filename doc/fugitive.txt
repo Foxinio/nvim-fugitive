@@ -92,7 +92,7 @@ Calling setup is optional; without it the defaults below apply. >lua
     browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
     integrations = { telescope = true, overseer = true, gitsigns = true },
     summary = { window = "split", log_limit = 256, tree = true,
-                compact = true, paths = "name", status = "letter" },
+                compact = true, paths = "full", status = "color" },
                                         -- |fugitive-summary-tree|
     args = {},                          -- |fugitive-args|
   })
@@ -335,7 +335,22 @@ Whole files that move are folded.
 The files of the Unmerged, Untracked, Unstaged and Staged sections show as
 a directory tree. With the default `compact`, a directory gets its own line
 when it holds two or more of the section's files, counting those in its
-subdirectories; its files are indented under it, by their path from it: >
+subdirectories. By default the files under it show their full path, and
+each name's background colour shows its status (see `status` below); the
+nesting shows in the indent of the directory lines and in what each one
+folds: >
+
+  Unstaged (5)
+    README.md
+  ▾ lua/nvim-fugitive/
+    ▾ lua/nvim-fugitive/cmd/
+    lua/nvim-fugitive/cmd/git.lua
+    lua/nvim-fugitive/cmd/log.lua
+    lua/nvim-fugitive/init.lua
+    tests/unit/argv_spec.lua
+<
+With `paths = "name"` and `status = "letter"`, the same section shows each
+file's status letter, and its path from the directory line, indented: >
 
   Unstaged (5)
   M README.md
@@ -358,7 +373,14 @@ default; without it every directory level is a line.
 On a directory line:
 - `=` folds or unfolds it, `<` folds it and `>` unfolds it, in that section
   only: its lines are hidden, not just closed. It stays folded until you
-  unfold it, across refreshes.
+  unfold it, across refreshes. Folding it closes the inline diffs of its
+  files, so they show closed when you unfold it.
+- `<BS>` folds it; on a folded one, it folds the directory around it, so
+  pressing it again climbs the tree. On a file, `<BS>` folds the directory
+  the file is in (or hides the expanded untracked directory listing it) and
+  moves to its line; on a line of an inline diff it folds just that diff
+  and moves to the file. Where there is no directory around, it does
+  nothing.
 - `s`, `u`, `-`, `X` and `I`/`P` act on all its files, as on a section
   heading; `gI` ignores the directory itself; `dp` diffs it.
 - `<CR>`, `o`, `f` and `dd` need one file and say so.
@@ -367,15 +389,17 @@ Vim's own folds (|zc|, |zo|) work too, on the lines that are shown: they
 nest sections, then directories, then files and their inline diffs.
 
 The `summary` options (|fugitive-config|):
-  tree        true: the tree; false: a flat list of full paths (`compact`
-              and `paths` then change nothing).
-  compact     true: as above; false: a line for every directory level.
-  paths       "name": files under a directory show their path from it,
-              indented; "full": their path from the repository root,
-              unindented, after the status letter (directory lines keep
-              their indent).
-  status      "letter": a status letter (M A D R ? U T) before each file;
-              "color": no letter, the name's background shows the status.
+  tree        true (default): the tree; false: a flat list of full paths
+              (`compact` and `paths` then change nothing).
+  compact     true (default): as above; false: a line for every directory
+              level.
+  paths       "full" (default): files show their path from the repository
+              root, unindented (directory lines keep their indent);
+              "name": files under a directory show their path from it,
+              indented.
+  status      "color" (default): no letter, the name's background shows
+              the status; "letter": a status letter (M A D R ? U T)
+              before each file.
 
 The colours of "color" are highlight groups, defined with `default` so a
 colorscheme or your own |:highlight| wins:
@@ -414,8 +438,12 @@ Staging maps ~
               untracked directory: list its files, each one staged, shown
               or discarded on its own. On a directory line: fold or unfold
               it (|fugitive-summary-tree|).
-  >  <        Show or hide the inline diff; on a directory line, unfold or
-              fold it.
+  >  <        `>` shows the inline diff and `<` hides it; on a directory
+              line, `>` unfolds it and `<` folds it.
+  <BS>        Fold the directory the file under the cursor is in; on a
+              directory line, fold it (or, when folded, the one around
+              it); on an inline diff, fold just that diff
+              (|fugitive-summary-tree|).
   I  P        Stage or unstage interactively (`git add --patch`) in a
               terminal.
   gI          Add the file to .git/info/exclude (with a count: .gitignore);

@@ -26,6 +26,7 @@ end
 describe("submodule maintenance", function()
   before_each(function()
     H.reset_ui()
+    H.status_letters()
     repo_mod._cache = {}
   end)
 
@@ -88,6 +89,7 @@ end)
 describe("bare and external git dirs", function()
   before_each(function()
     H.reset_ui()
+    H.status_letters()
     repo_mod._cache = {}
   end)
 

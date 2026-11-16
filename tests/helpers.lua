@@ -152,6 +152,12 @@ function H.feed(keys)
 end
 
 ---Close every window but one and wipe all buffers.
+---Summary status letters (M, A, ?, …), which tests find lines by; the
+---default shows the status as the name's colour instead.
+function H.status_letters()
+  require("nvim-fugitive.config").set({ summary = { status = "letter" } })
+end
+
 function H.reset_ui()
   -- floats first: :only refuses to run from a floating window
   for _, w in ipairs(vim.api.nvim_list_wins()) do

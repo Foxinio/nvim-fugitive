@@ -503,6 +503,24 @@ local function expand_id(i)
   return i.entry.path
 end
 
+---Forget what is expanded under `path` in `section` (the inline diffs of its
+---files, its expanded untracked directories, and `path` itself), so that
+---unfolding it again shows everything under it collapsed.
+local function forget_expanded(st, section, path)
+  local prefix = render.expand_key(section, path)
+  for k in pairs(st.expanded) do
+    if k:sub(1, #prefix) == prefix then
+      st.expanded[k] = nil
+    end
+  end
+end
+
+---Fold a directory line, closing what is open under it.
+local function fold_dir_line(st, dirline)
+  st.collapsed[render.expand_key(dirline.section, dirline.dir)] = true
+  forget_expanded(st, dirline.section, dirline.dir)
+end
+
 ---@param mode "toggle"|"show"|"hide"
 function M.inline(buf, mode, visual)
   local st = state(buf)
@@ -524,7 +542,11 @@ function M.inline(buf, mode, visual)
         want = mode == "hide"
       end
       if want ~= dirline.collapsed then
-        st.collapsed[key] = want or nil
+        if want then
+          fold_dir_line(st, dirline)
+        else
+          st.collapsed[key] = nil
+        end
         changed = true
       end
     end
@@ -579,6 +601,101 @@ function M.inline(buf, mode, visual)
       end
     end)
   end
+end
+
+---The nearest directory line above `lnum` enclosing it (same section,
+---smaller depth), and its line number.
+local function enclosing_dir(st, lnum)
+  local i = st.info[lnum]
+  local depth = i.depth or 0
+  for l = lnum - 1, 1, -1 do
+    local d = st.info[l]
+    if not d or d.section ~= i.section or d.kind == "section" then
+      return
+    end
+    if d.kind == "dir" and (d.depth or 0) < depth then
+      return d, l
+    end
+  end
+end
+
+---The nearest expanded untracked directory ("? dir/") listing the file at
+---`lnum`, and its line number.
+local function untracked_parent(st, lnum)
+  local i = st.info[lnum]
+  if i.section ~= "Untracked" or i.kind ~= "file" then
+    return
+  end
+  local path = i.entry.path
+  for l = lnum - 1, 1, -1 do
+    local d = st.info[l]
+    if not d or d.section ~= "Untracked" then
+      return
+    end
+    local p = d.kind == "file" and d.entry.path
+    if p and p ~= path and p:match("/$") and path:sub(1, #p) == p then
+      return d, l
+    end
+  end
+end
+
+---<BS>: fold the directory a line is in. On a directory line: that directory
+---(or, already folded, the one enclosing it); on a file: the directory it is
+---in; on an inline diff: just that diff.
+function M.fold_dir(buf, visual)
+  local st = state(buf)
+  if not st then
+    return
+  end
+  local l1, l2 = range(visual)
+  local target -- where the cursor goes: {dir = …} or {file = …}, with a section
+  for lnum = l1, l2 do
+    local i = st.info[lnum] or {}
+    if i.kind == "dir" then
+      local d ---@type fugitive.LineInfo?
+      if i.collapsed then
+        d = enclosing_dir(st, lnum)
+      else
+        d = i
+      end
+      if d then
+        fold_dir_line(st, d)
+        target = { section = d.section, dir = d.dir }
+      end
+    elseif i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta" then
+      local id = expand_id(i)
+      st.expanded[render.expand_key(i.section, id)] = nil
+      target = { section = i.section, file = id }
+    elseif i.kind == "file" then
+      local d, dl = enclosing_dir(st, lnum)
+      local u, ul = untracked_parent(st, lnum)
+      if u and (not d or ul > dl) then
+        forget_expanded(st, u.section, u.entry.path)
+        target = { section = u.section, file = u.entry.path }
+      elseif d then
+        fold_dir_line(st, d)
+        target = { section = d.section, dir = d.dir }
+      end
+    end
+  end
+  if not target then
+    return
+  end
+  summary().refresh(buf, function()
+    for lnum, i in ipairs(st.info) do
+      local here
+      if target.dir then
+        here = i.kind == "dir" and i.dir == target.dir
+      else
+        here = (i.kind == "file" or i.kind == "stash" or i.kind == "commit")
+          and expand_id(i) == target.file
+      end
+      if here and i.section == target.section then
+        pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
+        break
+      end
+    end
+  end)
 end
 
 return M
