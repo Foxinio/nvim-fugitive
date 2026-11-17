@@ -59,9 +59,12 @@ describe("config.merge", function()
       { tree = "yes" },
       { compact = 1 },
       { paths = "relative" },
-      { status = "colour" },
-      { color_from = "text" },
-      { color_to = "eol" },
+      { status = "letter" },
+      { status = { letters = "yes" } },
+      { status = { color = "on" } },
+      { status = { color = { enabled = 1 } } },
+      { status = { color = { from = "text" } } },
+      { status = { color = { to = "eol" } } },
     }) do
       assert.is_false(pcall(config.merge, { summary = bad }), vim.inspect(bad))
     end
@@ -73,21 +76,35 @@ describe("config.merge", function()
       tree = true,
       compact = true,
       paths = "full",
-      status = "color",
-      color_from = "name",
-      color_to = "line",
-    }, {
-      tree = s.tree,
-      compact = s.compact,
-      paths = s.paths,
-      status = s.status,
-      color_from = s.color_from,
-      color_to = s.color_to,
-    })
-    s = config.merge({ summary = { tree = false, paths = "name", status = "letter" } }).summary
+      status = { letters = false, color = { enabled = true, from = "name", to = "line" } },
+    }, { tree = s.tree, compact = s.compact, paths = s.paths, status = s.status })
+    s = config.merge({
+      summary = {
+        tree = false,
+        paths = "name",
+        status = { letters = true, color = { enabled = false } },
+      },
+    }).summary
     assert.is_false(s.tree)
     assert.equals("name", s.paths)
-    assert.equals("letter", s.status)
+    assert.same(
+      { letters = true, color = { enabled = false, from = "name", to = "line" } },
+      s.status
+    )
     assert.equals("split", s.window)
+  end)
+
+  it("merges a partial status table with the defaults", function()
+    local s = config.merge({ summary = { status = { color = { to = "name" } } } }).summary
+    assert.same(
+      { letters = false, color = { enabled = true, from = "name", to = "name" } },
+      s.status
+    )
+  end)
+
+  it("says the string form of status was replaced", function()
+    local ok, err = pcall(config.merge, { summary = { status = "letter" } })
+    assert.is_false(ok)
+    assert.truthy(tostring(err):match("summary%.status is now a table"))
   end)
 end)

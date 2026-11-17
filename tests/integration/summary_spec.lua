@@ -37,8 +37,11 @@ end
 -- tests read; the default colours are tested in "summary tree"), and
 -- upstream's flat list.
 local looks = {
-  { name = "tree", summary = { status = "letter" } },
-  { name = "upstream", summary = { tree = false, status = "letter" } },
+  { name = "tree", summary = { status = { letters = true, color = { enabled = false } } } },
+  {
+    name = "upstream",
+    summary = { tree = false, status = { letters = true, color = { enabled = false } } },
+  },
 }
 
 for _, look in ipairs(looks) do
@@ -912,7 +915,11 @@ describe("summary tree", function()
   ---the summary options as given, on top of the defaults.
   local function fixture(summary, defaults)
     if not defaults then
-      summary = vim.tbl_extend("force", { paths = "name", status = "letter" }, summary or {})
+      summary = vim.tbl_deep_extend(
+        "force",
+        { paths = "name", status = { letters = true, color = { enabled = false } } },
+        summary or {}
+      )
     end
     require("nvim-fugitive.config").set({ summary = summary or {} })
     local repo = H.repo({
@@ -1039,8 +1046,9 @@ describe("summary tree", function()
     }, section_lines(buf, "Unstaged"))
   end)
 
-  it("colours the names instead of the letters with status = color", function()
-    local _, buf = fixture({ status = "color", color_to = "name" })
+  it("colours the names instead of the letters", function()
+    local _, buf =
+      fixture({ status = { letters = false, color = { enabled = true, to = "name" } } })
     assert.same({
       "Staged (3)",
       "  Makefile",
@@ -1094,22 +1102,37 @@ describe("summary tree", function()
 
   it("runs the status colour from the name to the window edge by default", function()
     -- the name starts at column 4: two blanks, then an indent of two
-    local _, buf = fixture({ status = "color" })
+    local _, buf = fixture({ status = { letters = false, color = { enabled = true } } })
     local m = status_mark(buf, "^    health.lua$")
     assert.same({ 4, m.row + 1, 0, true }, { m.col, m.end_row, m.end_col, m.eol })
   end)
 
-  it("colours only the name with color_to = name", function()
-    local _, buf = fixture({ status = "color", color_to = "name" })
+  it("colours only the name with status.color.to = name", function()
+    local _, buf =
+      fixture({ status = { letters = false, color = { enabled = true, to = "name" } } })
     local m = status_mark(buf, "^    health.lua$")
     assert.same({ 4, m.row, 14 }, { m.col, m.end_row, m.end_col })
     assert.is_falsy(m.eol)
   end)
 
-  it("colours from the start of the line with color_from = line", function()
-    local _, buf = fixture({ status = "color", color_from = "line" })
+  it("colours from the start of the line with status.color.from = line", function()
+    local _, buf =
+      fixture({ status = { letters = false, color = { enabled = true, from = "line" } } })
     local m = status_mark(buf, "^    health.lua$")
     assert.same({ 0, m.row + 1, 0, true }, { m.col, m.end_row, m.end_col, m.eol })
+  end)
+
+  it("shows letters and colour together, or neither", function()
+    local _, buf = fixture({ status = { letters = true, color = { enabled = true, to = "name" } } })
+    local m = status_mark(buf, "^A   health%.lua$")
+    assert.same({ 4, m.row, 14 }, { m.col, m.end_row, m.end_col })
+    assert.truthy(H.find_line("^M     git%.lua$"))
+  end)
+
+  it("shows no status at all with letters and colour off", function()
+    local _, buf = fixture({ status = { letters = false, color = { enabled = false } } })
+    assert.truthy(H.find_line("^    health%.lua$"))
+    assert.is_nil(status_mark(buf, "^    health%.lua$"))
   end)
 
   it("folds and unfolds a directory with <, > and =", function()
@@ -1402,7 +1425,9 @@ describe("summary tree", function()
   end)
 
   it("closes an expanded untracked directory under a directory when it folds", function()
-    require("nvim-fugitive.config").set({ summary = { paths = "name", status = "letter" } })
+    require("nvim-fugitive.config").set({
+      summary = { paths = "name", status = { letters = true, color = { enabled = false } } },
+    })
     local repo = H.repo({ files = { ["top/keep.txt"] = "k\n" } })
     repo:write("top/a.txt", "a\n")
     repo:write("top/sub/b.txt", "b\n")
@@ -1437,7 +1462,9 @@ describe("summary tree", function()
   end)
 
   it("lists an expanded untracked directory's files under it, by name", function()
-    require("nvim-fugitive.config").set({ summary = { paths = "name", status = "letter" } })
+    require("nvim-fugitive.config").set({
+      summary = { paths = "name", status = { letters = true, color = { enabled = false } } },
+    })
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     repo:write("dir/one.txt", "1\n")
     repo:write("dir/sub/two.txt", "2\n")
