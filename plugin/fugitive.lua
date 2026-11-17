@@ -318,6 +318,21 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "FileChangedShellPo
   end,
 })
 
+-- saving a work-tree file changes the summary but not .git: refresh it now,
+-- in the background, so it is current when you go back to it
+vim.api.nvim_create_autocmd({ "BufWritePost", "FileChangedShellPost" }, {
+  group = group,
+  callback = function(ev)
+    if
+      package.loaded["nvim-fugitive.buffers.summary"]
+      and vim.bo[ev.buf].buftype == ""
+      and not ev.file:match("^%a[%w+.-]*://")
+    then
+      require("nvim-fugitive.buffers.summary").refresh_path(vim.fn.fnamemodify(ev.file, ":p"))
+    end
+  end,
+})
+
 vim.api.nvim_create_autocmd({ "FocusGained", "ShellCmdPost" }, {
   group = group,
   callback = function()

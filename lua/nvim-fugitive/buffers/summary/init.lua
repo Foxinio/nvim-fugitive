@@ -124,12 +124,16 @@ local function apply(buf, st, snap)
   -- before setting the lines: 'foldexpr' reads st.info as they change
   st.info = info
   st.snap = snap
-  vim.bo[buf].modifiable = true
-  vim.bo[buf].readonly = false
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].readonly = true
-  vim.bo[buf].modified = false
+  -- a refresh that found nothing new leaves the text (and so the folds and
+  -- the view) alone: only its line info and highlights are renewed
+  if not vim.deep_equal(lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false)) then
+    vim.bo[buf].modifiable = true
+    vim.bo[buf].readonly = false
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+    vim.bo[buf].readonly = true
+    vim.bo[buf].modified = false
+  end
   M.highlight(buf, info)
   -- after staging/unstaging files (or the hunks emptying them): on to the
   -- next file of the section they left, once this render shows them gone
@@ -353,6 +357,35 @@ function M.refresh_all(git_dir)
     if not vim.api.nvim_buf_is_valid(buf) then
       M._state[buf] = nil
     elseif not git_dir or st.repo.git_dir == git_dir then
+      M.refresh(buf)
+    end
+  end
+end
+
+---Whether a window shows a summary of the repository at `git_dir`.
+---@param git_dir string
+---@return boolean
+function M.visible(git_dir)
+  for buf, st in pairs(M._state) do
+    if st.repo.git_dir == git_dir and #vim.fn.win_findbuf(buf) > 0 then
+      return true
+    end
+  end
+  return false
+end
+
+---Refresh the summaries whose work tree holds `path`. Saving a file does
+---not touch .git, so the watcher misses it; without this the summary would
+---show its old state until entered (BufEnter refreshes too, but only once
+---you are already looking at it).
+---@param path string absolute
+function M.refresh_path(path)
+  local real = vim.uv.fs_realpath(path) or path
+  for buf, st in pairs(M._state) do
+    local wt = st.repo.worktree
+    if not vim.api.nvim_buf_is_valid(buf) then
+      M._state[buf] = nil
+    elseif wt and (real == wt or real:sub(1, #wt + 1) == wt .. "/") then
       M.refresh(buf)
     end
   end

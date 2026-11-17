@@ -16,7 +16,7 @@ local M = {}
 ---@field float {width: number, height: number, border: string|string[], style: string, title: boolean, title_pos: string, zindex: integer, winblend: integer}
 ---@field editor {window: "split"|"vsplit"|"tab"|"current"}
 ---@field discard {journal_size: integer}
----@field watch {enabled: boolean, debounce: integer}
+---@field watch {enabled: boolean, debounce: integer, recheck: integer}
 ---@field long_running string[] subcommands that run as overseer tasks
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
@@ -262,7 +262,7 @@ M.defaults = {
   },
   editor = { window = "split" },
   discard = { journal_size = 200 },
-  watch = { enabled = true, debounce = 150 },
+  watch = { enabled = true, debounce = 150, recheck = 5000 },
   long_running = { "pull", "fetch", "push", "clone", "submodule update", "lfs" },
   browse = { hosts = {}, providers = {} },
   integrations = { telescope = true, overseer = true, gitsigns = true },
@@ -394,6 +394,13 @@ local function validate(opts)
       one_of("summary.status.color.from", color.from, { "name", "line" })
       one_of("summary.status.color.to", color.to, { "name", "line" })
     end
+  end
+  local recheck = opts.watch and opts.watch.recheck
+  if recheck ~= nil and (type(recheck) ~= "number" or recheck < 0) then
+    error(
+      "fugitive: watch.recheck must be a number of ms (0 turns it off), not "
+        .. vim.inspect(recheck)
+    )
   end
   if opts.notify and opts.notify.max_lines ~= nil then
     vim.validate("opts.notify.max_lines", opts.notify.max_lines, "number")

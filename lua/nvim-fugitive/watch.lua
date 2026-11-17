@@ -10,8 +10,10 @@ local M = {}
 ---@class fugitive.Watcher
 ---@field handles {path: string, handle: uv.uv_fs_event_t}[]
 ---@field timer uv.uv_timer_t?
+---@field recheck uv.uv_timer_t? compares the fingerprint now and then
 ---@field refs integer
 ---@field fire fun()?
+---@field seen string? the state fugitive last acted on (fingerprint)
 
 ---@type table<string, fugitive.Watcher>
 M._watchers = {}
@@ -71,6 +73,43 @@ local function dirs_for(repo)
   return dirs
 end
 
+---What the watcher watches, as a string that changes when any of it does:
+---size and mtime of the index, HEAD, packed-refs and the merge/rebase heads,
+---and the mtime of every watched directory (a ref written by git appears
+---through a rename, which changes its directory).
+---@param repo fugitive.Repo
+---@param w fugitive.Watcher
+---@return string
+local function fingerprint(repo, w)
+  local parts = {}
+  local function add(path)
+    local st = uv.fs_stat(path)
+    if st then
+      table.insert(parts, string.format("%s:%d.%d:%d", path, st.mtime.sec, st.mtime.nsec, st.size))
+    end
+  end
+  for _, f in ipairs({ "index", "HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD" }) do
+    add(repo.git_dir .. "/" .. f)
+  end
+  add(repo.common_dir .. "/packed-refs")
+  for _, h in ipairs(w.handles) do
+    add(h.path)
+  end
+  return table.concat(parts, "\n")
+end
+
+---Fugitive has acted on the repo as it is now (a command finished, a
+---refresh started): what the watcher sees next is only its own echo unless
+---something changes again, so a later fire with the same fingerprint is
+---dropped.
+---@param repo fugitive.Repo
+function M.settle(repo)
+  local w = M._watchers[repo.git_dir]
+  if w then
+    w.seen = fingerprint(repo, w)
+  end
+end
+
 ---Start watching a repo (ref-counted).
 ---@param repo fugitive.Repo
 function M.watch(repo)
@@ -96,12 +135,40 @@ function M.watch(repo)
         end
         -- new remotes/rebase dirs may have appeared: rewatch lazily
         M._rewatch(repo, w)
+        -- the echo of fugitive's own change (git rewrote the index during a
+        -- command or a refresh fugitive already acted on): nothing to do
+        if w.seen and fingerprint(repo, w) == w.seen then
+          return
+        end
         require("nvim-fugitive").changed(repo)
       end)
     end)
   end
   w.fire = fire
   M._rewatch(repo, w)
+  w.seen = fingerprint(repo, w)
+  -- a change the filesystem events missed (or a fingerprint that matched by
+  -- chance on a coarse-timestamp filesystem) shows within `recheck` ms, while
+  -- a summary of this repository is on screen
+  local every = config().recheck or 0
+  if every > 0 then
+    w.recheck = uv.new_timer()
+    w.recheck:start(every, every, function()
+      vim.schedule(function()
+        if M._watchers[repo.git_dir] ~= w then
+          return
+        end
+        local summary = package.loaded["nvim-fugitive.buffers.summary"]
+        if not (summary and summary.visible(repo.git_dir)) then
+          return
+        end
+        if fingerprint(repo, w) ~= w.seen then
+          M._rewatch(repo, w)
+          require("nvim-fugitive").changed(repo)
+        end
+      end)
+    end)
+  end
 end
 
 function M._rewatch(repo, w)
@@ -152,9 +219,9 @@ function M.unwatch(git_dir)
     h.handle:stop()
     h.handle:close()
   end
-  if w.timer then
-    w.timer:stop()
-    w.timer:close()
+  for _, t in pairs({ timer = w.timer, recheck = w.recheck }) do
+    t:stop()
+    t:close()
   end
   M._watchers[git_dir] = nil
 end

@@ -857,6 +857,144 @@ for _, look in ipairs(looks) do
       end, "watcher refresh", 5000)
     end)
 
+    describe("watcher recheck", function()
+      ---Open a summary with a fast recheck, then stop the watcher's
+      ---filesystem handles: whatever changes next is a missed event.
+      local function deaf(repo)
+        require("nvim-fugitive.config").set({ summary = look.summary, watch = { recheck = 200 } })
+        require("nvim-fugitive.watch").enable(true)
+        local buf = open(repo)
+        local st = summary.state(buf)
+        H.wait(function()
+          return not st.running
+        end, "summary idle")
+        vim.wait(400) -- a debounced fire from opening the summary, if any
+        for _, h in ipairs(require("nvim-fugitive.watch")._watchers[st.repo.git_dir].handles) do
+          h.handle:stop()
+        end
+        return buf
+      end
+      local function count_changed(ms)
+        local n = 0
+        local id = vim.api.nvim_create_autocmd("User", {
+          pattern = "FugitiveChanged",
+          callback = function()
+            n = n + 1
+          end,
+        })
+        vim.wait(ms)
+        vim.api.nvim_del_autocmd(id)
+        return n
+      end
+
+      it("catches a change the watcher missed", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        local buf = deaf(repo)
+        repo:write("new", "x\n")
+        repo:git("add", "new")
+        H.wait(function()
+          return H.find_line("^A new", buf) ~= nil
+        end, "recheck refresh", 3000)
+      end)
+
+      it("does nothing when nothing changed", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        deaf(repo)
+        assert.equals(0, count_changed(700))
+      end)
+
+      it("does nothing while no summary is visible", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        local buf = deaf(repo)
+        vim.cmd("enew")
+        assert.are_not.equal(buf, vim.api.nvim_get_current_buf())
+        repo:write("new", "x\n")
+        repo:git("add", "new")
+        assert.equals(0, count_changed(700))
+      end)
+    end)
+
+    it("is up to date before you go back to it after saving a file", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      local buf = open(repo)
+      local st = summary.state(buf)
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
+      assert.is_nil(H.find_line("^M b$", buf))
+      -- edit and save b in another window, without entering the summary
+      vim.cmd("split " .. vim.fn.fnameescape(repo:path("b")))
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "changed" })
+      vim.cmd("write")
+      assert.are_not.equal(buf, vim.api.nvim_get_current_buf())
+      H.wait(function()
+        return H.find_line("^M b$", buf) ~= nil
+      end, "refresh after :write", 5000)
+      -- a file outside the repository refreshes nothing
+      local tick = st.tick
+      vim.cmd("edit " .. vim.fn.fnameescape(H.tmpdir() .. "/elsewhere.txt"))
+      vim.cmd("write")
+      vim.wait(200)
+      assert.equals(tick, st.tick)
+      vim.cmd("bwipeout!")
+    end)
+
+    it("refreshes once after a :Git command, not again for its own echo", function()
+      require("nvim-fugitive.watch").enable(true)
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      repo:write("a", "A\n")
+      local buf = open(repo)
+      local st = summary.state(buf)
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
+      vim.wait(400) -- the watcher's echo of opening the summary, if any
+      local changed = 0
+      local id = vim.api.nvim_create_autocmd("User", {
+        pattern = "FugitiveChanged",
+        callback = function()
+          changed = changed + 1
+        end,
+      })
+      vim.cmd("Git add a")
+      H.wait(function()
+        return H.find_line("^M a$", buf) ~= nil and H.find_line("^Staged", buf) ~= nil
+      end, "refresh after :Git add")
+      -- well past the watcher's debounce (150 ms)
+      vim.wait(600)
+      vim.api.nvim_del_autocmd(id)
+      assert.equals(1, changed)
+      -- a change from outside still refreshes
+      repo:git("add", "b")
+      repo:write("b", "B\n")
+      repo:git("add", "b")
+      H.wait(function()
+        local l = H.find_line("^Staged", buf)
+        return l and H.find_line("^M b$", buf) ~= nil
+      end, "watcher refresh", 5000)
+    end)
+
+    it("leaves the buffer alone when a refresh finds nothing new", function()
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      repo:write("a", "A\n")
+      local buf = open(repo)
+      local st = summary.state(buf)
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
+      local changedtick = vim.api.nvim_buf_get_changedtick(buf)
+      after(buf, function()
+        summary.refresh(buf)
+      end)
+      assert.equals(changedtick, vim.api.nvim_buf_get_changedtick(buf))
+      -- and does update it when something changed
+      repo:write("new", "n\n")
+      after(buf, function()
+        summary.refresh(buf)
+      end)
+      assert.truthy(H.find_line("new$", buf))
+    end)
+
     it("puts conflicts in an Unmerged section", function()
       local repo = H.repo({ files = { ["c"] = "base\n" } })
       repo:git("checkout", "-q", "-b", "topic")

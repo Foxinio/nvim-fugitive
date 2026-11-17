@@ -47,6 +47,11 @@ describe("config.merge", function()
     assert.has_error(function()
       config.merge({ notify = { max_lines = "ten" } })
     end)
+    for _, bad in ipairs({ { recheck = -1 }, { recheck = "5s" } }) do
+      assert.is_false(pcall(config.merge, { watch = bad }), vim.inspect(bad))
+    end
+    assert.equals(5000, config.merge().watch.recheck)
+    assert.equals(0, config.merge({ watch = { recheck = 0 } }).watch.recheck)
     for _, bad in ipairs({
       { commit = "--signoff" },
       { commit = { 1 } },
