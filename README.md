@@ -162,7 +162,18 @@ directory line, indented:
 
 ```lua
 require("nvim-fugitive").setup({
-  summary = { status = "letter", paths = "name" },
+  summary = {
+    paths = "name",
+    status = { letters = true, color = { enabled = false } },
+  },
+})
+```
+
+Colour only the file name, not the rest of its line:
+
+```lua
+require("nvim-fugitive").setup({
+  summary = { status = { color = { to = "name" } } },
 })
 ```
 
@@ -264,9 +275,19 @@ require("nvim-fugitive").setup({
     compact = true,
     -- files under a directory line: "full" (whole path) or "name" (indented)
     paths = "full",
-    -- "color" (the name's background shows it, :h fugitive-summary-tree)
-    -- or "letter" (M, A, D, ?, …)
-    status = "color",
+    -- how a file's status shows (:h fugitive-summary-tree); both can be on
+    status = {
+      -- a status letter (M, A, D, ?, …) before each file
+      letters = false,
+      color = {
+        -- the background shows it, in your colorscheme's diff colours
+        enabled = true,
+        -- the colour starts at the file's "name" (path) or the "line" start
+        from = "name",
+        -- and ends at the window's edge, after the "line", or after the "name"
+        to = "line",
+      },
+    },
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it for every command fugitive runs except :Git! (typed commands,
@@ -285,13 +306,17 @@ coloured names. For vim-fugitive's flat list with status letters:
 
 ```lua
 require("nvim-fugitive").setup({
-  summary = { tree = false, status = "letter" },
+  summary = {
+    tree = false,
+    status = { letters = true, color = { enabled = false } },
+  },
 })
 ```
 
-Both are needed: `tree = false` gives the flat list (`paths` and `compact`
-then change nothing), and `status = "letter"` puts back the letters in place
-of the default colours.
+`tree = false` gives the flat list (`paths` and `compact` then change
+nothing). `letters = true` puts back the status letters, and
+`color = { enabled = false }` turns off the default colours, which
+vim-fugitive doesn't have.
 
 With these settings the summary's text is the same as vim-fugitive's; the
 test suite checks it against vim-fugitive itself. The other deliberate

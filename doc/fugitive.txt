@@ -92,7 +92,9 @@ Calling setup is optional; without it the defaults below apply. >lua
     browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
     integrations = { telescope = true, overseer = true, gitsigns = true },
     summary = { window = "split", log_limit = 256, tree = true,
-                compact = true, paths = "full", status = "color" },
+                compact = true, paths = "full",
+                status = { letters = false, color = { enabled = true,
+                           from = "name", to = "line" } } },
                                         -- |fugitive-summary-tree|
     args = {},                          -- |fugitive-args|
   })
@@ -354,8 +356,9 @@ folds: >
     lua/nvim-fugitive/init.lua
     tests/unit/argv_spec.lua
 <
-With `paths = "name"` and `status = "letter"`, the same section shows each
-file's status letter, and its path from the directory line, indented: >
+With `paths = "name"` and `status = { letters = true, color = { enabled =
+false } }`, the same section shows each file's status letter, and its path
+from the directory line, indented: >
 
   Unstaged (5)
   M README.md
@@ -402,11 +405,27 @@ The `summary` options (|fugitive-config|):
               root, unindented (directory lines keep their indent);
               "name": files under a directory show their path from it,
               indented.
-  status      "color" (default): no letter, the name's background shows
-              the status; "letter": a status letter (M A D R ? U T)
-              before each file.
+  status      How each file's status shows, a table:
+    letters         true: a status letter (M A D R ? U T) and a blank
+                    before the file; false (default): two blanks, so the
+                    layout doesn't move.
+    color.enabled   true (default): the file's background shows its
+                    status (colours below); false: no colour.
+    color.from      Where the colour starts: "name" (default), where the
+                    file's text starts (its path or name, as shown);
+                    "line", at the start of the line, so the letter (or
+                    blank) column and any indent are coloured too.
+    color.to        Where it ends: "line" (default), at the window's edge,
+                    filling the empty space after the text; "name", where
+                    the file's text ends.
+              "name" here means the file's text as shown, its full path
+              with `paths = "full"`. Letters and colour can be on
+              together; with both off the status isn't shown (the two
+              blanks stay). Directory lines are never coloured. A
+              partial table keeps the other defaults:
+              `status = { color = { to = "name" } }`.
 
-The colours of "color" come from your colorscheme: each file name's
+The status colours come from your colorscheme: each file name's
 background is the colour your inline diffs use for the same kind of change,
 so a modified file matches its diff's changed lines, an added one the `+`
 lines and a deleted one the `-` lines. Each group's background is the
@@ -438,7 +457,10 @@ set yours after it, or in a |ColorScheme| autocommand: >lua
 Directory names use FugitiveDirectory (linked to |hl-Directory|) and the
 markers FugitiveFoldMarker (linked to Special).
 
-vim-fugitive's flat look is `summary = { tree = false, status = "letter" }`.
+vim-fugitive's flat look is >lua
+  summary = { tree = false,
+              status = { letters = true, color = { enabled = false } } }
+<
 
                                                      *fugitive-summary-maps*
 Staging maps ~
@@ -958,8 +980,8 @@ Deliberate changes:
 - Unmerged files have their own section in the summary; stashes,
   bisect state and uninitialized submodules are listed too.
 - The summary shows files as a directory tree (|fugitive-summary-tree|);
-  `summary = { tree = false, status = "letter" }` gives upstream's flat
-  list.
+  `summary = { tree = false, status = { letters = true, color = {
+  enabled = false } } }` gives upstream's flat list.
 - `:Ggrep` opens a telescope picker when telescope is installed.
 - Output goes to notifications or a float instead of temporary buffers,
   configurable per command (|fugitive-routes|); successful routine

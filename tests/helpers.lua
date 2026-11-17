@@ -155,7 +155,9 @@ end
 ---Summary status letters (M, A, ?, …), which tests find lines by; the
 ---default shows the status as the name's colour instead.
 function H.status_letters()
-  require("nvim-fugitive.config").set({ summary = { status = "letter" } })
+  require("nvim-fugitive.config").set({
+    summary = { status = { letters = true, color = { enabled = false } } },
+  })
 end
 
 function H.reset_ui()

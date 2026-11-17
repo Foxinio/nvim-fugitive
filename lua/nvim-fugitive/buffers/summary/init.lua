@@ -112,7 +112,7 @@ local function apply(buf, st, snap)
     tree = cfg.tree,
     compact = cfg.compact,
     paths = cfg.paths,
-    status = cfg.status,
+    letters = cfg.status.letters,
   })
   local wins = vim.fn.win_findbuf(buf)
   local cursors = {}
@@ -169,7 +169,7 @@ local function apply(buf, st, snap)
   )
 end
 
----Colours of the `status = "color"` style, by status letter; each is a
+---Colours of `status.color`, by status letter; each is a
 ---highlight group the user (or a colorscheme) can override.
 M.status_groups = {
   M = "FugitiveStatusModified",
@@ -205,7 +205,8 @@ end
 function M.highlight(buf, info)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   M.define_highlights()
-  local color = require("nvim-fugitive.config").get().summary.status == "color"
+  local cfg = require("nvim-fugitive.config").get().summary
+  local color = cfg.status.color
   local function mark(lnum, col, end_col, group)
     pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, col, {
       end_col = end_col,
@@ -245,10 +246,19 @@ function M.highlight(buf, info)
         local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
         mark(lnum, i.name_end, #line, "Comment")
       end
-    elseif i.kind == "file" and color and i.name_col then
+    elseif i.kind == "file" and color.enabled and i.name_col then
       local g = M.status_group(i)
       if g then
-        mark(lnum, i.name_col, i.name_end, g)
+        -- from the name (or the line's start) to the name's end, or through
+        -- the end of the line to the window's edge
+        local col = color.from == "line" and 0 or i.name_col
+        local span = { hl_group = g, priority = 150 }
+        if color.to == "name" then
+          span.end_col = i.name_end
+        else
+          span.end_row, span.end_col, span.hl_eol = lnum, 0, true
+        end
+        pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, col, span)
       end
     end
     if i.note then

@@ -41,7 +41,7 @@ local M = {}
 ---@field tree? boolean files as a directory tree
 ---@field compact? boolean no level for a lone file or a single-subdirectory chain
 ---@field paths? "name"|"full" files under a directory: name only, or full path
----@field status? "letter"|"color" status letter, or colour on the name
+---@field letters? boolean a status letter before each file (else two blanks)
 
 M.marker_open = "▾"
 M.marker_closed = "▸"
@@ -75,7 +75,7 @@ end
 ---@return string[] lines, fugitive.LineInfo[] info
 function M.render(snap, open, opts)
   opts = opts or {}
-  local color = opts.status == "color"
+  local letters = opts.letters
   local full = opts.paths == "full"
   local lines, info = {}, {}
   local function add(text, i)
@@ -186,7 +186,7 @@ function M.render(snap, open, opts)
   local function add_file(name, e, depth, label, parent)
     -- the flat (upstream) list never indents
     local indent = string.rep("  ", (opts.tree and not full) and depth or 0)
-    local prefix = (color and "  " or (e.status .. " ")) .. indent
+    local prefix = (letters and (e.status .. " ") or "  ") .. indent
     local line = {
       kind = "file",
       section = name,
