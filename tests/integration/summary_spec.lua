@@ -33,9 +33,11 @@ local function goto_line(pattern)
   return l
 end
 
--- Every test runs in both looks: the default tree, and upstream's flat list.
+-- Every test runs in both looks: the tree (with status letters, which these
+-- tests read; the default colours are tested in "summary tree"), and
+-- upstream's flat list.
 local looks = {
-  { name = "tree", summary = {} },
+  { name = "tree", summary = { status = "letter" } },
   { name = "upstream", summary = { tree = false, status = "letter" } },
 }
 
@@ -871,7 +873,10 @@ for _, look in ipairs(looks) do
     end)
 
     it("is configurable: maps can be disabled and remapped", function()
-      require("nvim-fugitive").setup({ maps = { summary = { s = false, a = "stage" } } })
+      require("nvim-fugitive").setup({
+        summary = look.summary,
+        maps = { summary = { s = false, a = "stage" } },
+      })
       local repo = H.repo({ files = { ["a"] = "a\n" } })
       repo:write("a", "A\n")
       local buf = open(repo)
@@ -903,7 +908,12 @@ describe("summary tree", function()
   ---tests/unit/x.lua; Untracked: docs/ (git lists a wholly untracked
   ---directory as one entry), tests/{a,b}.txt, notes.txt; Staged:
   ---Makefile, lua/f/health.lua (new), lua/f/ui/old.lua -> lua/f/ui/new.lua.
-  local function fixture(summary)
+  ---Most tests read the indented names and status letters; `defaults` uses
+  ---the summary options as given, on top of the defaults.
+  local function fixture(summary, defaults)
+    if not defaults then
+      summary = vim.tbl_extend("force", { paths = "name", status = "letter" }, summary or {})
+    end
     require("nvim-fugitive.config").set({ summary = summary or {} })
     local repo = H.repo({
       files = {
@@ -971,6 +981,31 @@ describe("summary tree", function()
       "A   health.lua",
       "R   ui/old.lua -> ui/new.lua",
     }, section_lines(buf, "Staged"))
+  end)
+
+  it("shows full paths and coloured names by default", function()
+    local _, buf = fixture(nil, true)
+    assert.same({
+      "Unstaged (5)",
+      "  README.md",
+      "▾ lua/f/",
+      "  ▾ lua/f/cmd/",
+      "  lua/f/cmd/git.lua",
+      "  lua/f/cmd/log.lua",
+      "  lua/f/init.lua",
+      "  tests/unit/x.lua",
+    }, section_lines(buf, "Unstaged"))
+    local ns = vim.api.nvim_get_namespaces().fugitive_summary
+    local l = assert(H.find_line("^  lua/f/cmd/log.lua$")) - 1
+    local groups = {}
+    for _, m in
+      ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { l, 0 }, { l, -1 }, { details = true }))
+    do
+      if m[4].hl_group then
+        groups[m[4].hl_group] = true
+      end
+    end
+    assert.truthy(groups.FugitiveStatusDeleted)
   end)
 
   it("shows full paths under the directory lines with paths = full", function()
@@ -1194,6 +1229,163 @@ describe("summary tree", function()
     assert.is_true(found)
   end)
 
+  describe("<BS>", function()
+    local function lines_of(buf)
+      return section_lines(buf, "Unstaged")
+    end
+
+    it("folds a directory line, and climbs to the parent when it is folded", function()
+      local _, buf = fixture()
+      goto_line("^  ▾ cmd/$")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.same({
+        "Unstaged (5)",
+        "M README.md",
+        "▾ lua/f/",
+        "  ▸ cmd/ (2)",
+        "M   init.lua",
+        "M tests/unit/x.lua",
+      }, lines_of(buf))
+      assert.equals("  ▸ cmd/ (2)", vim.api.nvim_get_current_line())
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.same(
+        { "Unstaged (5)", "M README.md", "▸ lua/f/ (3)", "M tests/unit/x.lua" },
+        lines_of(buf)
+      )
+      assert.equals("▸ lua/f/ (3)", vim.api.nvim_get_current_line())
+    end)
+
+    it("folds the innermost directory a file is in and moves to it", function()
+      local _, buf = fixture()
+      goto_line("^D     log.lua$")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.equals("  ▸ cmd/ (2)", vim.api.nvim_get_current_line())
+      goto_line("^M   init.lua$")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.equals("▸ lua/f/ (3)", vim.api.nvim_get_current_line())
+    end)
+
+    it("does nothing on a file outside any directory", function()
+      local _, buf = fixture()
+      local before = H.lines(buf)
+      goto_line("^M README.md$")
+      H.feed("<BS>")
+      vim.wait(200)
+      assert.same(before, H.lines(buf))
+    end)
+
+    it("folds only the diff on an inline diff line", function()
+      local _, buf = fixture()
+      goto_line("^M     git.lua$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      local hunk = goto_line("^@@")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.equals("M     git.lua", vim.api.nvim_get_current_line())
+      assert.is_nil(H.find_line("^@@"))
+      assert.equals("  ▾ cmd/", H.lines(buf)[hunk - 2])
+      -- and on a +/- line
+      after(buf, function()
+        H.feed("=")
+      end)
+      goto_line("^%+changed")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.equals("M     git.lua", vim.api.nvim_get_current_line())
+      assert.is_nil(H.find_line("^@@"))
+    end)
+
+    it("folds the directories in a visual range", function()
+      local _, buf = fixture()
+      goto_line("^M     git.lua$")
+      after(buf, function()
+        H.feed("Vj<BS>")
+      end)
+      assert.truthy(H.find_line("^  ▸ cmd/ %(2%)$"))
+      assert.truthy(H.find_line("^M   init.lua$"))
+    end)
+
+    it("hides an expanded untracked directory from one of its files", function()
+      local _, buf = fixture({ tree = false })
+      goto_line("^%? docs/$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      goto_line("a.md$")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.equals("? docs/", vim.api.nvim_get_current_line())
+      assert.is_nil(H.find_line("a.md$"))
+    end)
+
+    it("works with full paths too", function()
+      local _, buf = fixture({ paths = "full" })
+      goto_line("^D lua/f/cmd/log.lua$")
+      after(buf, function()
+        H.feed("<BS>")
+      end)
+      assert.equals("  ▸ lua/f/cmd/ (2)", vim.api.nvim_get_current_line())
+    end)
+  end)
+
+  it("closes the diffs under a directory when it folds", function()
+    local _, buf = fixture()
+    for _, keys in ipairs({ "<", "=", "<BS>" }) do
+      goto_line("^M     git.lua$")
+      after(buf, function()
+        H.feed("=")
+      end)
+      assert.truthy(H.find_line("^@@"), keys)
+      goto_line("^  ▾ cmd/$")
+      after(buf, function()
+        H.feed(keys)
+      end)
+      goto_line("^  ▸ cmd/")
+      after(buf, function()
+        H.feed(">")
+      end)
+      assert.truthy(H.find_line("^M     git.lua$"), keys)
+      assert.is_nil(H.find_line("^@@"), keys)
+    end
+  end)
+
+  it("closes an expanded untracked directory under a directory when it folds", function()
+    require("nvim-fugitive.config").set({ summary = { paths = "name", status = "letter" } })
+    local repo = H.repo({ files = { ["top/keep.txt"] = "k\n" } })
+    repo:write("top/a.txt", "a\n")
+    repo:write("top/sub/b.txt", "b\n")
+    repo:write("top/sub/c.txt", "c\n")
+    local buf = open(repo)
+    goto_line("^%?   sub/$")
+    after(buf, function()
+      H.feed("=")
+    end)
+    assert.truthy(H.find_line("b%.txt$"))
+    goto_line("^▾ top/$")
+    after(buf, function()
+      H.feed("<")
+    end)
+    goto_line("^▸ top/")
+    after(buf, function()
+      H.feed(">")
+    end)
+    assert.truthy(H.find_line("^%?   sub/$"))
+    assert.is_nil(H.find_line("b%.txt$"))
+  end)
+
   it("moves to directories with ( ) and past them with ]/ [/", function()
     local _, buf = fixture()
     goto_line("^M README.md$")
@@ -1206,7 +1398,7 @@ describe("summary tree", function()
   end)
 
   it("lists an expanded untracked directory's files under it, by name", function()
-    require("nvim-fugitive.config").set({ summary = {} })
+    require("nvim-fugitive.config").set({ summary = { paths = "name", status = "letter" } })
     local repo = H.repo({ files = { ["a"] = "a\n" } })
     repo:write("dir/one.txt", "1\n")
     repo:write("dir/sub/two.txt", "2\n")

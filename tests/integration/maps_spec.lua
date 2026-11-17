@@ -49,10 +49,12 @@ describe("summary maps (M2 and extras)", function()
   local log, restore
   before_each(function()
     H.reset_ui()
+    H.status_letters()
     log, restore = H.capture_notify()
   end)
   after_each(function()
     restore()
+    require("nvim-fugitive.config").set({})
   end)
 
   it("czz stashes, cza applies with --index, czp pops", function()

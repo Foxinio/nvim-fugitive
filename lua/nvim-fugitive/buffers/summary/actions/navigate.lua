@@ -1,6 +1,6 @@
 ---@mod nvim-fugitive.buffers.summary.actions.navigate Moving between items, files, sections and hunks.
 
-local render = require("nvim-fugitive.buffers.summary.render")
+local fold = require("nvim-fugitive.buffers.summary.fold")
 local util = require("nvim-fugitive.buffers.summary.actions.util")
 local summary = util.summary
 local state = util.state
@@ -126,14 +126,9 @@ function M.next_hunk(buf, dir)
   end
   local lnum = vim.fn.line(".")
   local i = st.info[lnum]
-  if
-    dir > 0
-    and i
-    and i.kind == "file"
-    and not st.expanded[render.expand_key(i.section, i.entry.path)]
-  then
+  if dir > 0 and i and i.kind == "file" and not fold.is_open(st.open, i.fold) then
     local path, section = i.entry.path, i.section --[[@as string]]
-    st.expanded[render.expand_key(section, path)] = true
+    fold.set(st.open, i.fold, true)
     summary().refresh(buf, function()
       for l, x in ipairs(st.info) do
         if x.kind == "hunk" and x.section == section and x.entry.path == path then
@@ -160,13 +155,9 @@ function M.next_expanded_hunk(buf)
     end
     local cur = vim.fn.line(".")
     local ci = st.info[cur]
-    if
-      ci
-      and ci.kind == "file"
-      and not st.expanded[render.expand_key(ci.section, ci.entry.path)]
-    then
+    if ci and ci.kind == "file" and not fold.is_open(st.open, ci.fold) then
       local path, section = ci.entry.path, ci.section --[[@as string]]
-      st.expanded[render.expand_key(section, path)] = true
+      fold.set(st.open, ci.fold, true)
       summary().refresh(buf, function()
         for l, x in ipairs(st.info) do
           if x.kind == "hunk" and x.section == section and x.entry.path == path then
@@ -181,11 +172,7 @@ function M.next_expanded_hunk(buf)
     end
     jump_kind(buf, { file = true, hunk = true }, 1, 1)
     local ni = st.info[vim.fn.line(".")]
-    if
-      ni
-      and ni.kind == "file"
-      and not st.expanded[render.expand_key(ni.section, ni.entry.path)]
-    then
+    if ni and ni.kind == "file" and not fold.is_open(st.open, ni.fold) then
       return step(n) -- expand the file we landed on
     end
     step(n - 1)

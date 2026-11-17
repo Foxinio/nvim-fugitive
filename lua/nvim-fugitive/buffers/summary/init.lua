@@ -8,13 +8,14 @@ local object = require("nvim-fugitive.object")
 local render = require("nvim-fugitive.buffers.summary.render")
 local snapshot = require("nvim-fugitive.buffers.summary.snapshot")
 
+local fold = require("nvim-fugitive.buffers.summary.fold")
+
 local M = {}
 
 ---@class fugitive.SummaryState
 ---@field repo fugitive.Repo
 ---@field info fugitive.LineInfo[]
----@field expanded table<string, boolean>
----@field collapsed table<string, boolean> folded directories (tree view), by render.expand_key
+---@field open fugitive.FoldState what is open (buffers/summary/fold.lua)
 ---@field generation integer
 ---@field running boolean
 ---@field dirty boolean
@@ -107,12 +108,11 @@ local function apply(buf, st, snap)
   end
   -- prune expansion state of files that are gone
   local cfg = require("nvim-fugitive.config").get().summary
-  local lines, info = render.render(snap, st.expanded, {
+  local lines, info = render.render(snap, st.open, {
     tree = cfg.tree,
     compact = cfg.compact,
     paths = cfg.paths,
     status = cfg.status,
-    collapsed = st.collapsed,
   })
   local wins = vim.fn.win_findbuf(buf)
   local cursors = {}
@@ -281,8 +281,7 @@ function M.load(buf, repo)
     st = {
       repo = repo,
       info = {},
-      expanded = {},
-      collapsed = {},
+      open = fold.new(),
       generation = 0,
       running = false,
       dirty = false,
@@ -294,7 +293,7 @@ function M.load(buf, repo)
   st.generation = st.generation + 1
   local snap = snapshot.gather(repo, function(args)
     return repo:sync(args)
-  end, st.expanded)
+  end, fold.expansions(st.open))
   apply(buf, st, snap)
   if snap.error then
     require("nvim-fugitive.ui.notify").error(snap.error)
@@ -325,7 +324,7 @@ function M.refresh(buf, cb)
   exec.async(function()
     return snapshot.gather(repo, function(args)
       return exec.await(args, { repo = repo })
-    end, st.expanded)
+    end, fold.expansions(st.open))
   end, function(ok, snap)
     vim.schedule(function()
       st.running = false

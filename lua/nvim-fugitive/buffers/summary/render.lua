@@ -5,6 +5,7 @@
 ---text we keep a parallel array describing every line so actions never have
 ---to parse buffer text.
 
+local fold = require("nvim-fugitive.buffers.summary.fold")
 local tree = require("nvim-fugitive.buffers.summary.tree")
 
 local M = {}
@@ -28,6 +29,10 @@ local M = {}
 ---@field dir? string directory: its path, with a trailing slash
 ---@field entries? fugitive.StatusEntry[] directory: every file under it
 ---@field collapsed? boolean directory: folded, its files not shown
+---@field fold? fugitive.FoldNode directory, file, commit or stash: its node
+---@field open? boolean file, commit or stash: its diff (or files) shown
+---@field parent? fugitive.LineInfo the line this one sits under: a file's
+---directory line or expanded untracked directory, a diff line's file
 ---@field name_col? integer file or directory: byte column where its name starts
 ---@field name_end? integer file or directory: byte column after its name
 ---@field marker_col? integer directory: byte column of its ▾/▸ marker
@@ -37,18 +42,9 @@ local M = {}
 ---@field compact? boolean no level for a lone file or a single-subdirectory chain
 ---@field paths? "name"|"full" files under a directory: name only, or full path
 ---@field status? "letter"|"color" status letter, or colour on the name
----@field collapsed? table<string, boolean> folded directories, by expand_key(section, dir)
 
 M.marker_open = "▾"
 M.marker_closed = "▸"
-
----Key of an expandable file.
----@param section string
----@param path string
----@return string
-function M.expand_key(section, path)
-  return section .. "\0" .. path
-end
 
 ---State of a submodule entry from its "S<c><m><u>" field, like git status.
 ---@param e fugitive.StatusEntry
@@ -74,12 +70,11 @@ function M.submodule_note(e)
 end
 
 ---@param snap fugitive.Snapshot
----@param expanded table<string, boolean>
+---@param open fugitive.FoldState what is open (buffers/summary/fold.lua)
 ---@param opts? fugitive.RenderOpts
 ---@return string[] lines, fugitive.LineInfo[] info
-function M.render(snap, expanded, opts)
+function M.render(snap, open, opts)
   opts = opts or {}
-  local collapsed = opts.collapsed or {}
   local color = opts.status == "color"
   local full = opts.paths == "full"
   local lines, info = {}, {}
@@ -116,26 +111,41 @@ function M.render(snap, expanded, opts)
     )
   end
 
-  local function add_diff(sec, entry, depth)
+  ---The inline diff of a file line, when it is open.
+  local function add_diff(file)
+    local sec, entry, depth = file.section, file.entry, file.depth
     local f = snap.diffs[sec] and snap.diffs[sec][entry.path]
-    if not expanded[M.expand_key(sec, entry.path)] or not f then
+    if not fold.is_open(open, file.fold) or not f then
       return
     end
+    file.open = true
     -- meta lines (new file mode, binary, rename, mode change) but not the
     -- diff/index/---/+++ boilerplate, then the hunks
     for _, h in ipairs(f.header) do
       if
         not (h:match("^diff ") or h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ "))
       then
-        add(h, { kind = "diffmeta", section = sec, entry = entry, file = f, depth = depth })
+        add(h, {
+          kind = "diffmeta",
+          section = sec,
+          entry = entry,
+          file = f,
+          depth = depth,
+          parent = file,
+        })
       end
     end
     for hi, hunk in ipairs(f.hunks) do
       if hunk.header ~= "" then
-        add(
-          hunk.header,
-          { kind = "hunk", section = sec, entry = entry, file = f, hunk_index = hi, depth = depth }
-        )
+        add(hunk.header, {
+          kind = "hunk",
+          section = sec,
+          entry = entry,
+          file = f,
+          hunk_index = hi,
+          depth = depth,
+          parent = file,
+        })
       end
       for li, l in ipairs(hunk.lines) do
         add(l, {
@@ -146,6 +156,7 @@ function M.render(snap, expanded, opts)
           hunk_index = hi,
           line_index = li,
           depth = depth,
+          parent = file,
         })
       end
     end
@@ -172,11 +183,11 @@ function M.render(snap, expanded, opts)
   local st = snap.status
   ---A file line: the status letter (or, coloured, two blanks), the indent,
   ---then its name; `name_col`/`name_end` mark the name for highlighting.
-  local function add_file(name, e, depth, label)
+  local function add_file(name, e, depth, label, parent)
     -- the flat (upstream) list never indents
     local indent = string.rep("  ", (opts.tree and not full) and depth or 0)
     local prefix = (color and "  " or (e.status .. " ")) .. indent
-    add(prefix .. label, {
+    local line = {
       kind = "file",
       section = name,
       entry = e,
@@ -184,21 +195,27 @@ function M.render(snap, expanded, opts)
       depth = depth,
       name_col = #prefix,
       name_end = #prefix + #label,
-    })
-    add_diff(name, e, depth)
+      fold = fold.node("file", name, e.path),
+      parent = parent,
+    }
+    add(prefix .. label, line)
+    add_diff(line)
+    return line
   end
   local function flat_label(e)
     return e.orig and (e.orig .. " -> " .. e.path) or e.path
   end
   ---An untracked directory expanded with `=`: its files, each its own entry.
-  local function add_children(name, e, depth)
+  local function add_children(line)
+    local name, e, depth = line.section, line.entry, line.depth
     local children = snap.untracked_children and snap.untracked_children[e.path]
     if name ~= "Untracked" or not children then
       return
     end
+    line.open = true
     for _, c in ipairs(children) do
       local label = (opts.tree and not full) and c.path:sub(#e.path + 1) or c.path
-      add_file(name, c, depth + 1, label)
+      add_file(name, c, depth + 1, label, line)
     end
   end
   local function file_section(name, list)
@@ -208,24 +225,26 @@ function M.render(snap, expanded, opts)
     section(name, name, #list)
     if not opts.tree then
       for _, e in ipairs(list) do
-        add_file(name, e, 0, flat_label(e))
-        add_children(name, e, 0)
+        add_children(add_file(name, e, 0, flat_label(e)))
       end
       return
     end
     local hidden_below -- depth under a folded directory: its lines are skipped
+    local dir_at = {} -- the directory line last shown at each depth
     for _, node in ipairs(tree.build(list, { compact = opts.compact ~= false })) do
       if hidden_below and node.depth <= hidden_below then
         hidden_below = nil
       end
       if not hidden_below then
         local label = tree.label(node, full and "full" or "name")
+        local parent = node.depth > 0 and dir_at[node.depth - 1] or nil
         if node.type == "dir" then
-          local folded = collapsed[M.expand_key(name, node.dir)] or false
+          local node_fold = fold.node("dir", name, node.dir)
+          local folded = not fold.is_open(open, node_fold)
           local indent = string.rep("  ", node.depth)
           local marker = folded and M.marker_closed or M.marker_open
           local text = indent .. marker .. " " .. label
-          add(text .. (folded and string.format(" (%d)", #node.entries) or ""), {
+          local line = {
             kind = "dir",
             section = name,
             dir = node.dir,
@@ -235,13 +254,16 @@ function M.render(snap, expanded, opts)
             marker_col = #indent,
             name_col = #indent + #marker + 1,
             name_end = #text,
-          })
+            fold = node_fold,
+            parent = parent,
+          }
+          add(text .. (folded and string.format(" (%d)", #node.entries) or ""), line)
+          dir_at[node.depth] = line
           if folded then
             hidden_below = node.depth
           end
         else
-          add_file(name, node.entry, node.depth, label)
-          add_children(name, node.entry, node.depth)
+          add_children(add_file(name, node.entry, node.depth, label, parent))
         end
       end
     end
@@ -260,13 +282,20 @@ function M.render(snap, expanded, opts)
 
   ---Read-only diff of a stash or commit expanded with `=`: its files with
   ---their hunks, keyed by the revision (`ref`).
-  local function add_rev_diff(sec, rev, files)
+  local function add_rev_diff(sec, rev, files, parent)
     local entry =
       { path = rev, status = "", xy = "", sub = "N...", submodule = false, kind = "stash" }
     for _, f in ipairs(files or {}) do
       for _, h in ipairs(f.header) do
         if not (h:match("^index ") or h:match("^%-%-%- ") or h:match("^%+%+%+ ")) then
-          add(h, { kind = "diffmeta", section = sec, entry = entry, file = f, ref = rev })
+          add(h, {
+            kind = "diffmeta",
+            section = sec,
+            entry = entry,
+            file = f,
+            ref = rev,
+            parent = parent,
+          })
         end
       end
       for hi, hunk in ipairs(f.hunks) do
@@ -277,6 +306,7 @@ function M.render(snap, expanded, opts)
           file = f,
           hunk_index = hi,
           ref = rev,
+          parent = parent,
         })
         for li, l in ipairs(hunk.lines) do
           add(l, {
@@ -287,6 +317,7 @@ function M.render(snap, expanded, opts)
             hunk_index = hi,
             line_index = li,
             ref = rev,
+            parent = parent,
           })
         end
       end
@@ -296,15 +327,18 @@ function M.render(snap, expanded, opts)
   for _, log in ipairs(snap.logs) do
     section(log.key, log.label, #log.entries, log.overflow and "+" or "")
     for _, e in ipairs(log.entries) do
-      add(e.commit .. " " .. e.subject, {
+      local line = {
         kind = "commit",
         section = log.key,
         commit = e.commit,
         subject = e.subject,
         label = log.label,
-      })
-      if expanded[M.expand_key(log.key, e.commit)] then
-        add_rev_diff(log.key, e.commit, snap.commit_diffs and snap.commit_diffs[e.commit])
+        fold = fold.node("commit", log.key, e.commit),
+      }
+      add(e.commit .. " " .. e.subject, line)
+      if fold.is_open(open, line.fold) then
+        line.open = true
+        add_rev_diff(log.key, e.commit, snap.commit_diffs and snap.commit_diffs[e.commit], line)
       end
     end
   end
@@ -312,14 +346,18 @@ function M.render(snap, expanded, opts)
   if #snap.stashes > 0 then
     section("Stash", "Stashes", #snap.stashes)
     for _, s in ipairs(snap.stashes) do
-      add(
-        s.ref .. " " .. s.subject,
-        { kind = "stash", section = "Stash", ref = s.ref, subject = s.subject }
-      )
-      local files = expanded[M.expand_key("Stash", s.ref)]
-        and snap.stash_diffs
-        and snap.stash_diffs[s.ref]
-      add_rev_diff("Stash", s.ref, files)
+      local line = {
+        kind = "stash",
+        section = "Stash",
+        ref = s.ref,
+        subject = s.subject,
+        fold = fold.node("stash", "Stash", s.ref),
+      }
+      add(s.ref .. " " .. s.subject, line)
+      if fold.is_open(open, line.fold) then
+        line.open = true
+        add_rev_diff("Stash", s.ref, snap.stash_diffs and snap.stash_diffs[s.ref], line)
+      end
     end
   end
 

@@ -40,6 +40,7 @@ describe("discard (X) and recovery", function()
   local log, restore
   before_each(function()
     H.reset_ui()
+    H.status_letters()
     log, restore = H.capture_notify()
     -- a watcher refresh landing mid-action would satisfy `after` too early
     require("nvim-fugitive.watch").enable(false)
@@ -47,6 +48,7 @@ describe("discard (X) and recovery", function()
   after_each(function()
     restore()
     require("nvim-fugitive.watch").enable(true)
+    require("nvim-fugitive.config").set({})
   end)
 
   it("untracked file: deleted, then restored", function()

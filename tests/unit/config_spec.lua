@@ -68,13 +68,13 @@ describe("config.merge", function()
   it("defaults to the tree look, and takes the upstream one", function()
     local s = config.merge().summary
     assert.same(
-      { tree = true, compact = true, paths = "name", status = "letter" },
+      { tree = true, compact = true, paths = "full", status = "color" },
       { tree = s.tree, compact = s.compact, paths = s.paths, status = s.status }
     )
-    s = config.merge({ summary = { tree = false, paths = "full", status = "color" } }).summary
+    s = config.merge({ summary = { tree = false, paths = "name", status = "letter" } }).summary
     assert.is_false(s.tree)
-    assert.equals("full", s.paths)
-    assert.equals("color", s.status)
+    assert.equals("name", s.paths)
+    assert.equals("letter", s.status)
     assert.equals("split", s.window)
   end)
 end)
