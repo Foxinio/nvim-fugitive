@@ -177,27 +177,11 @@ M.status_groups = {
   U = "FugitiveStatusUnmerged",
   T = "FugitiveStatusTypechange",
 }
-local status_colors = {
-  FugitiveStatusModified = { "#d78700", 172 },
-  FugitiveStatusAdded = { "#5faf5f", 71 },
-  FugitiveStatusDeleted = { "#d75f5f", 167 },
-  FugitiveStatusRenamed = { "#5f87d7", 68 },
-  FugitiveStatusUntracked = { "#8a8a8a", 245 },
-  FugitiveStatusUnmerged = { "#d75fd7", 170 },
-  FugitiveStatusTypechange = { "#af87d7", 140 },
-}
-
----Define the summary's highlight groups (`default`: a colorscheme's or the
----user's own definition wins). Cheap, so done on every render: a
----`:colorscheme` that clears them is undone by the next one.
+---Define the summary's highlight groups. The status colours come from the
+---colorscheme (buffers/summary/colors.lua) and follow it; the others are
+---links, with `default` so a colorscheme's or the user's own definition wins.
 function M.define_highlights()
-  for name, c in pairs(status_colors) do
-    vim.api.nvim_set_hl(
-      0,
-      name,
-      { bg = c[1], ctermbg = c[2], fg = "#000000", ctermfg = 0, default = true }
-    )
-  end
+  require("nvim-fugitive.buffers.summary.colors").setup()
   vim.api.nvim_set_hl(0, "FugitiveDirectory", { link = "Directory", default = true })
   vim.api.nvim_set_hl(0, "FugitiveFoldMarker", { link = "Special", default = true })
 end
