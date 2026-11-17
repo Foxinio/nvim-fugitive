@@ -348,6 +348,23 @@ function M.refresh_all(git_dir)
   end
 end
 
+---Refresh the summaries whose work tree holds `path`. Saving a file does
+---not touch .git, so the watcher misses it; without this the summary would
+---show its old state until entered (BufEnter refreshes too, but only once
+---you are already looking at it).
+---@param path string absolute
+function M.refresh_path(path)
+  local real = vim.uv.fs_realpath(path) or path
+  for buf, st in pairs(M._state) do
+    local wt = st.repo.worktree
+    if not vim.api.nvim_buf_is_valid(buf) then
+      M._state[buf] = nil
+    elseif wt and (real == wt or real:sub(1, #wt + 1) == wt .. "/") then
+      M.refresh(buf)
+    end
+  end
+end
+
 ---Folding (F26): sections, directories (tree view) and each expanded
 ---file's inline diff. An item enclosed by `depth` directory lines sits at
 ---level 1 + depth; what it shows below it (files, a diff) one deeper.

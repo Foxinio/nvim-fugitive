@@ -854,6 +854,31 @@ for _, look in ipairs(looks) do
       end, "watcher refresh", 5000)
     end)
 
+    it("is up to date before you go back to it after saving a file", function()
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      local buf = open(repo)
+      local st = summary.state(buf)
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
+      assert.is_nil(H.find_line("^M b$", buf))
+      -- edit and save b in another window, without entering the summary
+      vim.cmd("split " .. vim.fn.fnameescape(repo:path("b")))
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "changed" })
+      vim.cmd("write")
+      assert.are_not.equal(buf, vim.api.nvim_get_current_buf())
+      H.wait(function()
+        return H.find_line("^M b$", buf) ~= nil
+      end, "refresh after :write", 5000)
+      -- a file outside the repository refreshes nothing
+      local tick = st.tick
+      vim.cmd("edit " .. vim.fn.fnameescape(H.tmpdir() .. "/elsewhere.txt"))
+      vim.cmd("write")
+      vim.wait(200)
+      assert.equals(tick, st.tick)
+      vim.cmd("bwipeout!")
+    end)
+
     it("puts conflicts in an Unmerged section", function()
       local repo = H.repo({ files = { ["c"] = "base\n" } })
       repo:git("checkout", "-q", "-b", "topic")
