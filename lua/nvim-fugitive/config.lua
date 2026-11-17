@@ -16,7 +16,7 @@ local M = {}
 ---@field long_running string[] subcommands that run as overseer tasks
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
----@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: "letter"|"color"}
+---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: "letter"|"color", color_from: "name"|"line", color_to: "name"|"line"}
 ---@field args table<string, string[]> default arguments per subcommand ("sub" or "sub word")
 
 ---@type fugitive.Config
@@ -269,6 +269,8 @@ M.defaults = {
     compact = true,
     paths = "full",
     status = "color",
+    color_from = "name",
+    color_to = "line",
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it, e.g. { commit = { "--signoff" } }; not for :Git!
@@ -357,7 +359,12 @@ local function validate(opts)
       vim.validate("opts.summary." .. key, summary[key], kind)
     end
   end
-  for key, allowed in pairs({ paths = { "name", "full" }, status = { "letter", "color" } }) do
+  for key, allowed in pairs({
+    paths = { "name", "full" },
+    status = { "letter", "color" },
+    color_from = { "name", "line" },
+    color_to = { "name", "line" },
+  }) do
     if summary[key] ~= nil and not vim.tbl_contains(allowed, summary[key]) then
       error(
         string.format(

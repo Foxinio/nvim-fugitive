@@ -166,6 +166,14 @@ require("nvim-fugitive").setup({
 })
 ```
 
+Colour only the file name, not the rest of its line:
+
+```lua
+require("nvim-fugitive").setup({
+  summary = { color_to = "name" },
+})
+```
+
 A line for every directory level, even one holding a single changed file:
 
 ```lua
@@ -265,6 +273,12 @@ require("nvim-fugitive").setup({
     -- "color" (the name's background shows it, :h fugitive-summary-tree)
     -- or "letter" (M, A, D, ?, …)
     status = "color",
+    -- with status = "color", where a file's colour starts: at its "name"
+    -- (path) or at the start of the "line"
+    color_from = "name",
+    -- and where it ends: at the window's edge, after the "line", or at the
+    -- end of the "name"
+    color_to = "line",
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it for every command fugitive runs except :Git! (typed commands,

@@ -92,7 +92,8 @@ Calling setup is optional; without it the defaults below apply. >lua
     browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
     integrations = { telescope = true, overseer = true, gitsigns = true },
     summary = { window = "split", log_limit = 256, tree = true,
-                compact = true, paths = "full", status = "color" },
+                compact = true, paths = "full", status = "color",
+                color_from = "name", color_to = "line" },
                                         -- |fugitive-summary-tree|
     args = {},                          -- |fugitive-args|
   })
@@ -400,6 +401,15 @@ The `summary` options (|fugitive-config|):
   status      "color" (default): no letter, the name's background shows
               the status; "letter": a status letter (M A D R ? U T)
               before each file.
+  color_from  With "color", where a file line's colour starts: "name"
+              (default), where the file's text starts (its path or name,
+              as shown); "line", at the start of the line, so the blank
+              status column and any indent are coloured too.
+  color_to    With "color", where it ends: "line" (default), at the
+              window's edge, filling the empty space after the text;
+              "name", where the file's text ends.
+              Both do nothing with "letter", and directory lines are
+              never coloured.
 
 The colours of "color" come from your colorscheme: each file name's
 background is the colour your inline diffs use for the same kind of change,

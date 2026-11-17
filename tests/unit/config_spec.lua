@@ -60,6 +60,8 @@ describe("config.merge", function()
       { compact = 1 },
       { paths = "relative" },
       { status = "colour" },
+      { color_from = "text" },
+      { color_to = "eol" },
     }) do
       assert.is_false(pcall(config.merge, { summary = bad }), vim.inspect(bad))
     end
@@ -67,10 +69,21 @@ describe("config.merge", function()
 
   it("defaults to the tree look, and takes the upstream one", function()
     local s = config.merge().summary
-    assert.same(
-      { tree = true, compact = true, paths = "full", status = "color" },
-      { tree = s.tree, compact = s.compact, paths = s.paths, status = s.status }
-    )
+    assert.same({
+      tree = true,
+      compact = true,
+      paths = "full",
+      status = "color",
+      color_from = "name",
+      color_to = "line",
+    }, {
+      tree = s.tree,
+      compact = s.compact,
+      paths = s.paths,
+      status = s.status,
+      color_from = s.color_from,
+      color_to = s.color_to,
+    })
     s = config.merge({ summary = { tree = false, paths = "name", status = "letter" } }).summary
     assert.is_false(s.tree)
     assert.equals("name", s.paths)

@@ -1040,7 +1040,7 @@ describe("summary tree", function()
   end)
 
   it("colours the names instead of the letters with status = color", function()
-    local _, buf = fixture({ status = "color" })
+    local _, buf = fixture({ status = "color", color_to = "name" })
     assert.same({
       "Staged (3)",
       "  Makefile",
@@ -1071,6 +1071,45 @@ describe("summary tree", function()
     assert.truthy(dir.FugitiveDirectory)
     assert.truthy(dir.FugitiveFoldMarker)
     assert.truthy(vim.api.nvim_get_hl(0, { name = "FugitiveStatusModified" }).bg)
+  end)
+
+  ---The status-colour extmark on the line matching `pattern`.
+  local function status_mark(buf, pattern)
+    local ns = vim.api.nvim_get_namespaces().fugitive_summary
+    local l = assert(H.find_line(pattern)) - 1
+    for _, m in
+      ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { l, 0 }, { l, -1 }, { details = true }))
+    do
+      if (m[4].hl_group or ""):match("^FugitiveStatus") then
+        return {
+          row = m[2],
+          col = m[3],
+          end_row = m[4].end_row,
+          end_col = m[4].end_col,
+          eol = m[4].hl_eol,
+        }
+      end
+    end
+  end
+
+  it("runs the status colour from the name to the window edge by default", function()
+    -- the name starts at column 4: two blanks, then an indent of two
+    local _, buf = fixture({ status = "color" })
+    local m = status_mark(buf, "^    health.lua$")
+    assert.same({ 4, m.row + 1, 0, true }, { m.col, m.end_row, m.end_col, m.eol })
+  end)
+
+  it("colours only the name with color_to = name", function()
+    local _, buf = fixture({ status = "color", color_to = "name" })
+    local m = status_mark(buf, "^    health.lua$")
+    assert.same({ 4, m.row, 14 }, { m.col, m.end_row, m.end_col })
+    assert.is_falsy(m.eol)
+  end)
+
+  it("colours from the start of the line with color_from = line", function()
+    local _, buf = fixture({ status = "color", color_from = "line" })
+    local m = status_mark(buf, "^    health.lua$")
+    assert.same({ 0, m.row + 1, 0, true }, { m.col, m.end_row, m.end_col, m.eol })
   end)
 
   it("folds and unfolds a directory with <, > and =", function()
