@@ -4,6 +4,10 @@ local M = {}
 
 ---@alias fugitive.Route "float"|"notify"|"task"|"terminal"|"editor"
 
+---@class fugitive.StatusStyle how the summary shows a file's status
+---@field letters boolean M, A, D, ?, … before each file
+---@field color {enabled: boolean, from: "name"|"line", to: "name"|"line"} as the name's background
+
 ---@class fugitive.Config
 ---@field maps table<string, table<string, string|false>> per-buffer-type `lhs -> action` tables
 ---@field routes table<string, fugitive.Route> per-subcommand route overrides
@@ -16,7 +20,7 @@ local M = {}
 ---@field long_running string[] subcommands that run as overseer tasks
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
----@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: "letter"|"color"}
+---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: fugitive.StatusStyle}
 ---@field args table<string, string[]> default arguments per subcommand ("sub" or "sub word")
 
 ---@type fugitive.Config
@@ -268,7 +272,10 @@ M.defaults = {
     tree = true,
     compact = true,
     paths = "full",
-    status = "color",
+    status = {
+      letters = false,
+      color = { enabled = true, from = "name", to = "line" },
+    },
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it, e.g. { commit = { "--signoff" } }; not for :Git!
@@ -357,16 +364,35 @@ local function validate(opts)
       vim.validate("opts.summary." .. key, summary[key], kind)
     end
   end
-  for key, allowed in pairs({ paths = { "name", "full" }, status = { "letter", "color" } }) do
-    if summary[key] ~= nil and not vim.tbl_contains(allowed, summary[key]) then
+  local function one_of(name, value, allowed)
+    if value ~= nil and not vim.tbl_contains(allowed, value) then
       error(
         string.format(
-          'fugitive: summary.%s must be "%s", not %s',
-          key,
+          'fugitive: %s must be "%s", not %s',
+          name,
           table.concat(allowed, '" or "'),
-          vim.inspect(summary[key])
+          vim.inspect(value)
         )
       )
+    end
+  end
+  one_of("summary.paths", summary.paths, { "name", "full" })
+  local status = summary.status
+  if type(status) == "string" then
+    error(
+      "fugitive: summary.status is now a table: { letters = true } or"
+        .. " { color = { ... } } (:h fugitive-summary-tree)"
+    )
+  end
+  if status ~= nil then
+    vim.validate("opts.summary.status", status, "table")
+    vim.validate("opts.summary.status.letters", status.letters, "boolean", true)
+    local color = status.color
+    if color ~= nil then
+      vim.validate("opts.summary.status.color", color, "table")
+      vim.validate("opts.summary.status.color.enabled", color.enabled, "boolean", true)
+      one_of("summary.status.color.from", color.from, { "name", "line" })
+      one_of("summary.status.color.to", color.to, { "name", "line" })
     end
   end
   if opts.notify and opts.notify.max_lines ~= nil then
