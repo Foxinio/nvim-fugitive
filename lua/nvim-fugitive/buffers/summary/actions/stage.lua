@@ -2,7 +2,7 @@
 
 local diff_mod = require("nvim-fugitive.git.diff")
 local notify = require("nvim-fugitive.ui.notify")
-local render = require("nvim-fugitive.buffers.summary.render")
+local fold = require("nvim-fugitive.buffers.summary.fold")
 local util = require("nvim-fugitive.buffers.summary.actions.util")
 local summary = util.summary
 local state = util.state
@@ -323,7 +323,7 @@ local function fold_moved(st, items)
   end
   for path in pairs(paths) do
     for _, sec in ipairs(file_sections) do
-      st.expanded[render.expand_key(sec, path)] = nil
+      fold.reset(st.open, fold.node("file", sec, path))
     end
   end
   return paths
@@ -473,54 +473,48 @@ function M.toggle(buf, visual)
 end
 
 -- ---------------------------------------------------------------------------
--- Inline diffs
+-- Inline diffs and folds
 
-local function file_item_at(st, lnum)
-  local i = st.info[lnum]
-  if
-    i
-    and (
-      i.kind == "file"
-      or i.kind == "stash"
-      or i.kind == "commit"
-      or i.kind == "hunk"
-      or i.kind == "diffline"
-      or i.kind == "diffmeta"
-    )
-  then
-    return i
+local diff_kinds = { diffmeta = true, hunk = true, diffline = true }
+
+---The foldable line a line belongs to: itself (a directory, file, commit or
+---stash), or, on an inline diff, the file (commit, stash) the diff is of.
+---@param i fugitive.LineInfo?
+---@return fugitive.LineInfo?
+local function node_of(i)
+  if i and diff_kinds[i.kind] then
+    return i.parent
   end
+  return i and i.fold and i or nil
 end
 
----What `=` expands for a line: a file path, a stash ref or a commit.
-local function expand_id(i)
-  if i.kind == "commit" then
-    return i.commit
+---Whether a foldable line shows what is under it.
+local function shown(line)
+  if line.kind == "dir" then
+    return not line.collapsed
   end
-  if i.ref then
-    return i.ref
-  end
-  return i.entry.path
+  return line.open or false
 end
 
----Forget what is expanded under `path` in `section` (the inline diffs of its
----files, its expanded untracked directories, and `path` itself), so that
----unfolding it again shows everything under it collapsed.
-local function forget_expanded(st, section, path)
-  local prefix = render.expand_key(section, path)
-  for k in pairs(st.expanded) do
-    if k:sub(1, #prefix) == prefix then
-      st.expanded[k] = nil
+---Refresh, then put the cursor on the line of `node`, if given.
+---@param node fugitive.FoldNode?
+local function refresh_to(buf, st, node)
+  summary().refresh(buf, function()
+    if not node then
+      return
     end
-  end
+    for lnum, i in ipairs(st.info) do
+      if i.fold and i.fold.kind == node.kind and i.fold.id == node.id then
+        pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
+        return
+      end
+    end
+  end)
 end
 
----Fold a directory line, closing what is open under it.
-local function fold_dir_line(st, dirline)
-  st.collapsed[render.expand_key(dirline.section, dirline.dir)] = true
-  forget_expanded(st, dirline.section, dirline.dir)
-end
-
+---`=`, `<`, `>`: open, close or toggle the node of each line (a directory,
+---or a file's, commit's or stash's diff). Closing one from inside its diff
+---moves the cursor to it.
 ---@param mode "toggle"|"show"|"hide"
 function M.inline(buf, mode, visual)
   local st = state(buf)
@@ -528,174 +522,61 @@ function M.inline(buf, mode, visual)
     return
   end
   local l1, l2 = range(visual)
-  local changed = false
-  local cursor_to_file
+  local changed, cursor_to = false, nil
+  local done = {}
   for lnum = l1, l2 do
-    local dirline = st.info[lnum]
-    if dirline and dirline.kind == "dir" then
-      -- a directory: = toggles, < folds, > (or any unfold) unfolds it
-      local key = render.expand_key(dirline.section, dirline.dir)
-      local want
+    local i = st.info[lnum]
+    local node = node_of(i)
+    if node and not done[node] then
+      done[node] = true
+      local want = mode == "show"
       if mode == "toggle" then
-        want = not dirline.collapsed
-      else
-        want = mode == "hide"
+        want = not shown(node)
       end
-      if want ~= dirline.collapsed then
+      if want ~= shown(node) then
         if want then
-          fold_dir_line(st, dirline)
+          fold.set(st.open, node.fold, true)
         else
-          st.collapsed[key] = nil
-        end
-        changed = true
-      end
-    end
-    local i = file_item_at(st, lnum)
-    if i then
-      local key = render.expand_key(i.section, expand_id(i))
-      -- an untracked directory also shows its files when it is part of an
-      -- expanded one (git splits it up once some of its files are staged)
-      local dir = i.kind == "file"
-        and i.section == "Untracked"
-        and i.entry.path:match("/$")
-        and i.entry.path
-      local shown = st.expanded[key] or false
-      if dir then
-        shown = (st.snap and st.snap.untracked_children and st.snap.untracked_children[dir]) ~= nil
-      end
-      local want
-      if mode == "toggle" then
-        want = not shown
-      else
-        want = mode == "show"
-      end
-      if shown ~= want then
-        st.expanded[key] = want or nil
-        if dir and not want then
-          for k in pairs(st.expanded) do
-            local d = k:match("^Untracked%z(.+/)$")
-            if d and dir:sub(1, #d) == d then
-              st.expanded[k] = nil
-            end
+          fold.close(st.open, st.info, node)
+          if node ~= i then
+            cursor_to = node.fold
           end
         end
         changed = true
-        if not want and i.kind ~= "file" and i.kind ~= "stash" and i.kind ~= "commit" then
-          cursor_to_file = expand_id(i)
-        end
       end
     end
   end
   if changed then
-    summary().refresh(buf, function()
-      if cursor_to_file then
-        for lnum, i in ipairs(st.info) do
-          if
-            (i.kind == "file" or i.kind == "stash" or i.kind == "commit")
-            and expand_id(i) == cursor_to_file
-          then
-            pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
-            break
-          end
-        end
-      end
-    end)
+    refresh_to(buf, st, cursor_to)
   end
 end
 
----The nearest directory line above `lnum` enclosing it (same section,
----smaller depth), and its line number.
-local function enclosing_dir(st, lnum)
-  local i = st.info[lnum]
-  local depth = i.depth or 0
-  for l = lnum - 1, 1, -1 do
-    local d = st.info[l]
-    if not d or d.section ~= i.section or d.kind == "section" then
-      return
-    end
-    if d.kind == "dir" and (d.depth or 0) < depth then
-      return d, l
-    end
-  end
-end
-
----The nearest expanded untracked directory ("? dir/") listing the file at
----`lnum`, and its line number.
-local function untracked_parent(st, lnum)
-  local i = st.info[lnum]
-  if i.section ~= "Untracked" or i.kind ~= "file" then
-    return
-  end
-  local path = i.entry.path
-  for l = lnum - 1, 1, -1 do
-    local d = st.info[l]
-    if not d or d.section ~= "Untracked" then
-      return
-    end
-    local p = d.kind == "file" and d.entry.path
-    if p and p ~= path and p:match("/$") and path:sub(1, #p) == p then
-      return d, l
-    end
-  end
-end
-
----<BS>: fold the directory a line is in. On a directory line: that directory
----(or, already folded, the one enclosing it); on a file: the directory it is
----in; on an inline diff: just that diff.
+---<BS>: on an inline diff, close that diff; on an open directory, fold it;
+---anywhere else (a file, a folded directory), fold what it sits under: its
+---directory, or the expanded untracked directory listing it.
 function M.fold_dir(buf, visual)
   local st = state(buf)
   if not st then
     return
   end
   local l1, l2 = range(visual)
-  local target -- where the cursor goes: {dir = …} or {file = …}, with a section
+  local target
   for lnum = l1, l2 do
-    local i = st.info[lnum] or {}
-    if i.kind == "dir" then
-      local d ---@type fugitive.LineInfo?
-      if i.collapsed then
-        d = enclosing_dir(st, lnum)
-      else
-        d = i
-      end
-      if d then
-        fold_dir_line(st, d)
-        target = { section = d.section, dir = d.dir }
-      end
-    elseif i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta" then
-      local id = expand_id(i)
-      st.expanded[render.expand_key(i.section, id)] = nil
-      target = { section = i.section, file = id }
-    elseif i.kind == "file" then
-      local d, dl = enclosing_dir(st, lnum)
-      local u, ul = untracked_parent(st, lnum)
-      if u and (not d or ul > dl) then
-        forget_expanded(st, u.section, u.entry.path)
-        target = { section = u.section, file = u.entry.path }
-      elseif d then
-        fold_dir_line(st, d)
-        target = { section = d.section, dir = d.dir }
-      end
+    local i = st.info[lnum]
+    local node
+    if i and i.kind == "dir" and not i.collapsed then
+      node = i -- this directory
+    elseif i then
+      node = i.parent -- the diff's file, or what the line sits under
+    end
+    if node then
+      fold.close(st.open, st.info, node)
+      target = node.fold
     end
   end
-  if not target then
-    return
+  if target then
+    refresh_to(buf, st, target)
   end
-  summary().refresh(buf, function()
-    for lnum, i in ipairs(st.info) do
-      local here
-      if target.dir then
-        here = i.kind == "dir" and i.dir == target.dir
-      else
-        here = (i.kind == "file" or i.kind == "stash" or i.kind == "commit")
-          and expand_id(i) == target.file
-      end
-      if here and i.section == target.section then
-        pcall(vim.api.nvim_win_set_cursor, 0, { lnum, 0 })
-        break
-      end
-    end
-  end)
 end
 
 return M

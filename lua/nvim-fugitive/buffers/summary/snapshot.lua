@@ -292,19 +292,23 @@ end
 ---Untracked files inside the untracked directories expanded with `=`.
 ---@param run fun(args: string[]): fugitive.ExecResult
 ---@param st fugitive.Status
----@param expanded table<string, boolean>
+---@param expanded table<string, boolean> section .. "\0" .. path: open (true)
+---or closed (false) by the user
 ---@return table<string, fugitive.StatusEntry[]> directory -> files
 local function untracked_children(run, st, expanded)
   local dirs = {}
-  for key in pairs(expanded) do
-    local dir = key:match("^Untracked%z(.+/)$")
+  for key, open in pairs(expanded) do
+    local dir = open and key:match("^Untracked%z(.+/)$")
     if dir then
       table.insert(dirs, dir)
     end
   end
   ---Expanded itself, or inside an expanded directory that git now reports
-  ---in parts (after staging some of its files).
+  ---in parts (after staging some of its files), unless closed since.
   local function is_expanded(path)
+    if expanded["Untracked\0" .. path] == false then
+      return false
+    end
     for _, dir in ipairs(dirs) do
       if path:sub(1, #dir) == dir then
         return true
@@ -338,9 +342,9 @@ local function inline_diffs(run, st, expanded, children)
   local diffs = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} }
   local want = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} }
   local any = false
-  for key in pairs(expanded) do
+  for key, open in pairs(expanded) do
     local section, path = key:match("^(%w+)%z(.*)$")
-    if section and want[section] then
+    if open and section and want[section] then
       table.insert(want[section], path)
       any = true
     end
