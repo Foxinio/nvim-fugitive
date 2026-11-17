@@ -854,6 +854,63 @@ for _, look in ipairs(looks) do
       end, "watcher refresh", 5000)
     end)
 
+    describe("watcher recheck", function()
+      ---Open a summary with a fast recheck, then stop the watcher's
+      ---filesystem handles: whatever changes next is a missed event.
+      local function deaf(repo)
+        require("nvim-fugitive.config").set({ summary = look.summary, watch = { recheck = 200 } })
+        require("nvim-fugitive.watch").enable(true)
+        local buf = open(repo)
+        local st = summary.state(buf)
+        H.wait(function()
+          return not st.running
+        end, "summary idle")
+        vim.wait(400) -- a debounced fire from opening the summary, if any
+        for _, h in ipairs(require("nvim-fugitive.watch")._watchers[st.repo.git_dir].handles) do
+          h.handle:stop()
+        end
+        return buf
+      end
+      local function count_changed(ms)
+        local n = 0
+        local id = vim.api.nvim_create_autocmd("User", {
+          pattern = "FugitiveChanged",
+          callback = function()
+            n = n + 1
+          end,
+        })
+        vim.wait(ms)
+        vim.api.nvim_del_autocmd(id)
+        return n
+      end
+
+      it("catches a change the watcher missed", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        local buf = deaf(repo)
+        repo:write("new", "x\n")
+        repo:git("add", "new")
+        H.wait(function()
+          return H.find_line("^A new", buf) ~= nil
+        end, "recheck refresh", 3000)
+      end)
+
+      it("does nothing when nothing changed", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        deaf(repo)
+        assert.equals(0, count_changed(700))
+      end)
+
+      it("does nothing while no summary is visible", function()
+        local repo = H.repo({ files = { ["a"] = "a\n" } })
+        local buf = deaf(repo)
+        vim.cmd("enew")
+        assert.are_not.equal(buf, vim.api.nvim_get_current_buf())
+        repo:write("new", "x\n")
+        repo:git("add", "new")
+        assert.equals(0, count_changed(700))
+      end)
+    end)
+
     it("is up to date before you go back to it after saving a file", function()
       local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
       local buf = open(repo)

@@ -352,6 +352,18 @@ function M.refresh_all(git_dir)
   end
 end
 
+---Whether a window shows a summary of the repository at `git_dir`.
+---@param git_dir string
+---@return boolean
+function M.visible(git_dir)
+  for buf, st in pairs(M._state) do
+    if st.repo.git_dir == git_dir and #vim.fn.win_findbuf(buf) > 0 then
+      return true
+    end
+  end
+  return false
+end
+
 ---Refresh the summaries whose work tree holds `path`. Saving a file does
 ---not touch .git, so the watcher misses it; without this the summary would
 ---show its old state until entered (BufEnter refreshes too, but only once

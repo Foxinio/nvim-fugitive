@@ -242,8 +242,10 @@ require("nvim-fugitive").setup({
   editor = { window = "split" },
   -- discard journal length (.git/fugitive/discard.json)
   discard = { journal_size = 200 },
-  -- refresh the summary when .git changes on disk (debounce in ms)
-  watch = { enabled = true, debounce = 150 },
+  -- refresh the summary when .git changes on disk (debounce in ms); while a
+  -- summary is on screen, also recheck every `recheck` ms for a change the
+  -- filesystem events missed (0: never)
+  watch = { enabled = true, debounce = 150, recheck = 5000 },
   -- subcommands run as overseer tasks (or background jobs without overseer)
   long_running = { "pull", "fetch", "push", "clone", "submodule update", "lfs" },
   -- :GBrowse: host -> provider name, and custom providers

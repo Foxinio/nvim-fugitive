@@ -86,7 +86,7 @@ Calling setup is optional; without it the defaults below apply. >lua
     float = { width = 0.9, height = 0.85, border = "rounded" },
     editor = { window = "split" },      -- "split", "vsplit", "tab", "current"
     discard = { journal_size = 200 },
-    watch = { enabled = true, debounce = 150 },
+    watch = { enabled = true, debounce = 150, recheck = 5000 },
     long_running = { "pull", "fetch", "push", "clone",
                      "submodule update", "lfs" },
     browse = { hosts = {}, providers = {} },  -- |fugitive-browse|
@@ -328,7 +328,9 @@ filesystem events), when you save a file of its work tree (so it is
 current before you go back to it), on |FocusGained| and on |BufEnter|. A
 change fugitive made itself refreshes once: the watcher ignores git's own
 writes after it, and a refresh that finds nothing new leaves the buffer
-untouched. The cursor stays on the same item, except after staging or
+untouched. While a summary is on screen the watcher also rechecks every
+`watch.recheck` ms (5000; 0 turns it off), so a change it missed still
+shows within seconds. The cursor stays on the same item, except after staging or
 unstaging whole files, or a hunk that leaves its file with no change in its
 section: it moves on to the next file of the section they left, else the
 previous one, else (the section is empty now) the first file of the next

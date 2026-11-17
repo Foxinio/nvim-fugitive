@@ -10,6 +10,7 @@ local M = {}
 ---@class fugitive.Watcher
 ---@field handles {path: string, handle: uv.uv_fs_event_t}[]
 ---@field timer uv.uv_timer_t?
+---@field recheck uv.uv_timer_t? compares the fingerprint now and then
 ---@field refs integer
 ---@field fire fun()?
 ---@field seen string? the state fugitive last acted on (fingerprint)
@@ -145,6 +146,29 @@ function M.watch(repo)
   end
   w.fire = fire
   M._rewatch(repo, w)
+  w.seen = fingerprint(repo, w)
+  -- a change the filesystem events missed (or a fingerprint that matched by
+  -- chance on a coarse-timestamp filesystem) shows within `recheck` ms, while
+  -- a summary of this repository is on screen
+  local every = config().recheck or 0
+  if every > 0 then
+    w.recheck = uv.new_timer()
+    w.recheck:start(every, every, function()
+      vim.schedule(function()
+        if M._watchers[repo.git_dir] ~= w then
+          return
+        end
+        local summary = package.loaded["nvim-fugitive.buffers.summary"]
+        if not (summary and summary.visible(repo.git_dir)) then
+          return
+        end
+        if fingerprint(repo, w) ~= w.seen then
+          M._rewatch(repo, w)
+          require("nvim-fugitive").changed(repo)
+        end
+      end)
+    end)
+  end
 end
 
 function M._rewatch(repo, w)
@@ -195,9 +219,9 @@ function M.unwatch(git_dir)
     h.handle:stop()
     h.handle:close()
   end
-  if w.timer then
-    w.timer:stop()
-    w.timer:close()
+  for _, t in pairs({ timer = w.timer, recheck = w.recheck }) do
+    t:stop()
+    t:close()
   end
   M._watchers[git_dir] = nil
 end
