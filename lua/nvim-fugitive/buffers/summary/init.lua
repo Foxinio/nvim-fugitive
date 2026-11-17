@@ -124,12 +124,16 @@ local function apply(buf, st, snap)
   -- before setting the lines: 'foldexpr' reads st.info as they change
   st.info = info
   st.snap = snap
-  vim.bo[buf].modifiable = true
-  vim.bo[buf].readonly = false
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].readonly = true
-  vim.bo[buf].modified = false
+  -- a refresh that found nothing new leaves the text (and so the folds and
+  -- the view) alone: only its line info and highlights are renewed
+  if not vim.deep_equal(lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false)) then
+    vim.bo[buf].modifiable = true
+    vim.bo[buf].readonly = false
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+    vim.bo[buf].readonly = true
+    vim.bo[buf].modified = false
+  end
   M.highlight(buf, info)
   -- after staging/unstaging files (or the hunks emptying them): on to the
   -- next file of the section they left, once this render shows them gone

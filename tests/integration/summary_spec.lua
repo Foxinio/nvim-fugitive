@@ -879,6 +879,62 @@ for _, look in ipairs(looks) do
       vim.cmd("bwipeout!")
     end)
 
+    it("refreshes once after a :Git command, not again for its own echo", function()
+      require("nvim-fugitive.watch").enable(true)
+      local repo = H.repo({ files = { ["a"] = "a\n", ["b"] = "b\n" } })
+      repo:write("a", "A\n")
+      local buf = open(repo)
+      local st = summary.state(buf)
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
+      vim.wait(400) -- the watcher's echo of opening the summary, if any
+      local changed = 0
+      local id = vim.api.nvim_create_autocmd("User", {
+        pattern = "FugitiveChanged",
+        callback = function()
+          changed = changed + 1
+        end,
+      })
+      vim.cmd("Git add a")
+      H.wait(function()
+        return H.find_line("^M a$", buf) ~= nil and H.find_line("^Staged", buf) ~= nil
+      end, "refresh after :Git add")
+      -- well past the watcher's debounce (150 ms)
+      vim.wait(600)
+      vim.api.nvim_del_autocmd(id)
+      assert.equals(1, changed)
+      -- a change from outside still refreshes
+      repo:git("add", "b")
+      repo:write("b", "B\n")
+      repo:git("add", "b")
+      H.wait(function()
+        local l = H.find_line("^Staged", buf)
+        return l and H.find_line("^M b$", buf) ~= nil
+      end, "watcher refresh", 5000)
+    end)
+
+    it("leaves the buffer alone when a refresh finds nothing new", function()
+      local repo = H.repo({ files = { ["a"] = "a\n" } })
+      repo:write("a", "A\n")
+      local buf = open(repo)
+      local st = summary.state(buf)
+      H.wait(function()
+        return not st.running
+      end, "summary idle")
+      local changedtick = vim.api.nvim_buf_get_changedtick(buf)
+      after(buf, function()
+        summary.refresh(buf)
+      end)
+      assert.equals(changedtick, vim.api.nvim_buf_get_changedtick(buf))
+      -- and does update it when something changed
+      repo:write("new", "n\n")
+      after(buf, function()
+        summary.refresh(buf)
+      end)
+      assert.truthy(H.find_line("new$", buf))
+    end)
+
     it("puts conflicts in an Unmerged section", function()
       local repo = H.repo({ files = { ["c"] = "base\n" } })
       repo:git("checkout", "-q", "-b", "topic")

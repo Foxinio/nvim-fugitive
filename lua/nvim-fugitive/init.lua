@@ -18,6 +18,7 @@ end
 function M.changed(repo)
   if repo then
     require("nvim-fugitive.git.repo").invalidate(repo.git_dir)
+    require("nvim-fugitive.watch").settle(repo)
   end
   vim.api.nvim_exec_autocmds("User", {
     pattern = "FugitiveChanged",

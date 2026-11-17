@@ -325,13 +325,14 @@ left alone).
 The buffer refreshes by itself: after every command run through fugitive,
 when the repository changes on disk (index, HEAD, refs; watched with
 filesystem events), when you save a file of its work tree (so it is
-current before you go back to it), on |FocusGained| and on |BufEnter|. The
-cursor stays on the same item, except after staging or unstaging whole
-files, or a hunk that leaves its file with no change in its section: it
-moves on to the next file of the section they left, else the previous one,
-else (the section is empty now) the first file of the next section the
-files do not land in.
-Whole files that move are folded.
+current before you go back to it), on |FocusGained| and on |BufEnter|. A
+change fugitive made itself refreshes once: the watcher ignores git's own
+writes after it, and a refresh that finds nothing new leaves the buffer
+untouched. The cursor stays on the same item, except after staging or
+unstaging whole files, or a hunk that leaves its file with no change in its
+section: it moves on to the next file of the section they left, else the
+previous one, else (the section is empty now) the first file of the next
+section the files do not land in. Whole files that move are folded.
 
                                                      *fugitive-summary-tree*
 The files of the Unmerged, Untracked, Unstaged and Staged sections show as
