@@ -6,13 +6,15 @@ local M = {}
 ---editor, …) in a terminal split. The buffer closes when git exits 0.
 ---@param repo fugitive.Repo
 ---@param args string[]
----@param opts? {mods?: string, on_exit?: fun(code: integer)}
+---@param opts? {mods?: string, on_exit?: fun(code: integer), shell?: table}
 ---@return integer buf
 function M.run(repo, args, opts)
   opts = opts or {}
   local exec = require("nvim-fugitive.git.exec")
-  local cmd, sysopts =
-    exec.build(args, { repo = repo, editor = true, interactive = true, mods = opts.mods })
+  local cmd, sysopts = exec.build(
+    args,
+    { repo = repo, editor = true, interactive = true, mods = opts.mods, shell = opts.shell }
+  )
   -- a terminal is a real tty: let git page/prompt as it would normally, but
   -- keep our editor so commit messages still open in this Neovim
   sysopts.env.GIT_PAGER = nil

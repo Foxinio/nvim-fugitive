@@ -17,6 +17,22 @@ describe("exec.build", function()
     assert.truthy(opts.env.GIT_EDITOR:match("editor%.sh"))
   end)
 
+  it("runs through 'shell': our words escaped, the user's as typed, then the tail", function()
+    local cmd, opts = exec.build({ "log", "--format=%h %s", "added" }, {
+      color = { "color.diff" },
+      shell = { tail = "| head -1", raw = { log = "log", ["--format=%h %s"] = "'--format=%h %s'" } },
+    })
+    assert.equals(vim.o.shell, cmd[1])
+    assert.equals(vim.o.shellcmdflag, cmd[2])
+    assert.equals(3, #cmd)
+    assert.equals(
+      "'git' '--no-optional-locks' '-c' 'core.quotepath=false' '-c' 'color.ui=never'"
+        .. " log '--format=%h %s' 'added' | head -1",
+      cmd[3]
+    )
+    assert.equals("1", opts.env.NO_COLOR)
+  end)
+
   it("translates -c sequence.editor into the environment", function()
     local cmd, opts = exec.build({ "-c", "sequence.editor=true", "rebase", "-i" }, {})
     assert.equals("true", opts.env.GIT_SEQUENCE_EDITOR)

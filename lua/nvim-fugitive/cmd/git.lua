@@ -138,14 +138,14 @@ end
 ---Run a foreground command and notify its output (notify + editor routes).
 ---@param repo fugitive.Repo
 ---@param args string[]
----@param opts {mods?: string, on_done?: fun(res: fugitive.ExecResult), significant?: boolean}
+---@param opts {mods?: string, on_done?: fun(res: fugitive.ExecResult), significant?: boolean, shell?: table}
 ---@return fugitive.Job
 function M.run_notify(repo, args, opts)
   local job
   local entry
   -- `--no-pager` explicitly asks for the output as a notification
   local significant = opts.significant or routes.is_significant(args) or argv.parse(args).no_pager
-  job = repo:run(args, { editor = true, mods = opts.mods }, function(res)
+  job = repo:run(args, { editor = true, mods = opts.mods, shell = opts.shell }, function(res)
     finish_notify(repo, res, entry, significant)
     if opts.on_done then
       opts.on_done(res)
@@ -163,7 +163,7 @@ end
 function M.run_background(repo, args, opts)
   local entry
   -- a background run was asked for explicitly: always report its result
-  local job = repo:run(args, { editor = false }, function(res)
+  local job = repo:run(args, { editor = false, shell = opts.shell }, function(res)
     finish_notify(repo, res, entry, true)
     if opts.on_done then
       opts.on_done(res)
@@ -233,7 +233,7 @@ end
 ---with window modifiers). `<C-c>` in the pager cancels it.
 ---@param repo fugitive.Repo
 ---@param args string[]
----@param opts {mods?: string, sub?: string, window?: string}
+---@param opts {mods?: string, sub?: string, window?: string, shell?: table}
 ---@return fugitive.Job
 function M.run_float(repo, args, opts)
   local float = require("nvim-fugitive.ui.float")
@@ -266,6 +266,7 @@ function M.run_float(repo, args, opts)
     editor = true,
     mods = opts.mods,
     env = env,
+    shell = opts.shell,
     -- colours only when term-color-parser.nvim can show them
     color = ansi.available() and M.color_keys(repo, opts.sub) or nil,
     on_stdout = function(_, data)
@@ -324,8 +325,12 @@ function M.run_float(repo, args, opts)
     end
   end)
   entry = output.start(job.cmd, repo.worktree)
+  local title = "git " .. table.concat(args, " ")
+  if opts.shell and opts.shell.tail ~= "" then
+    title = title .. " " .. opts.shell.tail
+  end
   buf = float.show({}, {
-    title = "git " .. table.concat(args, " "),
+    title = title,
     mods = opts.mods,
     window = opts.window,
     filetype = pager_filetypes[opts.sub or ""],
@@ -334,7 +339,7 @@ function M.run_float(repo, args, opts)
         require("nvim-fugitive.buffers.editor").cancel(job.editor_id)
       end
       job:kill("sigterm")
-      notify.warn("git " .. table.concat(args, " ") .. ": cancelled")
+      notify.warn(title .. ": cancelled")
     end,
   })
   vim.b[buf].fugitive_running = true
@@ -396,7 +401,7 @@ end
 
 ---Dispatch `:Git {args}`.
 ---@param args string[]
----@param opts? {bang?: boolean, mods?: string, buf?: integer, repo?: fugitive.Repo, skip_picker?: boolean, on_done?: fun(res: fugitive.ExecResult)}
+---@param opts? {bang?: boolean, mods?: string, buf?: integer, repo?: fugitive.Repo, skip_picker?: boolean, on_done?: fun(res: fugitive.ExecResult), shell?: {tail: string, raw: table<string, string>}}
 ---@return fugitive.Job|integer|nil
 function M.run(args, opts)
   opts = opts or {}
@@ -408,6 +413,9 @@ function M.run(args, opts)
     return require("nvim-fugitive.buffers.summary").open(repo, { mods = opts.mods })
   end
   args = M.expand(args, repo)
+  if opts.shell then
+    return M.run_shell(repo, args, opts)
+  end
 
   -- subcommands fugitive implements itself (! = do not jump, like upstream)
   if args[1] == "difftool" or args[1] == "mergetool" then
@@ -483,6 +491,58 @@ function M.run(args, opts)
   end
 end
 
+---`:Git` with shell syntax (`argv.shell_split`): run through 'shell', routed
+---like the same command without it, except that output sent elsewhere
+---(`> file`) notifies instead of paging, and fugitive's own buffers
+---(blame, difftool) are not used.
+---@param repo fugitive.Repo
+---@param args string[] expanded words of the git part
+---@param opts table M.run's, with `shell`
+---@return fugitive.Job|integer|nil
+function M.run_shell(repo, args, opts)
+  local shell = opts.shell
+  if args[1] == "difftool" or args[1] == "mergetool" or args[1] == "restore-discard" then
+    notify.error(
+      string.format("git %s: shell syntax (%s) is not supported here", args[1], shell.tail)
+    )
+    return nil
+  end
+  if opts.bang then
+    return M.run_background(repo, args, { on_done = opts.on_done, shell = shell })
+  end
+  local aliases = M.alias_resolver(repo)
+  local cls = routes.classify(args, { aliases = aliases })
+  local with_defaults = M.default_args(repo, args, cls)
+  if with_defaults ~= args then
+    args = with_defaults
+    cls = routes.classify(args, { aliases = aliases })
+  end
+  if cls.route == "term" then
+    return require("nvim-fugitive.ui.terminal").run(repo, args, {
+      mods = opts.mods,
+      shell = shell,
+      on_exit = function()
+        require("nvim-fugitive").changed(repo)
+      end,
+    })
+  end
+  local pager = cls.route == "blame" or routes.is_pager(cls.route)
+  if pager and not argv.redirects_stdout(shell.tail) then
+    local window = cls.route ~= "blame" and cls.route or nil
+    return M.run_float(
+      repo,
+      args,
+      { mods = opts.mods, sub = cls.sub, window = window, shell = shell }
+    )
+  end
+  return M.run_notify(repo, args, {
+    mods = opts.mods,
+    on_done = opts.on_done,
+    significant = cls.explicit,
+    shell = shell,
+  })
+end
+
 ---Split a command line at the first unquoted, unescaped `|` (upstream
 ---lets `:Git` chain commands that way; `\|` is a literal bar).
 ---@param str string
@@ -513,6 +573,10 @@ end
 function M.command(cmd)
   local first, rest = M.split_bar(cmd.args or "")
   local args = M.split_args(first)
+  local shell = argv.shell_split(first)
+  if shell then
+    args = shell.words
+  end
   local on_done
   if rest and rest ~= "" then
     on_done = function(res)
@@ -521,7 +585,12 @@ function M.command(cmd)
       end
     end
   end
-  local ok, job = pcall(M.run, args, { bang = cmd.bang, mods = cmd.mods, on_done = on_done })
+  local ok, job = pcall(M.run, args, {
+    bang = cmd.bang,
+    mods = cmd.mods,
+    on_done = on_done,
+    shell = shell and { tail = shell.tail, raw = shell.raw },
+  })
   if not ok then
     notify.error(tostring(job))
     return
