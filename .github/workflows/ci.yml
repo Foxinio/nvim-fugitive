@@ -37,8 +37,9 @@ jobs:
           # a cut-off download used to fail the job in tar; fail and retry in curl
           curl -fsSL --retry 5 --retry-all-errors -o git-2.40.0.tar.gz https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.40.0.tar.gz
           tar xzf git-2.40.0.tar.gz
-          make -C git-2.40.0 -j4 prefix=/usr/local NO_TCLTK=1 all >/dev/null
-          sudo make -C git-2.40.0 prefix=/usr/local NO_TCLTK=1 install >/dev/null
+          # GCC 15 defaults to C23, whose unreachable() macro breaks git 2.40
+          make -C git-2.40.0 -j4 prefix=/usr/local NO_TCLTK=1 CFLAGS="-O2 -std=gnu17" all >/dev/null
+          sudo make -C git-2.40.0 prefix=/usr/local NO_TCLTK=1 CFLAGS="-O2 -std=gnu17" install >/dev/null
       - run: git --version | grep -q '2\.40\.'
       - run: make test
 
@@ -66,10 +67,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: 2.0.2
           args: --check lua plugin tests
-      - uses: NTBBloodbath/selene-action@v1.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: lua plugin
+      # selene-action's repository is gone: use selene's own release
+      - name: selene
+        run: |
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/selene.zip https://github.com/Kampfkarren/selene/releases/download/0.29.0/selene-0.29.0-linux.zip
+          unzip -q /tmp/selene.zip -d /tmp/selene && chmod +x /tmp/selene/selene
+          /tmp/selene/selene lua plugin
       - uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
