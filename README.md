@@ -328,7 +328,7 @@ listed in `:help fugitive-differences`.
 | Feature | Notes |
 |---|---|
 | `:Git` summary | files as a foldable directory tree (or upstream's flat list); Head/Merge/Push header, Rebasing, Bisecting, Unmerged, Untracked, Unstaged, Staged, Unpushed/Unpulled and Stashes (`=` expands a commit or stash); upstream maps plus bisect (`bg bb bs br`) and submodule (`cu cU`) maps; visual partial staging; folds; refreshed by a filesystem watcher; the cursor skips blank lines |
-| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); successful commands notify their output, or a short note when significant; failed pushes put rejected refs and hook errors in quickfix |
+| `:Git {args}` | output routed by command type (configurable per command: float, inplace, split, vert, tab, notification, overseer, term); successful commands notify their output, or a short note when significant; failed pushes put rejected refs and hook errors in quickfix; shell syntax (`> file`, `\| head`, `&&`, `$(…)`) runs the line through your shell |
 | Editor service | commit messages, rebase todo lists and merge messages open in this Neovim from every route, including overseer tasks |
 | `X` with recovery | every discard is saved (`hash-object -w`) and journaled; `:Git restore-discard`, `:FugitiveRestore`, `g-` |
 | `fugitive://` objects | `:Gedit`/`:Gsplit`/`:Gvsplit`/`:Gtabedit`/`:Gpedit`/`:Gdrop` with the full object syntax (`@`, `!`, `:%`, `:/message`, `main...other`, …); blobs, trees and commits with navigation (`~ P C -`) |

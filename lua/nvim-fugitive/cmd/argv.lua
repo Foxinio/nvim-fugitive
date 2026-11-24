@@ -47,6 +47,126 @@ function M.split_args(str)
   return args
 end
 
+---@class fugitive.ShellLine
+---@field words string[] the git part's words, unquoted (as split_args)
+---@field raw table<string, string> each of those words' text as typed
+---@field tail string the shell part, from the first operator on ("" when
+---only a substitution or variable asks for the shell)
+
+---A word starting an operator: a redirection (`>`, `>>`, `<`, `2>`, `&>`),
+---a pipe (`\|`, since a bare `|` ends the command for Vim), `&&`, `;`, `&`.
+local function operator_at(str, i)
+  local rest = str:sub(i)
+  return rest:match("^%d*[<>]") ~= nil
+    or rest:match("^&>") ~= nil
+    or rest:match("^\\|") ~= nil
+    or rest:match("^&&") ~= nil
+    or rest:match("^;") ~= nil
+    or rest:match("^&%s") ~= nil
+    or rest == "&"
+end
+
+---Split a `:Git` command line where it needs a shell: the git part's words
+---up to the first unquoted operator (see `operator_at`, or `>`, `<`, `;`,
+---`&&` inside a word), and the rest as typed. `$(…)`, backticks and
+---`$VAR` outside single quotes need the shell too. Nil when nothing does,
+---and the line is read by `split_args` as before. A `\|` starting a word is
+---a pipe; inside a word it stays a literal bar (`--grep=a\|b`).
+---@param str string
+---@return fugitive.ShellLine?
+function M.shell_split(str)
+  local words, raw = {}, {}
+  local i, n = 1, #str
+  local tail_at
+  local shellish = false
+  while i <= n and not tail_at do
+    while i <= n and str:sub(i, i):match("%s") do
+      i = i + 1
+    end
+    if i > n then
+      break
+    end
+    if operator_at(str, i) then
+      tail_at = i
+      break
+    end
+    local start, word, quote = i, "", nil
+    while i <= n do
+      local c = str:sub(i, i)
+      if quote then
+        if c == quote then
+          quote = nil
+        elseif c == "\\" and quote == '"' and i < n then
+          i = i + 1
+          word = word .. str:sub(i, i)
+        else
+          if
+            quote == '"' and (c == "`" or (c == "$" and str:sub(i + 1, i + 1):match("[%(%a_{]")))
+          then
+            shellish = true
+          end
+          word = word .. c
+        end
+      elseif c == "'" or c == '"' then
+        quote = c
+      elseif c == "\\" and i < n then
+        i = i + 1
+        word = word .. str:sub(i, i)
+      elseif c:match("%s") then
+        break
+      elseif c == "<" or c == ">" or c == ";" or str:sub(i, i + 1) == "&&" then
+        tail_at = i
+        break
+      else
+        if c == "`" or (c == "$" and str:sub(i + 1, i + 1):match("[%(%a_{]")) then
+          shellish = true
+        end
+        word = word .. c
+      end
+      i = i + 1
+    end
+    local text = str:sub(start, i - 1)
+    if text ~= "" then
+      table.insert(words, word)
+      raw[word] = raw[word] or text
+    end
+  end
+  if not tail_at and not shellish then
+    return nil
+  end
+  local tail = tail_at and vim.trim(str:sub(tail_at)) or ""
+  -- a `\|` starting a word is a pipe
+  tail = (" " .. tail):gsub("(%s)\\|", "%1|"):sub(2)
+  return { words = words, raw = raw, tail = tail }
+end
+
+---Whether a shell tail sends the command's standard output elsewhere: a
+---`>`, `>>`, `&>` or `1>` in the last stage of its pipeline (`2>` and
+---`2>&1` leave it).
+---@param tail string
+---@return boolean
+function M.redirects_stdout(tail)
+  local last, quote = {}, nil
+  for k = 1, #tail do
+    local c = tail:sub(k, k)
+    if quote then
+      if c == quote then
+        quote = nil
+      end
+    elseif c == "'" or c == '"' then
+      quote = c
+    elseif c == "|" then
+      last = {}
+    elseif c == ">" then
+      local prev = tail:sub(k - 1, k - 1)
+      if prev ~= ">" and not prev:match("[02-9]") then
+        table.insert(last, k)
+      end
+    end
+  end
+  return #last > 0
+end
+
 ---Split a shell command at `&&`, `||`, `;` and newlines outside quotes; each
 ---part keeps only the first stage of a `|` pipeline.
 ---@param str string

@@ -31,6 +31,9 @@ local M = {}
 ---@field mods? string command modifiers, used to place the editor window
 ---@field color? string[] colour config keys to force to "always" (after the
 ---common `color.ui=never`), e.g. { "color.ui", "color.diff" }
+---@field shell? {tail: string, raw: table<string, string>} run through
+---'shell': the user's words keep their text as typed (`raw`), ours are
+---escaped, and `tail` (redirections, pipes, …) follows verbatim
 
 M.git = "git"
 
@@ -61,6 +64,29 @@ function M.set_runner(fn)
   runner = fn or system_runner
 end
 
+---The argv running `own` (escaped) and `args` (as typed, when `shell.raw`
+---has them) through 'shell', followed by `shell.tail`.
+---@param own string[]
+---@param args string[]
+---@param shell {tail: string, raw: table<string, string>}
+---@return string[]
+function M.shell_command(own, args, shell)
+  local parts = {}
+  for _, a in ipairs(own) do
+    table.insert(parts, vim.fn.shellescape(a))
+  end
+  for _, a in ipairs(args) do
+    table.insert(parts, shell.raw[a] or vim.fn.shellescape(a))
+  end
+  if shell.tail ~= "" then
+    table.insert(parts, shell.tail)
+  end
+  local cmd = { vim.o.shell }
+  vim.list_extend(cmd, vim.split(vim.o.shellcmdflag, "%s+", { trimempty = true }))
+  table.insert(cmd, table.concat(parts, " "))
+  return cmd
+end
+
 ---Build the argv and vim.system options for a git invocation.
 ---@param args string[]
 ---@param opts? fugitive.ExecOpts
@@ -85,11 +111,13 @@ function M.build(args, opts)
   if not opts.raw then
     vim.list_extend(cmd, M.common_flags)
   end
-  -- colours on, as in a terminal: the later -c wins
-  for _, key in ipairs(opts.color or {}) do
+  -- colours on, as in a terminal: the later -c wins (never through a
+  -- shell, whose output may go to a file or another command)
+  local color = not opts.shell and opts.color or nil
+  for _, key in ipairs(color or {}) do
     vim.list_extend(cmd, { "-c", key .. "=always" })
   end
-  if opts.color then
+  if color then
     env.NO_COLOR = false
   end
   local cwd = opts.cwd
@@ -138,7 +166,11 @@ function M.build(args, opts)
   if opts.editor then
     vim.list_extend(cmd, { "-c", "advice.waitingForEditor=false" })
   end
-  vim.list_extend(cmd, rest)
+  if opts.shell then
+    cmd = M.shell_command(cmd, rest, opts.shell)
+  else
+    vim.list_extend(cmd, rest)
+  end
   for k, v in pairs(opts.env or {}) do
     env[k] = v
   end

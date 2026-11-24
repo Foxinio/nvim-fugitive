@@ -141,6 +141,25 @@ maps). Maps inside fugitive's own buffers are always set.
                         command; the rest runs as an Ex command after the
                         git command succeeded.
 
+                        Shell syntax hands the line to 'shell' as
+                        `git {args}`: a redirection (`>`, `>>`, `<`, `2>`,
+                        `&>`), a pipe written `\|` at the start of a word
+                        (a bare `|` stays the Ex command separator above),
+                        `&&`, `;`, `&`, a `$(…)` or backtick substitution,
+                        or a `$VAR`, all outside quotes. Then the words
+                        reach the shell as typed, so its quoting, globs and
+                        variables apply; `%` and `#` are still expanded. >
+                            :Git diff > changes.patch
+                            :Git log --oneline \| head -5
+                            :Git diff --name-only \| xargs wc -l
+<                       Output sent to a file notifies like a routine
+                        command; output left on standard output is paged or
+                        notified as usual. It is never coloured. The
+                        summary, blame and difftool buffers are not used:
+                        `:Git blame` goes to the pager. Quote a `>` or `;`
+                        that is meant for git: `:Git log --format='%h>%s'`.
+                        'shell' decides the syntax (`cmd.exe` on Windows).
+
 :Git! {args}            Run in the background. The editor is never opened:
                         a command that needs one fails with "fugitive:
                         aborting edit due to background operation".
