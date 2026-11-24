@@ -501,8 +501,7 @@ end
 ---@return fugitive.Job|integer|nil
 function M.run_shell(repo, args, opts)
   local shell = opts.shell
-  local own = { difftool = true, mergetool = true, ["restore-discard"] = true }
-  if own[args[1] or ""] then
+  if args[1] == "difftool" or args[1] == "mergetool" or args[1] == "restore-discard" then
     notify.error(
       string.format("git %s: shell syntax (%s) is not supported here", args[1], shell.tail)
     )
