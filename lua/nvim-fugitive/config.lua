@@ -284,6 +284,14 @@ M.defaults = {
   args = {},
 }
 
+---The key presets (`maps.preset`): "upstream" is vim-fugitive's keys,
+---frozen; "default" is this plugin's own, free to change. M.defaults.maps
+---is the default preset.
+M.presets = {
+  upstream = vim.deepcopy(M.defaults.maps),
+  default = M.defaults.maps,
+}
+
 ---@type fugitive.Config
 M.values = vim.deepcopy(M.defaults)
 
@@ -330,11 +338,20 @@ local function validate(opts)
       error(string.format("fugitive: invalid output target %q for %q", tostring(target), key))
     end
   end
+  local preset = opts.maps and opts.maps.preset
+  if preset ~= nil and not M.presets[preset] then
+    error(
+      string.format(
+        'fugitive: maps.preset must be "default" or "upstream", not %s',
+        vim.inspect(preset)
+      )
+    )
+  end
   for buftype, maps in pairs(opts.maps or {}) do
-    if not M.defaults.maps[buftype] then
+    if buftype ~= "preset" and not M.defaults.maps[buftype] then
       error(string.format("fugitive: unknown map table %q", buftype))
     end
-    for lhs, action in pairs(maps) do
+    for lhs, action in pairs(buftype ~= "preset" and maps or {}) do
       if action ~= false and type(action) ~= "string" and type(action) ~= "function" then
         error(
           string.format(
@@ -418,11 +435,15 @@ function M.merge(opts)
   opts = opts or {}
   validate(opts)
   local merged = vim.deepcopy(M.defaults)
+  local preset = opts.maps and opts.maps.preset or "default"
+  merged.maps = vim.deepcopy(M.presets[preset])
   for key, value in pairs(opts) do
     if key == "maps" then
       for buftype, maps in pairs(value) do
-        for lhs, action in pairs(maps) do
-          merged.maps[buftype][lhs] = action
+        if buftype ~= "preset" then
+          for lhs, action in pairs(maps) do
+            merged.maps[buftype][lhs] = action
+          end
         end
       end
     elseif type(value) ~= "table" or vim.islist(M.defaults[key]) then

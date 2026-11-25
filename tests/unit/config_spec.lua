@@ -113,3 +113,42 @@ describe("config.merge", function()
     assert.truthy(tostring(err):match("summary%.status is now a table"))
   end)
 end)
+
+describe("config key presets", function()
+  local config = require("nvim-fugitive.config")
+
+  it("start identical, and default is the default", function()
+    assert.same(config.presets.upstream, config.presets.default)
+    assert.same(config.presets.default, config.merge({}).maps)
+    assert.same(config.presets.upstream, config.merge({ maps = { preset = "upstream" } }).maps)
+  end)
+
+  it("take the user's maps on top, false included", function()
+    for _, preset in ipairs({ "default", "upstream" }) do
+      local maps =
+        config.merge({ maps = { preset = preset, summary = { X = false, D = "discard" } } }).maps
+      assert.is_false(maps.summary.X)
+      assert.equals("discard", maps.summary.D)
+      assert.equals("stage", maps.summary.s)
+    end
+  end)
+
+  it("reject an unknown preset", function()
+    local ok, err = pcall(config.merge, { maps = { preset = "vim" } })
+    assert.is_false(ok)
+    assert.truthy(tostring(err):match('maps%.preset must be "default" or "upstream"'))
+  end)
+
+  it("give the summary hints the preset's keys", function()
+    local saved = config.presets.upstream.summary.X
+    config.presets.upstream.summary.X = nil
+    config.presets.upstream.summary.Q = "discard"
+    config.set({ maps = { preset = "upstream" } })
+    local ok, k = pcall(require("nvim-fugitive.buffers.summary").hint_keys)
+    config.presets.upstream.summary.Q = nil
+    config.presets.upstream.summary.X = saved
+    config.set({})
+    assert.is_true(ok, k)
+    assert.equals("(s: stage) (dv: diff) (Q: discard)", k.Unstaged)
+  end)
+end)

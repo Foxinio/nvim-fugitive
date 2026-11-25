@@ -73,6 +73,8 @@ Calling setup is optional; without it the defaults below apply. >lua
     -- Map tables per buffer type. `false` disables a map, any key can be
     -- pointed at an action name (see the lists in this help file).
     maps = {
+      -- "default": this plugin's keys; "upstream": vim-fugitive's, frozen
+      preset = "default",
       summary = { ["s"] = "stage", ["a"] = false },
       object = {},     -- fugitive:// commit, tree and blob buffers
       conflict = {},   -- work-tree files with conflict markers
