@@ -117,8 +117,22 @@ end)
 describe("config key presets", function()
   local config = require("nvim-fugitive.config")
 
-  it("start identical, and default is the default", function()
-    assert.same(config.presets.upstream, config.presets.default)
+  it("differ only in the summary's co/cb keys, and default is the default", function()
+    for buftype, maps in pairs(config.presets.upstream) do
+      if buftype ~= "summary" then
+        assert.same(maps, config.presets.default[buftype])
+      end
+    end
+    local up, def = config.presets.upstream.summary, config.presets.default.summary
+    for _, lhs in ipairs({ "coo", "co<Space>", "co<CR>", "cb<Space>", "cb<CR>" }) do
+      assert.is_not_nil(up[lhs])
+      assert.is_nil(def[lhs])
+    end
+    assert.same(
+      { "choose_ours", "choose_theirs", "choose_both", "choose_none" },
+      { def.co, def.ct, def.cb, def.c0 }
+    )
+    assert.is_nil(up.co)
     assert.same(config.presets.default, config.merge({}).maps)
     assert.same(config.presets.upstream, config.merge({ maps = { preset = "upstream" } }).maps)
   end)

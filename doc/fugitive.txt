@@ -495,7 +495,7 @@ Staging maps ~
   U           Unstage everything.
   X           Discard the change under the cursor (saved first, see
               |fugitive-discard|). On an unmerged file, 2X takes ours and
-              3X takes theirs for the whole file.
+              3X takes theirs for the whole file (as co / ct below).
   g-          Restore the most recent discard; with a count, pick one.
   =           Toggle an inline diff of the file under the cursor. On a
               stash entry or an Unpushed/Unpulled commit: show its changes
@@ -562,8 +562,9 @@ Commit maps ~
   cn   commit --edit --squash= (command line)
   crc  revert the commit under the cursor
   crn  revert --no-commit
-  c<Space> cr<Space> cm<Space> cz<Space> co<Space> cb<Space> r<Space>
-       put the matching :Git command on the command line
+  c<Space> cr<Space> cm<Space> cz<Space> r<Space>
+       put the matching :Git command on the command line (co<Space> and
+       cb<Space> too, with the upstream preset)
 
 Submodule maps ~
 Submodule entries note their state after the line ("new commits, modified
@@ -581,7 +582,15 @@ Bisecting section with the good/bad/skip verdicts so far.
               cursor (HEAD when not on a commit)
   br          `git bisect reset`
 
-Checkout and branch maps ~
+Ours, theirs and checkout maps ~
+These act by the line under the cursor; elsewhere they say where they
+work ("ct: works on Unmerged files"). Saved first (|fugitive-discard|).
+  co          On an unmerged file: take ours. On an unpushed or unpulled
+              commit: check it out.
+  ct          On an unmerged file: take theirs.
+  cb  c0      On an unmerged file: keep both sides, or neither, of every
+              conflict block.
+With `maps.preset = "upstream"` these are vim-fugitive's keys instead:
   coo         Check out the commit under the cursor.
   co<CR> cb<CR>  :Git checkout, :Git branch.
 
@@ -675,8 +684,9 @@ Both the "merge" and the "diff3"/"zdiff3" marker styles are understood.
 Highlight groups: FugitiveConflictMarker, FugitiveConflictOurs,
 FugitiveConflictTheirs, FugitiveConflictBase.
 
-In the summary, unmerged files have their own section: `2X` / `3X` take
-ours / theirs for the whole file, `s` marks it resolved and `dd` / `dv`
+In the summary, unmerged files have their own section: `co` / `ct` (or
+`2X` / `3X`) take ours / theirs for the whole file, `cb` / `c0` keep both
+or neither side of every block, `s` marks it resolved and `dd` / `dv`
 open the three-way diff. Closing any of its three windows closes the other
 two; `dq` in the summary closes ours and theirs and keeps the work tree
 file.

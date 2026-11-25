@@ -291,6 +291,15 @@ M.presets = {
   upstream = vim.deepcopy(M.defaults.maps),
   default = M.defaults.maps,
 }
+-- the default preset: co/ct/cb/c0 act by section (ours/theirs/both/none on
+-- an Unmerged file, co checks out a commit), so no key may extend them
+for _, lhs in ipairs({ "coo", "co<Space>", "co<CR>", "cb<Space>", "cb<CR>" }) do
+  M.presets.default.summary[lhs] = nil
+end
+M.presets.default.summary.co = "choose_ours"
+M.presets.default.summary.ct = "choose_theirs"
+M.presets.default.summary.cb = "choose_both"
+M.presets.default.summary.c0 = "choose_none"
 
 ---@type fugitive.Config
 M.values = vim.deepcopy(M.defaults)

@@ -19,6 +19,51 @@ for _, part in ipairs({ "stage", "navigate", "open", "commands" }) do
     M[k] = v
   end
 end
+local what = {
+  Untracked = "Untracked files",
+  Unstaged = "Unstaged files",
+  Staged = "Staged files",
+  Unmerged = "Unmerged files",
+  Unpushed = "Unpushed commits",
+  Unpulled = "Unpulled commits",
+  Stash = "stashes",
+}
+local order = { "Unmerged", "Untracked", "Unstaged", "Staged", "Unpushed", "Unpulled", "Stash" }
+
+---An action that does something different per section: `handlers[section]`
+---for the line under the cursor; elsewhere it says where it works. Nil when
+---no section has a handler, so the key is not mapped at all.
+---@param buf integer
+---@param name string the action name (to name its key)
+---@param handlers table<string, fun()>
+---@return fun()?
+function M.by_section(buf, name, handlers)
+  if next(handlers) == nil then
+    return nil
+  end
+  return function()
+    local st = state(buf)
+    local info = st and st.info[vim.api.nvim_win_get_cursor(0)[1]]
+    local fn = info and handlers[info.section]
+    if fn then
+      return fn()
+    end
+    local key = name
+    for lhs, action in pairs(require("nvim-fugitive.config").get().maps.summary or {}) do
+      if action == name and (key == name or #lhs < #key) then
+        key = lhs
+      end
+    end
+    local where = {}
+    for _, s in ipairs(order) do
+      if handlers[s] then
+        table.insert(where, what[s] or s)
+      end
+    end
+    notify.warn(string.format("%s: works on %s", key, table.concat(where, ", ")))
+  end
+end
+
 ---@param buf integer
 ---@return table<string, fugitive.Action>
 function M.actions(buf)
@@ -313,6 +358,20 @@ function M.actions(buf)
     end,
     bisect_reset = run({ "bisect", "reset" }),
   }
+  -- one key, one action per section
+  local function choose(choice)
+    return function()
+      M.choose(buf, choice)
+    end
+  end
+  a.choose_ours = M.by_section(buf, "choose_ours", {
+    Unmerged = choose("ours"),
+    Unpushed = a.checkout,
+    Unpulled = a.checkout,
+  })
+  a.choose_theirs = M.by_section(buf, "choose_theirs", { Unmerged = choose("theirs") })
+  a.choose_both = M.by_section(buf, "choose_both", { Unmerged = choose("both") })
+  a.choose_none = M.by_section(buf, "choose_none", { Unmerged = choose("none") })
   for name, fn in pairs(require("nvim-fugitive.maps").cfile_actions(buf)) do
     a[name] = fn
   end

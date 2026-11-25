@@ -200,16 +200,19 @@ function M.status_group(i)
   return M.status_groups[i.entry.status]
 end
 
----The key hints after each section heading: { action, word, count? }; the
----key shown is the one maps.summary binds to the action.
+---The key hints after each section heading: { action, word, count? }, or a
+---list of alternatives; the key shown is the one maps.summary binds to the
+---action.
 local hints = {
   Untracked = { { "stage", "stage" }, { "ignore", "ignore" }, { "discard", "delete" } },
   Unstaged = { { "stage", "stage" }, { "diff_vertical", "diff" }, { "discard", "discard" } },
   Staged = { { "unstage", "unstage" }, { "commit", "commit" }, { "commit_amend", "amend" } },
   Unmerged = {
     { "diff_vertical", "3-way diff" },
-    { "discard", "ours", 2 },
-    { "discard", "theirs", 3 },
+    { { "choose_ours", "ours" }, { "discard", "ours", 2 } },
+    { { "choose_theirs", "theirs" }, { "discard", "theirs", 3 } },
+    { "choose_both", "both" },
+    { "choose_none", "neither" },
     { "stage", "resolved" },
   },
   Uninitialized = { { "submodule_update", "init" }, { "submodule_update_recursive", "recursive" } },
@@ -220,11 +223,15 @@ local hints = {
   },
   Bisecting = { { "bisect_good", "good" }, { "bisect_bad", "bad" }, { "bisect_reset", "reset" } },
   Unpushed = {
+    { { "choose_ours", "checkout" }, { "checkout", "checkout" } },
     { "rebase_interactive", "rebase" },
     { "rebase_reword", "reword" },
     { "rebase_drop", "drop" },
   },
-  Unpulled = { { "rebase_upstream", "rebase" } },
+  Unpulled = {
+    { { "choose_ours", "checkout" }, { "checkout", "checkout" } },
+    { "rebase_upstream", "rebase" },
+  },
   Stash = {
     { "stash_pop_index", "pop" },
     { "stash_apply_index", "apply" },
@@ -254,9 +261,14 @@ function M.hint_keys()
   end
   for section, list in pairs(hints) do
     local parts = {}
-    for _, h in ipairs(list) do
-      if key_of[h[1]] then
-        table.insert(parts, string.format("(%s%s: %s)", h[3] or "", key_of[h[1]], h[2]))
+    for _, entry in ipairs(list) do
+      -- an entry is { action, word, count? }, or a list of those: the
+      -- first whose action has a key
+      for _, h in ipairs(type(entry[1]) == "table" and entry or { entry }) do
+        if key_of[h[1]] then
+          table.insert(parts, string.format("(%s%s: %s)", h[3] or "", key_of[h[1]], h[2]))
+          break
+        end
       end
     end
     if #parts > 0 then

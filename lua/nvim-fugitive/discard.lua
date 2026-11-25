@@ -139,7 +139,8 @@ local function status_in(snap, section, path)
 end
 
 ---Plan the destructive commands for one selection item (upstream semantics).
----@return {cmds: {args: string[], stdin?: string}[], delete?: boolean, kind: string, touches_index: boolean}?, string? err
+---`opts.choice` ("ours", "theirs", "both", "none") resolves an unmerged file.
+---@return {cmds: {args: string[], stdin?: string}[], delete?: boolean, write?: fun(), kind: string, touches_index: boolean}?, string? err
 local function plan(item, opts)
   local e = item.entry
   if not e then
@@ -179,6 +180,47 @@ local function plan(item, opts)
     }
   end
   local count = opts.count or 0
+  if opts.choice == "ours" then
+    count = 2
+  elseif opts.choice == "theirs" then
+    count = 3
+  elseif opts.choice == "both" or opts.choice == "none" then
+    -- git has no --both or --none: resolve every conflict block of the file
+    local abs = opts.repo and opts.repo:abs(path) or path
+    local f = io.open(abs, "r")
+    if not f then
+      return nil, "cannot read " .. path
+    end
+    local text = f:read("*a")
+    f:close()
+    local lines = vim.split(text, "\n", { plain = true })
+    local conflict = require("nvim-fugitive.conflict")
+    local blocks = conflict.parse(lines)
+    if #blocks == 0 then
+      return nil, "no conflict markers in " .. path
+    end
+    for k = #blocks, 1, -1 do
+      local c = blocks[k]
+      local repl = conflict.resolve_block(lines, c, opts.choice)
+      for _ = c.start, c.finish do
+        table.remove(lines, c.start)
+      end
+      for n, l in ipairs(repl) do
+        table.insert(lines, c.start + n - 1, l)
+      end
+    end
+    local out = table.concat(lines, "\n")
+    return {
+      cmds = {},
+      write = function()
+        local w = assert(io.open(abs, "w"))
+        w:write(out)
+        w:close()
+      end,
+      kind = opts.choice,
+      touches_index = false,
+    }
+  end
   if item.section == "Untracked" then
     return {
       cmds = { { args = { "clean", "-f", "--", path } } },
@@ -265,7 +307,7 @@ function M.discard(repo, items, opts, cb)
   -- 1. plan and save everything before touching anything
   local plans, journal_new = {}, {}
   for _, it in ipairs(flat) do
-    local p, err = plan(it, opts)
+    local p, err = plan(it, vim.tbl_extend("force", opts, { repo = repo }))
     if not p then
       notify.error(err or ("cannot discard " .. it.entry.path))
       if cb then
@@ -336,6 +378,9 @@ function M.discard(repo, items, opts, cb)
   for _, pl in ipairs(plans) do
     if pl.plan.delete then
       os.remove(repo:abs(pl.item.entry.path))
+    end
+    if pl.plan.write then
+      pl.plan.write()
     end
     vim.list_extend(cmds, pl.plan.cmds)
   end

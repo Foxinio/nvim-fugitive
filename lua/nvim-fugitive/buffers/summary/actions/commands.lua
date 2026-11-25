@@ -134,6 +134,18 @@ function M.discard(buf, visual)
   )
 end
 
+---Resolve the unmerged file under the cursor: "ours", "theirs" (as 2X/3X),
+---"both" or "none" (every conflict block of the file).
+function M.choose(buf, choice)
+  local st = state(buf)
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  require("nvim-fugitive.discard").discard(
+    st.repo,
+    stage.selection(buf, lnum, lnum),
+    { choice = choice, has_head = has_head(st), snap = st.snap }
+  )
+end
+
 function M.restore_discard(buf)
   local st = state(buf)
   if vim.v.count > 0 then
