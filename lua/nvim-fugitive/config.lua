@@ -117,11 +117,13 @@ M.defaults = {
       ["cm<Space>"] = "merge_prompt",
       ["cm<CR>"] = "merge_bare",
       -- M2: checkout / branch
-      ["coo"] = "checkout",
-      ["co<Space>"] = "checkout_prompt",
-      ["co<CR>"] = "checkout_bare",
-      ["cb<Space>"] = "branch_prompt",
-      ["cb<CR>"] = "branch_bare",
+      -- by section: ours/theirs/both/neither on an Unmerged file; co checks
+      -- out a commit. No key may extend them, so coo, co<Space>, co<CR>,
+      -- cb<Space> and cb<CR> are upstream preset only
+      ["co"] = "choose_ours",
+      ["ct"] = "choose_theirs",
+      ["cb"] = "choose_both",
+      ["c0"] = "choose_none",
       -- M2: stash
       ["czz"] = "stash_push",
       ["czw"] = "stash_push_keep_index",
@@ -482,15 +484,6 @@ M.presets.upstream = {
     ["<C-c>"] = "cancel",
   },
 }
--- the default preset: co/ct/cb/c0 act by section (ours/theirs/both/none on
--- an Unmerged file, co checks out a commit), so no key may extend them
-for _, lhs in ipairs({ "coo", "co<Space>", "co<CR>", "cb<Space>", "cb<CR>" }) do
-  M.presets.default.summary[lhs] = nil
-end
-M.presets.default.summary.co = "choose_ours"
-M.presets.default.summary.ct = "choose_theirs"
-M.presets.default.summary.cb = "choose_both"
-M.presets.default.summary.c0 = "choose_none"
 
 M.presets.default = M.defaults.maps
 
