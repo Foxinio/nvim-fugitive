@@ -200,6 +200,55 @@ function M.status_group(i)
   return M.status_groups[i.entry.status]
 end
 
+---The hint text of each section, "(s - stage) (= - diff) …", from
+---`summary.hints` and the keys `maps.summary` binds to their actions (the
+---shortest one when several do); actions without a key are left out.
+---@return table<string, string>
+function M.hint_keys()
+  local cfg = require("nvim-fugitive.config").get()
+  local hints = cfg.summary.hints
+  local out = {}
+  if not hints then
+    return out
+  end
+  local key_of = {}
+  for lhs, action in pairs(cfg.maps.summary or {}) do
+    if type(action) == "string" then
+      local cur = key_of[action]
+      if not cur or #lhs < #cur or (#lhs == #cur and lhs < cur) then
+        key_of[action] = lhs
+      end
+    end
+  end
+  for section, list in pairs(hints) do
+    local parts = {}
+    for _, h in ipairs(list or {}) do
+      if key_of[h[1]] then
+        table.insert(parts, string.format("(%s - %s)", key_of[h[1]], h[2]))
+      end
+    end
+    if #parts > 0 then
+      out[section] = table.concat(parts, " ")
+    end
+  end
+  return out
+end
+
+---Scroll the summary's windows that show its first line so the title above
+---it is visible: Neovim draws virtual lines above line 1 only with topfill.
+---@param buf integer
+function M.show_title(buf)
+  for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+    vim.api.nvim_win_call(win, function()
+      local view = vim.fn.winsaveview()
+      if view.topline == 1 and (view.topfill or 0) == 0 then
+        view.topfill = 1
+        vim.fn.winrestview(view)
+      end
+    end)
+  end
+end
+
 ---Extmark highlights for sigils and diff lines (the syntax file covers the
 ---rest; extmarks are robust against text that looks like a header).
 function M.highlight(buf, info)
@@ -214,10 +263,13 @@ function M.highlight(buf, info)
       priority = 150,
     })
   end
+  -- the title, on a virtual line above the first: the cursor never lands on it
   vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
-    virt_text = { { "(new)", "Comment" } },
-    virt_text_pos = "eol",
+    virt_lines = { { { "(nvim-fugitive)", "Comment" } } },
+    virt_lines_above = true,
   })
+  M.show_title(buf)
+  local keys = M.hint_keys()
   for lnum, i in ipairs(info) do
     local group
     if i.kind == "diffline" then
@@ -260,6 +312,12 @@ function M.highlight(buf, info)
         end
         pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, col, span)
       end
+    end
+    if i.kind == "section" and keys[i.section] then
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, 0, {
+        virt_text = { { keys[i.section], "Comment" } },
+        virt_text_pos = "eol",
+      })
     end
     if i.note then
       pcall(vim.api.nvim_buf_set_extmark, buf, ns, lnum - 1, 0, {
@@ -476,6 +534,7 @@ function M.setup_buffer(buf, repo)
     buffer = buf,
     callback = function()
       M.setup_window(vim.api.nvim_get_current_win())
+      M.show_title(buf)
     end,
   })
   vim.api.nvim_create_autocmd("BufWipeout", {

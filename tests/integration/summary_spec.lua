@@ -100,8 +100,8 @@ for _, look in ipairs(looks) do
       local ns = vim.api.nvim_get_namespaces().fugitive_summary
       local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 0, -1 }, { details = true })
       assert.equals(1, #marks)
-      assert.same({ { "(new)", "Comment" } }, marks[1][4].virt_text)
-      assert.equals("eol", marks[1][4].virt_text_pos)
+      assert.same({ { { "(nvim-fugitive)", "Comment" } } }, marks[1][4].virt_lines)
+      assert.is_true(marks[1][4].virt_lines_above)
       assert.equals("fugitive", vim.bo[buf].filetype)
       assert.equals("fugitive://" .. repo.root .. "/.git//", vim.api.nvim_buf_get_name(buf))
       assert.equals(repo.root .. "/.git", vim.b[buf].git_dir)

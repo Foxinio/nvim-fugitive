@@ -20,7 +20,7 @@ local M = {}
 ---@field long_running string[] subcommands that run as overseer tasks
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
----@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: fugitive.StatusStyle}
+---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: fugitive.StatusStyle, hints: table<string, string[][]|false>|false}
 ---@field args table<string, string[]> default arguments per subcommand ("sub" or "sub word")
 
 ---@type fugitive.Config
@@ -276,6 +276,30 @@ M.defaults = {
       letters = false,
       color = { enabled = true, from = "name", to = "line" },
     },
+    -- greyed key hints after section headings: per section, { action, word }
+    -- pairs; the key shown is the one maps.summary binds to the action.
+    -- false turns them off (all, or one section)
+    hints = {
+      Untracked = { { "stage", "stage" }, { "ignore", "ignore" }, { "discard", "delete" } },
+      Unstaged = { { "stage", "stage" }, { "inline_toggle", "diff" }, { "discard", "discard" } },
+      Staged = { { "unstage", "unstage" }, { "inline_toggle", "diff" }, { "commit", "commit" } },
+      Unmerged = { { "stage", "resolved" }, { "diff_vertical", "merge" } },
+      Unpushed = {
+        { "open", "open" },
+        { "inline_toggle", "show" },
+        { "rebase_interactive", "rebase" },
+      },
+      Unpulled = {
+        { "open", "open" },
+        { "inline_toggle", "show" },
+        { "rebase_upstream", "rebase" },
+      },
+      Stash = {
+        { "stash_pop_index", "pop" },
+        { "stash_apply_index", "apply" },
+        { "inline_toggle", "show" },
+      },
+    },
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it, e.g. { commit = { "--signoff" } }; not for :Git!
@@ -395,6 +419,22 @@ local function validate(opts)
       one_of("summary.status.color.to", color.to, { "name", "line" })
     end
   end
+  local hints = summary.hints
+  if hints ~= nil and hints ~= false then
+    vim.validate("opts.summary.hints", hints, "table")
+    for name, list in pairs(hints) do
+      if list ~= false then
+        vim.validate("opts.summary.hints." .. name, list, "table")
+        for _, h in ipairs(list) do
+          if type(h) ~= "table" or type(h[1]) ~= "string" or type(h[2]) ~= "string" then
+            error(
+              string.format('fugitive: summary.hints.%s entries are { "action", "word" }', name)
+            )
+          end
+        end
+      end
+    end
+  end
   local recheck = opts.watch and opts.watch.recheck
   if recheck ~= nil and (type(recheck) ~= "number" or recheck < 0) then
     error(
@@ -428,6 +468,13 @@ function M.merge(opts)
       merged[key] = value
     else
       merged[key] = vim.tbl_deep_extend("force", merged[key] or {}, value)
+    end
+  end
+  -- a section's hints are a list: the user's replaces the default's
+  local hints = opts.summary and opts.summary.hints
+  if type(hints) == "table" and type(merged.summary.hints) == "table" then
+    for name, list in pairs(hints) do
+      merged.summary.hints[name] = list
     end
   end
   return merged

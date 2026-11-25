@@ -443,6 +443,29 @@ The `summary` options (|fugitive-config|):
               blanks stay). Directory lines are never coloured. A
               partial table keeps the other defaults:
               `status = { color = { to = "name" } }`.
+  hints       Key hints after section headings, see
+              |fugitive-summary-hints|; false turns them off.
+
+                                                     *fugitive-summary-hints*
+The summary's first line has "(nvim-fugitive)" above it, and each section
+heading is followed by a few keys that act on that section: >
+
+  (nvim-fugitive)
+  Head: main
+  Help: g?
+
+  Untracked (1) (s - stage) (gI - ignore) (X - delete)
+  Unstaged (1) (s - stage) (= - diff) (X - discard)
+  Staged (1) (u - unstage) (= - diff) (cc - commit)
+<
+Both are greyed (|hl-Comment|) virtual text: not part of the buffer, so the
+cursor never lands on them and yanks leave them out. `summary.hints` lists,
+per section (Untracked, Unstaged, Staged, Unmerged, Unpushed, Unpulled,
+Stash), { action, word } pairs; the key shown is the one `maps.summary`
+binds to the action (the shortest, when several do), so remapped keys show
+as remapped. An action without a key is left out. `hints = false` turns
+them all off, `hints = { Staged = false }` those of one section. Setting a
+section replaces its list: `hints = { Staged = { { "commit", "commit" } } }`.
 
 The status colours come from your colorscheme: each file name's
 background is the colour your inline diffs use for the same kind of change,
