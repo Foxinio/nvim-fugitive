@@ -308,12 +308,16 @@ coloured names. For vim-fugitive's flat list with status letters:
 
 ```lua
 require("nvim-fugitive").setup({
+  maps = { preset = "upstream" },
   summary = {
     tree = false,
     status = { letters = true, color = { enabled = false } },
   },
 })
 ```
+
+`preset = "upstream"` gives vim-fugitive's keys, frozen; the default preset
+is this plugin's own and may change.
 
 `tree = false` gives the flat list (`paths` and `compact` then change
 nothing). `letters = true` puts back the status letters, and
