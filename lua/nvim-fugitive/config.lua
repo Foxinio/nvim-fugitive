@@ -20,7 +20,7 @@ local M = {}
 ---@field long_running string[] subcommands that run as overseer tasks
 ---@field browse {hosts: table<string, string>, providers: table<string, function>}
 ---@field integrations {telescope: boolean, overseer: boolean, gitsigns: boolean}
----@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: fugitive.StatusStyle}
+---@field summary {window: "split"|"vsplit"|"tab"|"current", log_limit: integer, tree: boolean, compact: boolean, paths: "name"|"full", status: fugitive.StatusStyle, hints: boolean}
 ---@field args table<string, string[]> default arguments per subcommand ("sub" or "sub word")
 
 ---@type fugitive.Config
@@ -276,6 +276,8 @@ M.defaults = {
       letters = false,
       color = { enabled = true, from = "name", to = "line" },
     },
+    -- greyed key hints after section headings
+    hints = true,
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it, e.g. { commit = { "--signoff" } }; not for :Git!
@@ -395,6 +397,7 @@ local function validate(opts)
       one_of("summary.status.color.to", color.to, { "name", "line" })
     end
   end
+  vim.validate("opts.summary.hints", summary.hints, "boolean", true)
   local recheck = opts.watch and opts.watch.recheck
   if recheck ~= nil and (type(recheck) ~= "number" or recheck < 0) then
     error(

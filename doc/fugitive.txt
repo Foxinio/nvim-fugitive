@@ -443,6 +443,8 @@ The `summary` options (|fugitive-config|):
               blanks stay). Directory lines are never coloured. A
               partial table keeps the other defaults:
               `status = { color = { to = "name" } }`.
+  hints       true (default): greyed key hints after section headings;
+              false: none.
 
 The status colours come from your colorscheme: each file name's
 background is the colour your inline diffs use for the same kind of change,

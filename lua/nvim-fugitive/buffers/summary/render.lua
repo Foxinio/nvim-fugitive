@@ -276,7 +276,7 @@ function M.render(snap, open, opts)
   if snap.uninitialized and #snap.uninitialized > 0 then
     section("Uninitialized", "Uninitialized submodules", #snap.uninitialized)
     for _, p in ipairs(snap.uninitialized) do
-      add("- " .. p, { kind = "submodule", section = "Uninitialized", path = p, note = "cu: init" })
+      add("- " .. p, { kind = "submodule", section = "Uninitialized", path = p })
     end
   end
 

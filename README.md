@@ -288,6 +288,8 @@ require("nvim-fugitive").setup({
         to = "line",
       },
     },
+    -- greyed key hints after each section heading
+    hints = true,
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it for every command fugitive runs except :Git! (typed commands,
