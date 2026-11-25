@@ -288,26 +288,8 @@ require("nvim-fugitive").setup({
         to = "line",
       },
     },
-    -- greyed key hints after each section heading (:h fugitive-summary-hints):
-    -- { action, word } pairs, shown with the key maps.summary binds to the
-    -- action; false turns them off, for all sections or one
-    hints = {
-      Untracked = { { "stage", "stage" }, { "ignore", "ignore" }, { "discard", "delete" } },
-      Unstaged = { { "stage", "stage" }, { "inline_toggle", "diff" }, { "discard", "discard" } },
-      Staged = { { "unstage", "unstage" }, { "inline_toggle", "diff" }, { "commit", "commit" } },
-      Unmerged = { { "stage", "resolved" }, { "diff_vertical", "merge" } },
-      Unpushed = {
-        { "open", "open" },
-        { "inline_toggle", "show" },
-        { "rebase_interactive", "rebase" },
-      },
-      Unpulled = { { "open", "open" }, { "inline_toggle", "show" }, { "rebase_upstream", "rebase" } },
-      Stash = {
-        { "stash_pop_index", "pop" },
-        { "stash_apply_index", "apply" },
-        { "inline_toggle", "show" },
-      },
-    },
+    -- greyed key hints after each section heading
+    hints = true,
   },
   -- default arguments per subcommand ("sub" or "sub word"), added right
   -- after it for every command fugitive runs except :Git! (typed commands,

@@ -200,15 +200,47 @@ function M.status_group(i)
   return M.status_groups[i.entry.status]
 end
 
----The hint text of each section, "(s - stage) (= - diff) …", from
----`summary.hints` and the keys `maps.summary` binds to their actions (the
----shortest one when several do); actions without a key are left out.
+---The key hints after each section heading: { action, word, count? }; the
+---key shown is the one maps.summary binds to the action.
+local hints = {
+  Untracked = { { "stage", "stage" }, { "ignore", "ignore" }, { "discard", "delete" } },
+  Unstaged = { { "stage", "stage" }, { "diff_vertical", "diff" }, { "discard", "discard" } },
+  Staged = { { "unstage", "unstage" }, { "commit", "commit" }, { "commit_amend", "amend" } },
+  Unmerged = {
+    { "diff_vertical", "3-way diff" },
+    { "discard", "ours", 2 },
+    { "discard", "theirs", 3 },
+    { "stage", "resolved" },
+  },
+  Uninitialized = { { "submodule_update", "init" }, { "submodule_update_recursive", "recursive" } },
+  Rebasing = {
+    { "rebase_continue", "continue" },
+    { "rebase_skip", "skip" },
+    { "rebase_abort", "abort" },
+  },
+  Bisecting = { { "bisect_good", "good" }, { "bisect_bad", "bad" }, { "bisect_reset", "reset" } },
+  Unpushed = {
+    { "rebase_interactive", "rebase" },
+    { "rebase_reword", "reword" },
+    { "rebase_drop", "drop" },
+  },
+  Unpulled = { { "rebase_upstream", "rebase" } },
+  Stash = {
+    { "stash_pop_index", "pop" },
+    { "stash_apply_index", "apply" },
+    { "stash_view", "view" },
+  },
+}
+hints.Sequencing = hints.Rebasing
+
+---The hint text of each section, "(s: stage) (X: discard) …", with the keys
+---`maps.summary` binds to the actions (the shortest when several do);
+---actions without a key are left out.
 ---@return table<string, string>
 function M.hint_keys()
   local cfg = require("nvim-fugitive.config").get()
-  local hints = cfg.summary.hints
   local out = {}
-  if not hints then
+  if not cfg.summary.hints then
     return out
   end
   local key_of = {}
@@ -222,9 +254,9 @@ function M.hint_keys()
   end
   for section, list in pairs(hints) do
     local parts = {}
-    for _, h in ipairs(list or {}) do
+    for _, h in ipairs(list) do
       if key_of[h[1]] then
-        table.insert(parts, string.format("(%s - %s)", key_of[h[1]], h[2]))
+        table.insert(parts, string.format("(%s%s: %s)", h[3] or "", key_of[h[1]], h[2]))
       end
     end
     if #parts > 0 then
