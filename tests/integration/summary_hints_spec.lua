@@ -61,15 +61,15 @@ describe("summary title and hints", function()
     config.set({})
     local k = summary.hint_keys()
     assert.equals(
-      "(dv: 3-way diff) (co: ours) (ct: theirs) (cb: both) (c0: neither) (s: resolved)",
+      "(dv: 3-way diff) (s: resolved) (co: ours) (ct: theirs) (cb: both) (c0: neither)",
       k.Unmerged
     )
     assert.equals("(cu: init) (cU: recursive)", k.Uninitialized)
     assert.equals("(rr: continue) (rs: skip) (ra: abort)", k.Rebasing)
     assert.equals(k.Rebasing, k.Sequencing)
     assert.equals("(bg: good) (bb: bad) (br: reset)", k.Bisecting)
-    assert.equals("(co: checkout) (ri: rebase) (rw: reword) (rd: drop)", k.Unpushed)
-    assert.equals("(co: checkout) (ru: rebase)", k.Unpulled)
+    assert.equals("(ri: rebase) (co: checkout) (rw: reword) (rd: drop) (rm: edit)", k.Unpushed)
+    assert.equals("(ru: rebase) (co: checkout)", k.Unpulled)
     assert.equals("(czp: pop) (cza: apply) (czv: view)", k.Stash)
     for _, text in pairs(k) do
       assert.is_nil(text:find("(=", 1, true))

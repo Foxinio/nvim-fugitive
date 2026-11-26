@@ -115,6 +115,77 @@ describe("summary section keys", function()
     assert.truthy(vim.trim(repo:git("status", "--short", "--branch")):match("HEAD"))
   end)
 
+  it("czp/cza/czv act on the stash under the cursor", function()
+    letters("default")
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    repo:write("a", "first\n")
+    repo:git("stash", "-q")
+    repo:write("a", "second\n")
+    repo:git("stash", "-q")
+    local buf = open(repo)
+    goto_line("^stash@{1} ")
+    after(buf, function()
+      H.feed("czp")
+    end)
+    assert.equals("first\n", repo:read("a"))
+    local list = vim.trim(repo:git("stash", "list"))
+    assert.equals(1, #vim.split(list, "\n"))
+    assert.truthy(list:match("^stash@{0}"))
+  end)
+
+  it("rw rewords the Unpushed commit under the cursor", function()
+    letters("default")
+    local origin = H.repo({ files = { ["f"] = "1\n" } })
+    local clone = H.clone(origin)
+    clone:commit("first local", { ["g"] = "g\n" })
+    clone:commit("second local", { ["h"] = "h\n" })
+    open(clone)
+    goto_line(" first local$")
+    H.feed("rw")
+    local todo
+    H.wait(function()
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if
+          vim.api.nvim_buf_get_name(b):match("git%-rebase%-todo$") and vim.b[b].fugitive_editor
+        then
+          todo = b
+          return true
+        end
+      end
+    end, "rebase todo", 10000)
+    assert.truthy(
+      vim.api.nvim_buf_get_lines(todo, 0, 1, false)[1]:match("^reword %x+ #? ?first local")
+    )
+    vim.api.nvim_set_current_win(vim.fn.win_findbuf(todo)[1])
+    -- an empty todo aborts the rebase
+    vim.api.nvim_buf_set_lines(todo, 0, -1, false, {})
+    vim.cmd("wq")
+    H.wait(function()
+      return vim.uv.fs_stat(clone.root .. "/.git/rebase-merge") == nil
+    end, "rebase aborted", 10000)
+  end)
+
+  it("czp, cu and rw say where they work elsewhere, and do nothing", function()
+    letters("default")
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    repo:write("a", "stashed\n")
+    repo:git("stash", "-q")
+    repo:write("a", "A\n")
+    open(repo)
+    goto_line("^M a")
+    H.feed("czp")
+    H.feed("cu")
+    H.feed("rw")
+    local msgs = vim.tbl_map(function(m)
+      return m.msg
+    end, log)
+    assert.truthy(vim.tbl_contains(msgs, "czp: works on stashes"))
+    assert.truthy(vim.tbl_contains(msgs, "cu: works on Unstaged files, Staged files, submodules"))
+    assert.truthy(vim.tbl_contains(msgs, "rw: works on Unpushed commits"))
+    assert.equals("A\n", repo:read("a"))
+    assert.equals(1, #vim.split(vim.trim(repo:git("stash", "list")), "\n"))
+  end)
+
   it("keeps 2X/3X in both presets, and coo/cb<Space> in upstream", function()
     for _, preset in ipairs({ "default", "upstream" }) do
       H.reset_ui()
@@ -131,7 +202,7 @@ describe("summary section keys", function()
     assert.equals("checkout", maps.coo)
     assert.equals("branch_prompt", maps["cb<Space>"])
     assert.equals(
-      "(dv: 3-way diff) (2X: ours) (3X: theirs) (s: resolved)",
+      "(dv: 3-way diff) (s: resolved) (2X: ours) (3X: theirs)",
       summary.hint_keys().Unmerged
     )
   end)

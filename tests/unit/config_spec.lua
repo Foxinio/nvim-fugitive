@@ -133,6 +133,25 @@ describe("config key presets", function()
       { def.co, def.ct, def.cb, def.c0 }
     )
     assert.is_nil(up.co)
+    -- the per-section keys: same keys, per-section actions
+    local per_section = {
+      cu = { "submodule_update", "submodule_init" },
+      cU = { "submodule_update_recursive", "submodule_init_recursive" },
+      czp = { "stash_pop_index", "stash_pop_line" },
+      cza = { "stash_apply_index", "stash_apply_line" },
+      czv = { "stash_view", "stash_view_line" },
+      rw = { "rebase_reword", "rebase_reword_line" },
+      rd = { "rebase_drop", "rebase_drop_line" },
+      rm = { "rebase_edit", "rebase_edit_line" },
+    }
+    for lhs, pair in pairs(per_section) do
+      assert.same(pair, { up[lhs], def[lhs] }, lhs)
+    end
+    for lhs, action in pairs(def) do
+      if not per_section[lhs] and not lhs:match("^c[otb0]$") then
+        assert.equals(up[lhs], action, lhs)
+      end
+    end
     assert.same(config.presets.default, config.merge({}).maps)
     assert.same(config.presets.upstream, config.merge({ maps = { preset = "upstream" } }).maps)
   end)

@@ -200,43 +200,21 @@ function M.status_group(i)
   return M.status_groups[i.entry.status]
 end
 
----The key hints after each section heading: { action, word, count? }, or a
----list of alternatives; the key shown is the one maps.summary binds to the
----action.
+---The hints of the general keys after each section heading: { action,
+---word, count? }; the per-section keys follow them (actions/sections.lua).
 local hints = {
   Untracked = { { "stage", "stage" }, { "ignore", "ignore" }, { "discard", "delete" } },
   Unstaged = { { "stage", "stage" }, { "diff_vertical", "diff" }, { "discard", "discard" } },
   Staged = { { "unstage", "unstage" }, { "commit", "commit" }, { "commit_amend", "amend" } },
-  Unmerged = {
-    { "diff_vertical", "3-way diff" },
-    { { "choose_ours", "ours" }, { "discard", "ours", 2 } },
-    { { "choose_theirs", "theirs" }, { "discard", "theirs", 3 } },
-    { "choose_both", "both" },
-    { "choose_none", "neither" },
-    { "stage", "resolved" },
-  },
-  Uninitialized = { { "submodule_update", "init" }, { "submodule_update_recursive", "recursive" } },
+  Unmerged = { { "diff_vertical", "3-way diff" }, { "stage", "resolved" } },
   Rebasing = {
     { "rebase_continue", "continue" },
     { "rebase_skip", "skip" },
     { "rebase_abort", "abort" },
   },
   Bisecting = { { "bisect_good", "good" }, { "bisect_bad", "bad" }, { "bisect_reset", "reset" } },
-  Unpushed = {
-    { { "choose_ours", "checkout" }, { "checkout", "checkout" } },
-    { "rebase_interactive", "rebase" },
-    { "rebase_reword", "reword" },
-    { "rebase_drop", "drop" },
-  },
-  Unpulled = {
-    { { "choose_ours", "checkout" }, { "checkout", "checkout" } },
-    { "rebase_upstream", "rebase" },
-  },
-  Stash = {
-    { "stash_pop_index", "pop" },
-    { "stash_apply_index", "apply" },
-    { "stash_view", "view" },
-  },
+  Unpushed = { { "rebase_interactive", "rebase" } },
+  Unpulled = { { "rebase_upstream", "rebase" } },
 }
 hints.Sequencing = hints.Rebasing
 
@@ -259,15 +237,35 @@ function M.hint_keys()
       end
     end
   end
-  for section, list in pairs(hints) do
+  local sections = require("nvim-fugitive.buffers.summary.actions.sections")
+  local names = {}
+  for name in pairs(hints) do
+    names[name] = true
+  end
+  for _, decl in ipairs(sections.actions) do
+    for name in pairs(decl.sections) do
+      names[name] = true
+    end
+  end
+  for section in pairs(names) do
     local parts = {}
-    for _, entry in ipairs(list) do
-      -- an entry is { action, word, count? }, or a list of those: the
-      -- first whose action has a key
-      for _, h in ipairs(type(entry[1]) == "table" and entry or { entry }) do
-        if key_of[h[1]] then
-          table.insert(parts, string.format("(%s%s: %s)", h[3] or "", key_of[h[1]], h[2]))
-          break
+    local function add(action, word, count)
+      if key_of[action] then
+        table.insert(parts, string.format("(%s%s: %s)", count or "", key_of[action], word))
+      end
+    end
+    for _, h in ipairs(hints[section] or {}) do
+      add(h[1], h[2], h[3])
+    end
+    -- the per-section keys bound here; with the upstream preset, the
+    -- action vim-fugitive has for it
+    for _, decl in ipairs(sections.actions) do
+      local e = decl.sections[section]
+      if e and e.hint ~= false then
+        if key_of[decl.name] then
+          add(decl.name, e.word)
+        elseif e.fallback then
+          add(e.fallback[1], e.word, e.fallback.count)
         end
       end
     end

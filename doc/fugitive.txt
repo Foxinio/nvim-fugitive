@@ -572,7 +572,8 @@ content, untracked content"); `=` shows the commits and the submodule's
 own short status. Submodules that are not checked out are listed under
 "Uninitialized submodules".
   cu          `git submodule update --init` for the submodule under the
-              cursor (every submodule elsewhere)
+              cursor (with the upstream preset, every submodule elsewhere;
+              see |fugitive-section-maps|)
   cU          the same with --recursive
 
 Bisect maps ~
@@ -582,9 +583,15 @@ Bisecting section with the good/bad/skip verdicts so far.
               cursor (HEAD when not on a commit)
   br          `git bisect reset`
 
-Ours, theirs and checkout maps ~
-These act by the line under the cursor; elsewhere they say where they
-work ("ct: works on Unmerged files"). Saved first (|fugitive-discard|).
+Per-section maps ~
+                                                     *fugitive-section-maps*
+Some keys act on the line under the cursor and only make sense in some
+sections: co ct cb c0 (below), cu cU (submodules), cza czp czv (the stash
+under the cursor) and rw rm rd (an Unpushed commit). Elsewhere they say
+where they work ("ct: works on Unmerged files") and do nothing. The
+upstream preset keeps vim-fugitive's behaviour for cu, cza, czp, czv and
+rw, rm, rd. co ct cb c0 resolve a whole file, saved first
+(|fugitive-discard|):
   co          On an unmerged file: take ours. On an unpushed or unpulled
               commit: check it out.
   ct          On an unmerged file: take theirs.
@@ -598,18 +605,19 @@ Stash maps ~
   czz         stash push ([count] 1: --include-untracked, 2: --all)
   czw         stash push --keep-index
   czs         stash push --staged
-  cza  czA    stash apply ([count] selects stash@{count}), with or without
-              --index
+  cza  czA    stash apply, with or without --index
   czp  czP    stash pop, with or without --index
-  czv         Open stash@{count} as a commit.
+  czv         Open the stash as a commit.
+cza, czp and czv act on the stash under the cursor; with the upstream
+preset, on stash@{count} from any line (czA and czP always do).
 
 Rebase maps ~
   ri          rebase --interactive from the parent of the commit under the
               cursor (or the upstream).
   rf          The same with --autosquash and no editor.
   ru  rp      rebase --interactive @{upstream} / @{push}.
-  rw  rm  rd  Start an interactive rebase with the first commit set to
-              reword, edit or drop.
+  rw  rm  rd  Start an interactive rebase from the Unpushed commit under
+              the cursor, set to reword, edit or drop.
   rr  rs  ra  rebase --continue, --skip, --abort.
   re          rebase --edit-todo.
 
