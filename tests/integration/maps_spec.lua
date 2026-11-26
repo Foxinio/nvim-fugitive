@@ -49,7 +49,12 @@ describe("summary maps (M2 and extras)", function()
   local log, restore
   before_each(function()
     H.reset_ui()
-    H.status_letters()
+    -- vim-fugitive's keys (coo, cza from any line, ...); the default
+    -- preset's per-section keys are in section_keys_spec
+    require("nvim-fugitive.config").set({
+      maps = { preset = "upstream" },
+      summary = { status = { letters = true, color = { enabled = false } } },
+    })
     log, restore = H.capture_notify()
   end)
   after_each(function()

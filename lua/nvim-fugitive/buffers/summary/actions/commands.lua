@@ -124,13 +124,26 @@ end
 
 function M.discard(buf, visual)
   local st = state(buf)
-  local count = vim.v.count
+  -- vim-fugitive's 2X / 3X: take ours / theirs
+  local resolve = ({ [2] = "ours", [3] = "theirs" })[vim.v.count]
   local l1, l2 = range(visual)
   local items = stage.selection(buf, l1, l2)
   require("nvim-fugitive.discard").discard(
     st.repo,
     items,
-    { count = count, has_head = has_head(st), snap = st.snap }
+    { resolve = resolve, has_head = has_head(st), snap = st.snap }
+  )
+end
+
+---Resolve the unmerged file under the cursor: "ours", "theirs" (as 2X/3X),
+---"both" or "none" (every conflict block of the file).
+function M.choose(buf, choice)
+  local st = state(buf)
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  require("nvim-fugitive.discard").discard(
+    st.repo,
+    stage.selection(buf, lnum, lnum),
+    { resolve = choice, has_head = has_head(st), snap = st.snap }
   )
 end
 

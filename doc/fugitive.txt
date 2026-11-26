@@ -494,8 +494,9 @@ Staging maps ~
   -           Stage or unstage, whichever applies.
   U           Unstage everything.
   X           Discard the change under the cursor (saved first, see
-              |fugitive-discard|). On an unmerged file, 2X takes ours and
-              3X takes theirs for the whole file.
+              |fugitive-discard|). On an unmerged file, co / ct take
+              ours / theirs for the whole file; 2X / 3X do the same
+              (vim-fugitive's keys, in both presets).
   g-          Restore the most recent discard; with a count, pick one.
   =           Toggle an inline diff of the file under the cursor. On a
               stash entry or an Unpushed/Unpulled commit: show its changes
@@ -562,8 +563,9 @@ Commit maps ~
   cn   commit --edit --squash= (command line)
   crc  revert the commit under the cursor
   crn  revert --no-commit
-  c<Space> cr<Space> cm<Space> cz<Space> co<Space> cb<Space> r<Space>
-       put the matching :Git command on the command line
+  c<Space> cr<Space> cm<Space> cz<Space> r<Space>
+       put the matching :Git command on the command line (co<Space> and
+       cb<Space> too, with the upstream preset)
 
 Submodule maps ~
 Submodule entries note their state after the line ("new commits, modified
@@ -571,7 +573,8 @@ content, untracked content"); `=` shows the commits and the submodule's
 own short status. Submodules that are not checked out are listed under
 "Uninitialized submodules".
   cu          `git submodule update --init` for the submodule under the
-              cursor (every submodule elsewhere)
+              cursor (with the upstream preset, every submodule elsewhere;
+              see |fugitive-section-maps|)
   cU          the same with --recursive
 
 Bisect maps ~
@@ -581,7 +584,21 @@ Bisecting section with the good/bad/skip verdicts so far.
               cursor (HEAD when not on a commit)
   br          `git bisect reset`
 
-Checkout and branch maps ~
+Per-section maps ~
+                                                     *fugitive-section-maps*
+Some keys act on the line under the cursor and only make sense in some
+sections: co ct cb c0 (below), cu cU (submodules), cza czp czv (the stash
+under the cursor) and rw rm rd (an Unpushed commit). Elsewhere they say
+where they work ("ct: works on Unmerged files") and do nothing. The
+upstream preset keeps vim-fugitive's behaviour for cu, cza, czp, czv and
+rw, rm, rd. co ct cb c0 resolve a whole file, saved first
+(|fugitive-discard|):
+  co          On an unmerged file: take ours. On an unpushed or unpulled
+              commit: check it out.
+  ct          On an unmerged file: take theirs.
+  cb  c0      On an unmerged file: keep both sides, or neither, of every
+              conflict block.
+With `maps.preset = "upstream"` these are vim-fugitive's keys instead:
   coo         Check out the commit under the cursor.
   co<CR> cb<CR>  :Git checkout, :Git branch.
 
@@ -589,18 +606,19 @@ Stash maps ~
   czz         stash push ([count] 1: --include-untracked, 2: --all)
   czw         stash push --keep-index
   czs         stash push --staged
-  cza  czA    stash apply ([count] selects stash@{count}), with or without
-              --index
+  cza  czA    stash apply, with or without --index
   czp  czP    stash pop, with or without --index
-  czv         Open stash@{count} as a commit.
+  czv         Open the stash as a commit.
+cza, czp and czv act on the stash under the cursor; with the upstream
+preset, on stash@{count} from any line (czA and czP always do).
 
 Rebase maps ~
   ri          rebase --interactive from the parent of the commit under the
               cursor (or the upstream).
   rf          The same with --autosquash and no editor.
   ru  rp      rebase --interactive @{upstream} / @{push}.
-  rw  rm  rd  Start an interactive rebase with the first commit set to
-              reword, edit or drop.
+  rw  rm  rd  Start an interactive rebase from the Unpushed commit under
+              the cursor, set to reword, edit or drop.
   rr  rs  ra  rebase --continue, --skip, --abort.
   re          rebase --edit-todo.
 
@@ -675,8 +693,9 @@ Both the "merge" and the "diff3"/"zdiff3" marker styles are understood.
 Highlight groups: FugitiveConflictMarker, FugitiveConflictOurs,
 FugitiveConflictTheirs, FugitiveConflictBase.
 
-In the summary, unmerged files have their own section: `2X` / `3X` take
-ours / theirs for the whole file, `s` marks it resolved and `dd` / `dv`
+In the summary, unmerged files have their own section: `co` / `ct` (or
+`2X` / `3X`) take ours / theirs for the whole file, `cb` / `c0` keep both
+or neither side of every block, `s` marks it resolved and `dd` / `dv`
 open the three-way diff. Closing any of its three windows closes the other
 two; `dq` in the summary closes ours and theirs and keeps the work tree
 file.

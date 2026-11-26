@@ -138,77 +138,109 @@ local function status_in(snap, section, path)
   end
 end
 
----Plan the destructive commands for one selection item (upstream semantics).
----@return {cmds: {args: string[], stdin?: string}[], delete?: boolean, kind: string, touches_index: boolean}?, string? err
-local function plan(item, opts)
+---A plan: the commands that destroy, run after everything is saved.
+---@alias fugitive.DiscardPlan {cmds: {args: string[], stdin?: string}[], delete?: boolean, write?: fun(), kind: string, touches_index: boolean}
+
+---Discard the selected hunks of a file.
+---@return fugitive.DiscardPlan?, string? err
+local function plan_patch(item)
+  local sels = {}
+  for _, h in ipairs(item.hunks) do
+    if h.hunk.combined or h.hunk.submodule then
+      return nil, "cannot discard part of a conflict or submodule diff"
+    end
+    table.insert(sels, { hunk = h.hunk, lines = h.lines })
+  end
+  if item.section ~= "Unstaged" and item.section ~= "Staged" then
+    return nil, "cannot discard part of an " .. item.section:lower() .. " file"
+  end
+  local patch = require("nvim-fugitive.git.diff").build_patch(item.file, sels, true)
+  if not patch then
+    return nil, "no changes selected"
+  end
+  local args = { "apply", "--recount", "--whitespace=nowarn", "--reverse" }
+  if item.section == "Staged" then
+    table.insert(args, "--index")
+  end
+  table.insert(args, "-")
+  return {
+    cmds = { { args = args, stdin = patch } },
+    kind = "partial",
+    touches_index = item.section == "Staged",
+  }
+end
+
+---Keep both sides, or neither, of every conflict block of the file: git
+---has no --both or --none for a whole file.
+---@return fugitive.DiscardPlan?, string? err
+local function plan_rewrite(path, side, opts)
+  local abs = opts.repo and opts.repo:abs(path) or path
+  local f = io.open(abs, "r")
+  if not f then
+    return nil, "cannot read " .. path
+  end
+  local lines = vim.split(f:read("*a"), "\n", { plain = true })
+  f:close()
+  local conflict = require("nvim-fugitive.conflict")
+  local blocks = conflict.parse(lines)
+  if #blocks == 0 then
+    return nil, "no conflict markers in " .. path
+  end
+  -- from the last block, so earlier line numbers stay valid
+  for k = #blocks, 1, -1 do
+    local c = blocks[k]
+    local repl = conflict.resolve_block(lines, c, side)
+    for _ = c.start, c.finish do
+      table.remove(lines, c.start)
+    end
+    for n, l in ipairs(repl) do
+      table.insert(lines, c.start + n - 1, l)
+    end
+  end
+  local out = table.concat(lines, "\n")
+  return {
+    cmds = {},
+    write = function()
+      local w = assert(io.open(abs, "w"))
+      w:write(out)
+      w:close()
+    end,
+    kind = side,
+    touches_index = false,
+  }
+end
+
+---For each side: git's flag, the section a deletion on that side shows in,
+---and which character of the status pair is that side's.
+local sides = {
+  ours = { flag = "--ours", other = "Staged", xy = 1 },
+  theirs = { flag = "--theirs", other = "Unstaged", xy = 2 },
+}
+
+---Take one side of the file: checkout --ours/--theirs, or delete it when
+---that side deleted it.
+---@return fugitive.DiscardPlan
+local function plan_side(item, side, opts)
+  local e, s = item.entry, sides[side]
+  local deleted = status_in(opts.snap, s.other, e.path) == "D"
+    or (e.xy and e.xy:sub(s.xy, s.xy) == "D")
+  if deleted then
+    return { cmds = {}, delete = true, kind = side, touches_index = false }
+  end
+  return {
+    cmds = { { args = { "checkout", s.flag, "--", e.path } } },
+    kind = side,
+    touches_index = false,
+  }
+end
+
+---Throw away the file's change, by its section.
+---@return fugitive.DiscardPlan?, string? err
+local function plan_file(item, opts)
   local e = item.entry
-  if not e then
-    return nil
-  end
   local path = e.path
-  if e.submodule then
-    return nil, "will not touch submodule " .. path
-  end
-  if path:sub(-1) == "/" then
-    return nil, "will not delete directory " .. path
-  end
-  if item.type == "patch" then
-    local sels = {}
-    for _, h in ipairs(item.hunks) do
-      if h.hunk.combined or h.hunk.submodule then
-        return nil, "cannot discard part of a conflict or submodule diff"
-      end
-      table.insert(sels, { hunk = h.hunk, lines = h.lines })
-    end
-    if item.section ~= "Unstaged" and item.section ~= "Staged" then
-      return nil, "cannot discard part of an " .. item.section:lower() .. " file"
-    end
-    local patch = require("nvim-fugitive.git.diff").build_patch(item.file, sels, true)
-    if not patch then
-      return nil, "no changes selected"
-    end
-    local args = { "apply", "--recount", "--whitespace=nowarn", "--reverse" }
-    if item.section == "Staged" then
-      table.insert(args, "--index")
-    end
-    table.insert(args, "-")
-    return {
-      cmds = { { args = args, stdin = patch } },
-      kind = "partial",
-      touches_index = item.section == "Staged",
-    }
-  end
-  local count = opts.count or 0
-  if item.section == "Untracked" then
-    return {
-      cmds = { { args = { "clean", "-f", "--", path } } },
-      kind = "untracked",
-      touches_index = false,
-    }
-  end
-  if count == 2 or count == 3 then
-    local side = count == 2 and "--ours" or "--theirs"
-    local other = count == 2 and "Staged" or "Unstaged"
-    if
-      status_in(opts.snap, other, path) == "D"
-      or e.xy
-        and ((count == 2 and e.xy:sub(1, 1) == "D") or (count == 3 and e.xy:sub(2, 2) == "D"))
-    then
-      return {
-        cmds = {},
-        delete = true,
-        kind = count == 2 and "ours" or "theirs",
-        touches_index = false,
-      }
-    end
-    return {
-      cmds = { { args = { "checkout", side, "--", path } } },
-      kind = count == 2 and "ours" or "theirs",
-      touches_index = false,
-    }
-  end
   if item.section == "Unmerged" then
-    return nil, "Use 2X for --ours or 3X for --theirs"
+    return nil, "Use co / ct (or 2X / 3X) to take ours / theirs"
   end
   if e.status == "U" then
     return { cmds = {}, delete = true, kind = "unmerged", touches_index = false }
@@ -235,6 +267,38 @@ local function plan(item, opts)
     return { cmds = cmds, kind = "staged", touches_index = true }
   end
   return nil
+end
+
+---Plan the destructive commands for one selection item. `opts.resolve`
+---("ours", "theirs", "both", "none") resolves a file instead of discarding
+---its change.
+---@return fugitive.DiscardPlan?, string? err
+local function plan(item, opts)
+  local e = item.entry
+  if not e then
+    return nil
+  end
+  if e.submodule then
+    return nil, "will not touch submodule " .. e.path
+  end
+  if e.path:sub(-1) == "/" then
+    return nil, "will not delete directory " .. e.path
+  end
+  local resolve = opts.resolve
+  if item.type == "patch" then
+    return plan_patch(item)
+  elseif resolve == "both" or resolve == "none" then
+    return plan_rewrite(e.path, resolve, opts)
+  elseif item.section == "Untracked" then
+    return {
+      cmds = { { args = { "clean", "-f", "--", e.path } } },
+      kind = "untracked",
+      touches_index = false,
+    }
+  elseif resolve == "ours" or resolve == "theirs" then
+    return plan_side(item, resolve, opts)
+  end
+  return plan_file(item, opts)
 end
 
 ---Discard the selected items. Refuses everything if any save fails.
@@ -265,7 +329,7 @@ function M.discard(repo, items, opts, cb)
   -- 1. plan and save everything before touching anything
   local plans, journal_new = {}, {}
   for _, it in ipairs(flat) do
-    local p, err = plan(it, opts)
+    local p, err = plan(it, vim.tbl_extend("force", opts, { repo = repo }))
     if not p then
       notify.error(err or ("cannot discard " .. it.entry.path))
       if cb then
@@ -336,6 +400,9 @@ function M.discard(repo, items, opts, cb)
   for _, pl in ipairs(plans) do
     if pl.plan.delete then
       os.remove(repo:abs(pl.item.entry.path))
+    end
+    if pl.plan.write then
+      pl.plan.write()
     end
     vim.list_extend(cmds, pl.plan.cmds)
   end

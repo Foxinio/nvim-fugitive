@@ -19,6 +19,46 @@ for _, part in ipairs({ "stage", "navigate", "open", "commands" }) do
     M[k] = v
   end
 end
+local sections = require("nvim-fugitive.buffers.summary.actions.sections")
+
+---The key bound to `name` (the shortest), or the name itself.
+local function key_of(name)
+  local key
+  for lhs, action in pairs(require("nvim-fugitive.config").get().maps.summary or {}) do
+    if action == name and (not key or #lhs < #key) then
+      key = lhs
+    end
+  end
+  return key or name
+end
+
+---The action of a per-section key (sections.lua): what its entry for the
+---cursor line's section does; elsewhere it says where it works.
+---@param buf integer
+---@param a table<string, fugitive.Action> the buffer's actions
+---@param decl {name: string, sections: table<string, fugitive.SectionEntry>}
+---@return fun()
+function M.by_section(buf, a, decl)
+  local function warn()
+    local where = {}
+    for _, s in ipairs(sections.order) do
+      if decl.sections[s] then
+        table.insert(where, sections.what[s] or s)
+      end
+    end
+    notify.warn(string.format("%s: works on %s", key_of(decl.name), table.concat(where, ", ")))
+  end
+  return function()
+    local st = state(buf)
+    local info = st and st.info[vim.api.nvim_win_get_cursor(0)[1]]
+    local entry = info and decl.sections[info.section]
+    if not entry then
+      return warn()
+    end
+    entry.run({ buf = buf, a = a, info = info, warn = warn })
+  end
+end
+
 ---@param buf integer
 ---@return table<string, fugitive.Action>
 function M.actions(buf)
@@ -313,6 +353,10 @@ function M.actions(buf)
     end,
     bisect_reset = run({ "bisect", "reset" }),
   }
+  -- the per-section keys (sections.lua)
+  for _, decl in ipairs(sections.actions) do
+    a[decl.name] = M.by_section(buf, a, decl)
+  end
   for name, fn in pairs(require("nvim-fugitive.maps").cfile_actions(buf)) do
     a[name] = fn
   end
