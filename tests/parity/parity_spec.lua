@@ -10,8 +10,14 @@ local function skip()
 end
 
 describe("parity with upstream vim-fugitive", function()
+  local config = require("nvim-fugitive.config")
   before_each(function()
     H.reset_ui()
+    -- parity is with vim-fugitive's keys
+    config.set({ maps = { preset = "upstream" } })
+  end)
+  after_each(function()
+    config.set({})
   end)
 
   local scenarios = {
