@@ -262,3 +262,34 @@ describe("config key presets", function()
     assert.equals("(s: stage) (dv: diff) (Q: discard)", k.Unstaged)
   end)
 end)
+
+describe("config prefix conflicts", function()
+  local config = require("nvim-fugitive.config")
+
+  it("finds none in either preset", function()
+    assert.same({}, config.prefix_conflicts(config.presets.default))
+    assert.same({}, config.prefix_conflicts(config.presets.upstream))
+  end)
+
+  it("names a key that hides a longer one, by the keys typed", function()
+    assert.same(
+      { 'maps.summary: "co" hides "coo"' },
+      config.prefix_conflicts({
+        summary = { co = "stage", coo = "checkout", ["<"] = "x", ["<CR>"] = "y" },
+      })
+    )
+    assert.same({}, config.prefix_conflicts({ summary = { co = false, coo = "checkout" } }))
+  end)
+
+  it("warns on setup", function()
+    local seen
+    local notify = vim.notify
+    vim.notify = function(msg)
+      seen = msg
+    end
+    config.set({ maps = { preset = "upstream", summary = { co = "stage" } } })
+    vim.notify = notify
+    config.set({})
+    assert.truthy(seen and seen:match('"co" hides "co<CR>"'))
+  end)
+end)

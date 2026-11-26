@@ -659,6 +659,40 @@ M.user = nil
 ---@type string?
 M.error = nil
 
+---Keys that hide longer ones: maps are nowait, so with "co" mapped "coo"
+---can never be typed. Disabled (false) keys don't count.
+---@param maps table<string, table<string, any>> map tables by buffer type
+---@return string[] messages like 'maps.summary: "co" hides "coo"'
+function M.prefix_conflicts(maps)
+  local out = {}
+  for buftype, tbl in pairs(maps) do
+    if type(tbl) == "table" then
+      local keys = {}
+      for lhs, action in pairs(tbl) do
+        if action then
+          table.insert(keys, lhs)
+        end
+      end
+      table.sort(keys)
+      -- compare the keys typed, not their notation ("<" is no prefix of "<CR>")
+      local typed = {}
+      for _, lhs in ipairs(keys) do
+        typed[lhs] = vim.keycode(lhs)
+      end
+      for _, short in ipairs(keys) do
+        for _, long in ipairs(keys) do
+          local s, l = typed[short], typed[long]
+          if #l > #s and l:sub(1, #s) == s then
+            table.insert(out, string.format('maps.%s: "%s" hides "%s"', buftype, short, long))
+          end
+        end
+      end
+    end
+  end
+  table.sort(out)
+  return out
+end
+
 ---@param opts? table
 function M.set(opts)
   M.user, M.error = opts, nil
@@ -666,6 +700,13 @@ function M.set(opts)
   if not ok then
     M.error = tostring(merged)
     error(merged, 0)
+  end
+  local conflicts = M.prefix_conflicts(merged.maps)
+  if #conflicts > 0 then
+    vim.notify(
+      "nvim-fugitive: " .. table.concat(conflicts, "; ") .. " (maps don't wait for a longer key)",
+      vim.log.levels.WARN
+    )
   end
   M.values = merged
   return M.values
