@@ -11,7 +11,6 @@ local state = util.state
 local has_head = util.has_head
 local git = util.git
 local cmdline = util.cmdline
-local split_words = util.split_words
 
 local M = {}
 for _, part in ipairs({ "stage", "navigate", "open", "commands" }) do
@@ -82,6 +81,32 @@ function M.actions(buf)
     return function()
       git(buf, args, { mods = mods })
     end
+  end
+  ---`fn(commit)` on the commit under the cursor; elsewhere a warning.
+  local function on_commit(fn)
+    return function()
+      local c = M.cursor_commit(buf)
+      if not c then
+        notify.warn("no commit under the cursor")
+        return
+      end
+      fn(c)
+    end
+  end
+  ---`:Git {args}`, run as it is (no command line typed).
+  local function git_cmd(args)
+    return function()
+      require("nvim-fugitive.cmd.git").run(vim.deepcopy(args), { buf = buf })
+    end
+  end
+  ---The prompt of cF/cS: commit, then an autosquash rebase from the parent.
+  local function fixup_then_rebase(flag)
+    local c = M.cursor_commit(buf)
+    local text = "Git commit "
+      .. flag
+      .. (c or "")
+      .. " | Git -c sequence.editor=true rebase --interactive --autosquash"
+    return c and (text .. " " .. c .. "^") or text
   end
   local function count_ref()
     return "stash@{" .. vim.v.count .. "}"
@@ -184,31 +209,19 @@ function M.actions(buf)
     commit_reset_author_extend = run({ "commit", "--reset-author", "--amend", "--no-edit" }),
     commit_reset_author_reword = run({ "commit", "--reset-author", "--amend", "--only" }),
     commit_fixup = function()
-      cmdline("Git commit --fixup=" .. M.cursor_commit(buf))
+      cmdline("Git commit --fixup=" .. (M.cursor_commit(buf) or ""))
     end,
     commit_fixup_rebase = function()
-      local c = M.cursor_commit(buf)
-      cmdline(
-        "Git commit --fixup="
-          .. c
-          .. " | Git -c sequence.editor=true rebase --interactive --autosquash"
-          .. M.rebase_argument(buf)
-      )
+      cmdline(fixup_then_rebase("--fixup="))
     end,
     commit_squash = function()
-      cmdline("Git commit --no-edit --squash=" .. M.cursor_commit(buf))
+      cmdline("Git commit --no-edit --squash=" .. (M.cursor_commit(buf) or ""))
     end,
     commit_squash_rebase = function()
-      local c = M.cursor_commit(buf)
-      cmdline(
-        "Git commit --no-edit --squash="
-          .. c
-          .. " | Git -c sequence.editor=true rebase --interactive --autosquash"
-          .. M.rebase_argument(buf)
-      )
+      cmdline(fixup_then_rebase("--no-edit --squash="))
     end,
     commit_squash_edit = function()
-      cmdline("Git commit --edit --squash=" .. M.cursor_commit(buf))
+      cmdline("Git commit --edit --squash=" .. (M.cursor_commit(buf) or ""))
     end,
     commit_prompt = function()
       cmdline("Git commit ")
@@ -217,45 +230,32 @@ function M.actions(buf)
       cmdline("tab Git commit -v ")
     end,
     -- revert / merge
-    revert = function()
-      git(buf, { "revert", M.cursor_commit(buf) })
-    end,
-    revert_no_commit = function()
-      git(buf, { "revert", "--no-commit", M.cursor_commit(buf) })
-    end,
+    revert = on_commit(function(c)
+      git(buf, { "revert", c })
+    end),
+    revert_no_commit = on_commit(function(c)
+      git(buf, { "revert", "--no-commit", c })
+    end),
     revert_prompt = function()
       cmdline("Git revert ")
     end,
-    revert_bare = function()
-      cmdline("Git revert\r")
-    end,
+    revert_bare = git_cmd({ "revert" }),
     merge_prompt = function()
       cmdline("Git merge ")
     end,
-    merge_bare = function()
-      cmdline("Git merge\r")
-    end,
+    merge_bare = git_cmd({ "merge" }),
     -- checkout / branch (M2)
-    checkout = function()
-      local c = M.cursor_commit(buf)
-      if c == "" then
-        notify.warn("no commit under the cursor")
-        return
-      end
+    checkout = on_commit(function(c)
       git(buf, { "checkout", c, "--" })
-    end,
+    end),
     checkout_prompt = function()
       cmdline("Git checkout ")
     end,
-    checkout_bare = function()
-      cmdline("Git checkout\r")
-    end,
+    checkout_bare = git_cmd({ "checkout" }),
     branch_prompt = function()
       cmdline("Git branch ")
     end,
-    branch_bare = function()
-      cmdline("Git branch\r")
-    end,
+    branch_bare = git_cmd({ "branch" }),
     -- stash (M2)
     stash_push = function()
       local extra = vim.v.count > 1 and { "--all" }
@@ -294,19 +294,17 @@ function M.actions(buf)
     stash_prompt = function()
       cmdline("Git stash ")
     end,
-    stash_bare = function()
-      cmdline("Git stash\r")
-    end,
+    stash_bare = git_cmd({ "stash" }),
     -- rebase (M2)
     rebase_interactive = function()
-      git(buf, vim.list_extend({ "rebase", "--interactive" }, split_words(M.rebase_argument(buf))))
+      git(buf, vim.list_extend({ "rebase", "--interactive" }, M.rebase_base(buf)))
     end,
     rebase_autosquash = function()
       git(
         buf,
         vim.list_extend(
           { "-c", "sequence.editor=true", "rebase", "--interactive", "--autosquash" },
-          split_words(M.rebase_argument(buf))
+          M.rebase_base(buf)
         )
       )
     end,
@@ -328,9 +326,7 @@ function M.actions(buf)
     rebase_prompt = function()
       cmdline("Git rebase ")
     end,
-    rebase_bare = function()
-      cmdline("Git rebase\r")
-    end,
+    rebase_bare = git_cmd({ "rebase" }),
     -- submodules: init/update the one under the cursor (all elsewhere)
     submodule_update = function()
       git(buf, vim.list_extend({ "submodule", "update", "--init" }, M.cursor_submodule(buf)))
@@ -343,13 +339,13 @@ function M.actions(buf)
     end,
     -- bisect: on the commit under the cursor, else on HEAD
     bisect_good = function()
-      git(buf, vim.list_extend({ "bisect", "good" }, split_words(M.cursor_commit(buf))))
+      git(buf, { "bisect", "good", M.cursor_commit(buf) })
     end,
     bisect_bad = function()
-      git(buf, vim.list_extend({ "bisect", "bad" }, split_words(M.cursor_commit(buf))))
+      git(buf, { "bisect", "bad", M.cursor_commit(buf) })
     end,
     bisect_skip = function()
-      git(buf, vim.list_extend({ "bisect", "skip" }, split_words(M.cursor_commit(buf))))
+      git(buf, { "bisect", "skip", M.cursor_commit(buf) })
     end,
     bisect_reset = run({ "bisect", "reset" }),
   }

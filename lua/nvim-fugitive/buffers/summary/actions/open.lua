@@ -244,14 +244,14 @@ function M.cursor_submodule(buf)
   return {}
 end
 
----Commit under the cursor (upstream's s:SquashArgument).
+---The commit under the cursor, or nil.
+---@return string?
 function M.cursor_commit(buf)
   local st = state(buf)
   local i = st and st.info[vim.fn.line(".")]
   if i and (i.kind == "commit" or i.kind == "rebase") then
     return i.commit
   end
-  return ""
 end
 
 return M

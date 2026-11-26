@@ -34,16 +34,14 @@ function M.git(buf, args, opts)
 end
 
 ---Put a command on the command line for the user to complete/confirm.
+---Leave a `:` prompt for the user to finish (the `…<Space>` keys); a
+---command that runs as it is goes through `run` instead.
 function M.cmdline(text, home)
   local keys = ":" .. text
   if home then
     keys = keys .. "<Home>"
   end
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "n", false)
-end
-
-function M.split_words(s)
-  return vim.split(s, " ", { trimempty = true })
 end
 
 return M

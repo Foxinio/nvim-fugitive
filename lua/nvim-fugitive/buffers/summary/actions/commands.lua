@@ -6,19 +6,20 @@ local state = util.state
 local range = util.range
 local has_head = util.has_head
 local git = util.git
-local split_words = util.split_words
 local open = require("nvim-fugitive.buffers.summary.actions.open")
 local stage = require("nvim-fugitive.buffers.summary.actions.stage")
 
 local M = {}
 
-function M.rebase_argument(buf)
+---Where an interactive rebase starts: the parent of the commit under the
+---cursor, or nothing (git's default, the upstream branch).
+---@return string[]
+function M.rebase_base(buf)
   local c = open.cursor_commit(buf)
-  return c ~= "" and (" " .. c .. "^") or ""
+  return c and { c .. "^" } or {}
 end
 
 function M.rebase_retodo(buf, word)
-  local arg = M.rebase_argument(buf)
   local group = vim.api.nvim_create_augroup("fugitive_rebase_retodo", { clear = true })
   vim.api.nvim_create_autocmd("User", {
     group = group,
@@ -33,7 +34,7 @@ function M.rebase_retodo(buf, word)
       end
     end,
   })
-  git(buf, vim.list_extend({ "rebase", "--interactive" }, split_words(arg)))
+  git(buf, vim.list_extend({ "rebase", "--interactive" }, M.rebase_base(buf)))
 end
 
 -- ---------------------------------------------------------------------------
