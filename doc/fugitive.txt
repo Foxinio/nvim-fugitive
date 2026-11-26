@@ -494,8 +494,9 @@ Staging maps ~
   -           Stage or unstage, whichever applies.
   U           Unstage everything.
   X           Discard the change under the cursor (saved first, see
-              |fugitive-discard|). On an unmerged file, 2X takes ours and
-              3X takes theirs for the whole file (as co / ct below).
+              |fugitive-discard|). On an unmerged file, co / ct take
+              ours / theirs for the whole file; 2X / 3X do the same
+              (vim-fugitive's keys, in both presets).
   g-          Restore the most recent discard; with a count, pick one.
   =           Toggle an inline diff of the file under the cursor. On a
               stash entry or an Unpushed/Unpulled commit: show its changes

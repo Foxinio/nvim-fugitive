@@ -124,13 +124,14 @@ end
 
 function M.discard(buf, visual)
   local st = state(buf)
-  local count = vim.v.count
+  -- vim-fugitive's 2X / 3X: take ours / theirs
+  local resolve = ({ [2] = "ours", [3] = "theirs" })[vim.v.count]
   local l1, l2 = range(visual)
   local items = stage.selection(buf, l1, l2)
   require("nvim-fugitive.discard").discard(
     st.repo,
     items,
-    { count = count, has_head = has_head(st), snap = st.snap }
+    { resolve = resolve, has_head = has_head(st), snap = st.snap }
   )
 end
 
@@ -142,7 +143,7 @@ function M.choose(buf, choice)
   require("nvim-fugitive.discard").discard(
     st.repo,
     stage.selection(buf, lnum, lnum),
-    { choice = choice, has_head = has_head(st), snap = st.snap }
+    { resolve = choice, has_head = has_head(st), snap = st.snap }
   )
 end
 
