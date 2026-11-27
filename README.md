@@ -236,7 +236,12 @@ require("nvim-fugitive").setup({
     },
   },
   -- how many commands :FugitiveOutput remembers
-  output = { ring_size = 20 },
+  -- the whole output of the latest command (ring_size; 0 means 1), and the
+  -- stderr of the latest 20 commands that wrote any (:FugitiveOutput)
+  output = { ring_size = 1, errors = 20 },
+  -- :FugitiveLog: the latest 100 git commands; "user" shows the ones your keys
+  -- and commands started, "all" the background ones too
+  log = { size = 100, level = "user" },
   -- the pager float
   float = {
     width = 0.9, -- fraction of the editor (<= 1) or columns (> 1)

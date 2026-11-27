@@ -1,84 +1,147 @@
 local H = require("helpers")
-local object = require("nvim-fugitive.object")
+local summary = require("nvim-fugitive.buffers.summary")
+local log = require("nvim-fugitive.log")
+local output = require("nvim-fugitive.ui.output")
+local config = require("nvim-fugitive.config")
 
-local function wait_qf(get)
+local function open(repo)
+  vim.cmd("cd " .. vim.fn.fnameescape(repo.root))
+  vim.cmd("Git")
+  local buf = vim.api.nvim_get_current_buf()
   H.wait(function()
-    return #get() > 0
-  end, "list filled")
-  return get()
+    return summary.state(buf) and summary.state(buf).tick > 0 and not summary.state(buf).running
+  end)
+  return buf
 end
 
-describe(":Gclog / :Gllog", function()
-  local repo, c1, c2, c3
+---Entries added after `n` entries, with `sub` among their words.
+local function since(n, sub)
+  local out = {}
+  for k = n + 1, #log._ring do
+    local e = log._ring[k]
+    if vim.tbl_contains(e.cmd, sub) then
+      table.insert(out, e)
+    end
+  end
+  return out
+end
+
+describe(":FugitiveLog", function()
   before_each(function()
     H.reset_ui()
-    vim.fn.setqflist({}, "r")
-    local lines = {}
-    for i = 1, 10 do
-      lines[i] = "l" .. i
+    log._ring = {}
+  end)
+  after_each(function()
+    config.set({})
+  end)
+
+  it("marks what your keys start as user, the refresh after it as background", function()
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    repo:write("a", "A\n")
+    local buf = open(repo)
+    local st = summary.state(buf)
+    local n = #log._ring
+    vim.api.nvim_win_set_cursor(0, { assert(H.find_line("a$")), 0 })
+    local tick = st.tick
+    H.feed("s")
+    H.wait(function()
+      return st.tick > tick and not st.running
+    end, "refresh")
+    local adds = since(n, "add")
+    assert.equals(1, #adds)
+    assert.equals("user", adds[1].kind)
+    assert.equals(0, adds[1].code)
+    assert.truthy(adds[1].ms)
+    local status = since(n, "status")
+    assert.is_true(#status > 0)
+    assert.equals("background", status[#status].kind)
+  end)
+
+  it("counts :Git as user, and records failures", function()
+    local repo = H.repo({ files = { ["a"] = "a\n" } })
+    vim.cmd("cd " .. vim.fn.fnameescape(repo.root))
+    local n = #log._ring
+    vim.cmd("Git rev-parse --verify nosuchref")
+    H.wait(function()
+      local e = since(n, "rev-parse")[1]
+      return e and e.code ~= nil
+    end, "rev-parse done")
+    local e = since(n, "rev-parse")[1]
+    assert.equals("user", e.kind)
+    assert.is_true(e.code ~= 0)
+    assert.truthy(log.format(e):match("✗ " .. e.code))
+  end)
+
+  it("keeps log.size entries", function()
+    config.set({ log = { size = 3 } })
+    local exec = require("nvim-fugitive.git.exec")
+    for _ = 1, 5 do
+      exec.sync({ "--version" })
     end
-    repo = H.repo({ files = { ["f"] = table.concat(lines, "\n") .. "\n", ["g"] = "g\n" } })
-    c1 = repo:rev("HEAD")
-    lines[5] = "FIVE"
-    c2 = repo:commit("change five", { ["f"] = table.concat(lines, "\n") .. "\n" })
-    c3 = repo:commit("touch g", { ["g"] = "G\n" })
-    vim.cmd("cd " .. repo.root)
+    assert.equals(3, #log._ring)
   end)
 
-  it("loads commits into quickfix and jumps to the first", function()
-    vim.cmd("Gclog")
-    local qf = wait_qf(vim.fn.getqflist)
-    assert.equals(3, #qf)
-    assert.equals("touch g", qf[1].text)
-    assert.equals(c3:sub(1, 7), qf[1].module)
-    assert.equals(object.format(repo.root .. "/.git", c3), vim.api.nvim_buf_get_name(0))
+  it("shows your commands, and the background ones after a", function()
+    local exec = require("nvim-fugitive.git.exec")
+    exec.sync({ "--version" })
+    log.user(exec.sync, { "--help" })
+    local buf = log.show()
+    local function body()
+      return table.concat(vim.api.nvim_buf_get_lines(buf, 1, -1, false), "\n")
+    end
+    assert.truthy(body():match("%-%-help"))
+    assert.is_nil(body():match("%-%-version"))
+    H.feed("a")
+    assert.truthy(body():match("%-%-version"))
+    log.user(exec.sync, { "--exec-path" })
+    H.wait(function()
+      return body():match("%-%-exec%-path") ~= nil
+    end, "new line")
+  end)
+end)
+
+describe("kept output", function()
+  before_each(function()
+    output._ring = {}
+  end)
+  after_each(function()
+    config.set({})
   end)
 
-  it("with a path lists that file at each commit; ! does not jump", function()
-    vim.cmd("enew")
-    vim.cmd("Gclog! -- f")
-    local qf = wait_qf(vim.fn.getqflist)
-    assert.equals(2, #qf)
-    assert.equals(
-      object.format(repo.root .. "/.git", c2, "f"),
-      vim.api.nvim_buf_get_name(qf[1].bufnr)
+  local function cmd(stdout, stderr)
+    output.record({
+      cmd = { "git" },
+      code = stderr ~= "" and 1 or 0,
+      stdout = stdout,
+      stderr = stderr,
+    })
+  end
+
+  it("keeps the latest command's output, and 20 commands' stderr", function()
+    for k = 1, 21 do
+      cmd("out" .. k, "err" .. k)
+    end
+    cmd("last", "")
+    assert.equals("last", output.get(1).stdout)
+    assert.equals("", output.get(2).stdout) -- stderr only
+    assert.equals("err21", output.get(2).stderr)
+    assert.equals(21, #output._ring) -- err1 dropped
+    assert.equals("err2", output._ring[1].stderr)
+  end)
+
+  it("treats ring_size 0 as 1, and keeps more when asked", function()
+    config.set({ output = { ring_size = 0 } })
+    cmd("a", "")
+    cmd("b", "")
+    assert.equals(1, #output._ring)
+    config.set({ output = { ring_size = 3 } })
+    cmd("c", "")
+    cmd("d", "")
+    assert.same(
+      { "b", "c", "d" },
+      vim.tbl_map(function(e)
+        return e.stdout
+      end, output._ring)
     )
-    assert.equals("", vim.api.nvim_buf_get_name(0))
-  end)
-
-  it("an option's value is not taken for the path", function()
-    vim.cmd("Gclog -n 1 f")
-    local qf = wait_qf(vim.fn.getqflist)
-    assert.equals(1, #qf)
-    assert.equals(
-      object.format(repo.root .. "/.git", c2, "f"),
-      vim.api.nvim_buf_get_name(qf[1].bufnr)
-    )
-  end)
-
-  it(":{range}Gclog follows the lines with log -L, on each hunk", function()
-    vim.cmd("edit f")
-    vim.cmd("5,5Gclog")
-    local qf = wait_qf(vim.fn.getqflist)
-    assert.equals(2, #qf)
-    assert.equals(
-      object.format(repo.root .. "/.git", c2, "f"),
-      vim.api.nvim_buf_get_name(qf[1].bufnr)
-    )
-    assert.equals(5, qf[1].lnum)
-    assert.equals(
-      object.format(repo.root .. "/.git", c1, "f"),
-      vim.api.nvim_buf_get_name(qf[2].bufnr)
-    )
-  end)
-
-  it(":0Gclog is the whole file's history; :Gllog uses the location list", function()
-    vim.cmd("edit f")
-    vim.cmd("0Gllog!")
-    local ll = wait_qf(function()
-      return vim.fn.getloclist(0)
-    end)
-    assert.equals(2, #ll)
-    assert.equals(0, #vim.fn.getqflist())
   end)
 end)

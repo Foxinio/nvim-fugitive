@@ -84,7 +84,8 @@ Calling setup is optional; without it the defaults below apply. >lua
     -- Per-subcommand route overrides, see |fugitive-output|.
     routes = { status = "float" },
     notify = { max_lines = 10 },
-    output = { ring_size = 20 },
+    output = { ring_size = 1, errors = 20 },  -- |:FugitiveOutput|
+    log = { size = 100, level = "user" },     -- |:FugitiveLog|
     float = { width = 0.9, height = 0.85, border = "rounded" },
     editor = { window = "split" },      -- "split", "vsplit", "tab", "current"
     discard = { journal_size = 200 },
@@ -179,8 +180,9 @@ maps). Maps inside fugitive's own buffers are always set.
                         column. Modified buffers are blamed with their
                         unsaved contents; blobs at a commit are blamed at
                         that commit. With a path, a revision or -L the
-                        output goes to the pager float instead. Maps (table
-                        `blame`):
+                        output goes to the pager float instead.
+                                                       *fugitive-blame-maps*
+                        Maps (table `blame`):
                           <CR>  close blame and open the commit at the
                                 hunk that added the line (a boundary
                                 commit opens the blob instead)
@@ -200,7 +202,23 @@ maps). Maps inside fugitive's own buffers are always set.
                         command, newest first ([n] = 1 is the latest), with
                         the colours git printed (|fugitive-colours|).
                         Opens in the float;
-                        modifiers open a split.
+                        modifiers open a split. Only the latest command's
+                        whole output is kept (`output.ring_size`, 1 by
+                        default); older ones keep their stderr, for the
+                        latest `output.errors` (20) that wrote any.
+
+                                                                *:FugitiveLog*
+:FugitiveLog [all]      A window listing the git commands fugitive ran,
+:FugitiveLog!           oldest first, that keeps up as more run: the time,
+                        `user` or `background`, how long it took, `ok` or
+                        `✗` and the exit code, and the command. `user`
+                        commands are the ones your keys and commands
+                        started; the rest (refreshes, the watcher,
+                        completion) are `background` and show with [all]
+                        or !. `log.level` sets which are shown by default,
+                        `log.size` (100) how many are kept. In the window:
+                        `a` switches, `<CR>` opens the command's output
+                        (when still kept), `q` closes.
 
                                                             *:FugitiveRestore*
 :FugitiveRestore [path] Pick a discarded change from the journal and
@@ -274,7 +292,7 @@ and `:w` in it stage exactly the lines you chose.
                         --cached, or the second revision. Jumps to the
                         first entry unless ! is given.
 :Git difftool -y [args] Open each changed file in a new tab with
-                        |:Gdiffsplit!| against the old side.
+                        |:Gdiffsplit|! against the old side.
 :Git[!] mergetool [paths]
                         The conflicted files, each at its first conflict
                         marker. With -y each opens in a tab with the
@@ -662,7 +680,9 @@ Expansions, as in |cmdline-special|:
   !:Makefile !^   a file in that commit, its parent
 
 Commit buffers show the raw commit followed by its diff, with one fold per
-file. Maps in commit, tree and pager buffers:
+file.
+                                                      *fugitive-object-maps*
+Maps in commit, tree and pager buffers:
   <CR> o gO O Open the object under the cursor (parent, tree, the file on a
               diff header, the right version and line on a diff line, a
               commit id at the start of a line).
@@ -796,7 +816,8 @@ Errors always notify.
 Notifications carry `title = "Fugitive"`. They are cut after
 `notify.max_lines` lines and end with "… (+N lines) — :FugitiveOutput".
 Errors always show the error line and the exit code. The complete output
-of the last `output.ring_size` commands is kept for |:FugitiveOutput|.
+of the latest command (`output.ring_size`), and the stderr of the latest
+`output.errors` that wrote any, is kept for |:FugitiveOutput|.
 
 ==============================================================================
 9. THE EDITOR SERVICE                                          *fugitive-editor*
