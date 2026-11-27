@@ -50,7 +50,7 @@ local function identity(i)
   local path = i.entry and i.entry.path
   return {
     kind = i.kind,
-    section = i.section,
+    section = i.section_id,
     path = path,
     hunk_index = i.hunk_index,
     line_index = i.line_index,
@@ -68,7 +68,7 @@ local function find_identity(info, id)
   local fallback
   for lnum, i in ipairs(info) do
     local path = i.entry and i.entry.path
-    if i.section == id.section and path == id.path then
+    if i.section_id == id.section and path == id.path then
       if
         i.kind == id.kind
         and i.hunk_index == id.hunk_index

@@ -12,7 +12,10 @@ local M = {}
 
 ---@class fugitive.LineInfo
 ---@field kind "header"|"section"|"file"|"dir"|"diffmeta"|"hunk"|"diffline"|"commit"|"rebase"|"stash"|"blank"|"discarded"
----@field section? string Untracked/Unstaged/Staged/Unmerged/Unpushed/Unpulled/Rebasing/Sequencing/Stash
+---@field section? string the section's kind: Untracked/Unstaged/Staged/Unmerged/Unpushed/Unpulled/Rebasing/Sequencing/Stash
+---@field section_id? string the section itself: its kind, or for commit
+---sections one of "Unpushed:push", "Unpushed:upstream", "Unpushed:any",
+---"Unpulled:push", "Unpulled:upstream"
 ---@field key? string header key
 ---@field value? string header value
 ---@field entry? fugitive.StatusEntry
@@ -78,7 +81,11 @@ function M.render(snap, open, opts)
   local letters = opts.letters
   local full = opts.paths == "full"
   local lines, info = {}, {}
+  local current -- id of the section being rendered
   local function add(text, i)
+    if i.section then
+      i.section_id = i.section_id or current
+    end
     table.insert(lines, text)
     table.insert(info, i)
   end
@@ -103,8 +110,9 @@ function M.render(snap, open, opts)
     )
   end
 
-  local function section(name, label, n, suffix)
+  local function section(name, label, n, suffix, id)
     add("", { kind = "blank" })
+    current = id or name
     add(
       string.format("%s (%d%s)", label, n, suffix or ""),
       { kind = "section", section = name, label = label }
@@ -325,7 +333,7 @@ function M.render(snap, open, opts)
   end
 
   for _, log in ipairs(snap.logs) do
-    section(log.key, log.label, #log.entries, log.overflow and "+" or "")
+    section(log.key, log.label, #log.entries, log.overflow and "+" or "", log.id)
     for _, e in ipairs(log.entries) do
       local line = {
         kind = "commit",
@@ -333,7 +341,7 @@ function M.render(snap, open, opts)
         commit = e.commit,
         subject = e.subject,
         label = log.label,
-        fold = fold.node("commit", log.key, e.commit),
+        fold = fold.node("commit", log.id, e.commit),
       }
       add(e.commit .. " " .. e.subject, line)
       if fold.is_open(open, line.fold) then

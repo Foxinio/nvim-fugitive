@@ -538,6 +538,9 @@ Navigation maps ~
   [] ][       Previous or next section end.
   gu gU gs    Jump to Untracked, Unstaged or Staged.
   gp gP gr    Jump to Unpushed, Unpulled or Rebasing.
+              There can be two Unpushed (or Unpulled) sections, against
+              the push remote and the upstream: from inside one, gp (gP)
+              goes on to the next.
   .           Start a command line with the path under the cursor.
   gq          Close the summary.
   g?  <F1>    Show these maps.

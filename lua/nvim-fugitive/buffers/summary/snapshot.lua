@@ -15,7 +15,8 @@ local M = {}
 
 ---@class fugitive.LogSection
 ---@field label string full heading text without the count
----@field key "Unpushed"|"Unpulled"
+---@field key "Unpushed"|"Unpulled" the section's kind
+---@field id string this section ("Unpushed:push", "Unpushed:upstream", "Unpushed:any", "Unpulled:push", "Unpulled:upstream")
 ---@field entries fugitive.LogEntry[]
 ---@field overflow boolean
 
@@ -541,11 +542,13 @@ function M.gather(repo, run, expanded)
     end
     return query_log(run, old .. ".." .. new, limit)
   end
-  local function add(key, label, log)
+  ---`key` is the section's kind (Unpushed, Unpulled), `id` names this one
+  ---section: there can be two or three of a kind, against different refs.
+  local function add(key, id, label, log)
     if log and #log.entries > 0 then
       table.insert(
         snap.logs,
-        { key = key, label = label, entries = log.entries, overflow = log.overflow }
+        { key = key, id = id, label = label, entries = log.entries, overflow = log.overflow }
       )
     end
   end
@@ -562,8 +565,8 @@ function M.gather(repo, run, expanded)
   if unpushed_push.error == true then
     unpushed_push = unpushed_pull
   end
-  add("Unpushed", "Unpushed to " .. push_short, unpushed_push)
-  add("Unpushed", "Unpushed to " .. pull_short, unpushed_pull)
+  add("Unpushed", "Unpushed:push", "Unpushed to " .. push_short, unpushed_push)
+  add("Unpushed", "Unpushed:upstream", "Unpushed to " .. pull_short, unpushed_pull)
   if
     unpushed_push.error
     and unpushed_pull.error
@@ -571,17 +574,27 @@ function M.gather(repo, run, expanded)
     and (push_remote .. fetch_remote) ~= ""
     and head_rev ~= ""
   then
-    add("Unpushed", "Unpushed to *", query_log(run, { head_rev, "--not", "--remotes" }, limit))
+    add(
+      "Unpushed",
+      "Unpushed:any",
+      "Unpushed to *",
+      query_log(run, { head_rev, "--not", "--remotes" }, limit)
+    )
   end
-  add("Unpulled", "Unpulled from " .. push_short, range_log(head_rev, unique_push))
+  add("Unpulled", "Unpulled:push", "Unpulled from " .. push_short, range_log(head_rev, unique_push))
   if pull_ref ~= "" and st.behind ~= 0 then
-    add("Unpulled", "Unpulled from " .. pull_short, range_log(head_rev, pull_ref))
+    add(
+      "Unpulled",
+      "Unpulled:upstream",
+      "Unpulled from " .. pull_short,
+      range_log(head_rev, pull_ref)
+    )
   end
 
   -- commits expanded with `=`: their own diff
   for _, log in ipairs(snap.logs) do
     for _, e in ipairs(log.entries) do
-      if expanded and expanded[log.key .. "\0" .. e.commit] and not snap.commit_diffs[e.commit] then
+      if expanded and expanded[log.id .. "\0" .. e.commit] and not snap.commit_diffs[e.commit] then
         local diff = run({ "show", "--format=", "--no-color", "--no-ext-diff", e.commit })
         snap.commit_diffs[e.commit] = diff_mod.parse(diff.stdout or "")
       end

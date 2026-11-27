@@ -187,6 +187,44 @@ function M.stage_jump(buf, sections)
     return
   end
   local count = vim.v.count
+  if count == 0 then
+    -- the first item of each section of these kinds, in order; from inside
+    -- one, go on to the next (there can be two Unpushed sections)
+    local firsts, seen = {}, {}
+    local wanted = {}
+    for _, name in ipairs(sections) do
+      wanted[name] = true
+    end
+    for l, i in ipairs(st.info) do
+      if wanted[i.section] and i.kind ~= "section" and not seen[i.section_id] then
+        seen[i.section_id] = true
+        table.insert(firsts, { id = i.section_id, lnum = l, kind = i.section })
+      end
+    end
+    -- the order the caller gave: sections of the first kind before the next
+    table.sort(firsts, function(a, b)
+      local ra, rb
+      for k, name in ipairs(sections) do
+        ra = ra or (name == a.kind and k)
+        rb = rb or (name == b.kind and k)
+      end
+      if ra ~= rb then
+        return ra < rb
+      end
+      return a.lnum < b.lnum
+    end)
+    local here = st.info[vim.fn.line(".")]
+    local target = firsts[1]
+    for k, f in ipairs(firsts) do
+      if here and here.section_id == f.id and firsts[k + 1] and firsts[k + 1].kind == f.kind then
+        target = firsts[k + 1]
+      end
+    end
+    if target then
+      vim.api.nvim_win_set_cursor(0, { target.lnum, 0 })
+    end
+    return
+  end
   for _, name in ipairs(sections) do
     local n = 0
     for l, i in ipairs(st.info) do
