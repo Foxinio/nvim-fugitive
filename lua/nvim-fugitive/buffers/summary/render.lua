@@ -39,6 +39,11 @@ local M = {}
 ---@field name_col? integer file or directory: byte column where its name starts
 ---@field name_end? integer file or directory: byte column after its name
 ---@field marker_col? integer directory: byte column of its ▾/▸ marker
+---@field item? fugitive.LineInfo the item this line is part of (a head line;
+---itself for a head)
+---@field first? integer item: its own line
+---@field last? integer item: the last line under it (its diff, files)
+---@field section_item? fugitive.LineInfo item: the heading of its section
 
 ---@class fugitive.RenderOpts
 ---@field tree? boolean files as a directory tree
@@ -72,6 +77,57 @@ function M.submodule_note(e)
   return table.concat(parts, ", ")
 end
 
+---Lines that are an item of their own: what the user acts on. A diff's
+---meta lines belong to their file (commit, stash), its lines to their hunk.
+local heads = {
+  header = true,
+  discarded = true,
+  section = true,
+  dir = true,
+  file = true,
+  commit = true,
+  rebase = true,
+  stash = true,
+  submodule = true,
+  hunk = true,
+}
+
+---Give every line its item (`item`), and every item its lines (`first`,
+---`last`: its own line through the last line under it) and its section
+---(`section_item`). Items are the head lines themselves; a file, dir,
+---commit or stash links to what encloses it through `parent`.
+---@param info fugitive.LineInfo[]
+function M.link_items(info)
+  local sec, hunk
+  for l, i in ipairs(info) do
+    if i.kind == "section" then
+      sec = i
+    elseif i.kind == "blank" then
+      sec = nil
+    end
+    if heads[i.kind] then
+      i.item, i.first, i.last = i, l, l
+      if i.kind ~= "section" then
+        i.section_item = sec
+      end
+      if i.kind == "hunk" then
+        hunk = i
+      end
+    elseif i.kind == "diffmeta" then
+      i.item = i.parent
+    elseif i.kind == "diffline" then
+      local own = hunk and hunk.parent == i.parent and hunk.hunk_index == i.hunk_index
+      i.item = own and hunk or i.parent
+    end
+    -- this line is under its item and everything enclosing it
+    local h = i.item
+    while h do
+      h.last = l
+      h = h.parent or (h ~= h.section_item and h.section_item) or nil
+    end
+  end
+end
+
 ---@param snap fugitive.Snapshot
 ---@param open fugitive.FoldState what is open (buffers/summary/fold.lua)
 ---@param opts? fugitive.RenderOpts
@@ -92,6 +148,7 @@ function M.render(snap, open, opts)
 
   if snap.error then
     add("Error: " .. snap.error, { kind = "header", key = "Error", value = snap.error })
+    M.link_items(info)
     return lines, info
   end
 
@@ -369,6 +426,7 @@ function M.render(snap, open, opts)
     end
   end
 
+  M.link_items(info)
   return lines, info
 end
 

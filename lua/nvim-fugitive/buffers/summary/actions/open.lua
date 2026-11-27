@@ -233,8 +233,7 @@ end
 ---@param buf integer
 ---@return string[]
 function M.cursor_submodule(buf)
-  local st = state(buf)
-  local i = st.info[vim.fn.line(".")]
+  local i = require("nvim-fugitive.buffers.summary.items").at(state(buf), vim.fn.line("."))
   if i and i.kind == "submodule" and i.path then
     return { "--", i.path }
   end
@@ -247,8 +246,7 @@ end
 ---The commit under the cursor, or nil.
 ---@return string?
 function M.cursor_commit(buf)
-  local st = state(buf)
-  local i = st and st.info[vim.fn.line(".")]
+  local i = require("nvim-fugitive.buffers.summary.items").at(state(buf), vim.fn.line("."))
   if i and (i.kind == "commit" or i.kind == "rebase") then
     return i.commit
   end
