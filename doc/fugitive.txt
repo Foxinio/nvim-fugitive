@@ -133,8 +133,13 @@ maps). Maps inside fugitive's own buffers are always set.
                                                                 *:Git* *:G*
 :Git                    Open the summary buffer of the current repository,
                         or focus it if it is already visible in this tab.
-                        See |fugitive-summary|. Command modifiers such as
-                        |:vertical| or |:tab| control the window.
+                        See |fugitive-summary|. Like upstream, the split
+                        spans the whole tab: across the top (the bottom
+                        with 'splitbelow'), or with `summary.window =
+                        "vsplit"` down the left (the right with
+                        'splitright'), not inside the window you are in.
+                        Command modifiers such as |:vertical|, |:botright|
+                        or |:tab| control the window.
 
 :Git {args}             Run an arbitrary git command. Where its output goes
                         depends on the kind of command, see

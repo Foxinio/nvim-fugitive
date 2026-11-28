@@ -613,6 +613,25 @@ function M.snap_cursor(buf)
   vim.w[win].fugitive_summary_line = target
 end
 
+---Window modifiers for a split that spans the tab, like upstream's
+---s:Mods(mods, 'Edge'): without a position of their own, the split goes
+---across the top (`topleft`) or, with 'splitbelow', the bottom (`botright`);
+---a vertical one to the left, or with 'splitright' the right.
+---@param mods string
+---@return string
+function M.edge(mods)
+  local positions =
+    { "aboveleft", "belowright", "leftabove", "rightbelow", "topleft", "botright", "tab" }
+  for _, p in ipairs(positions) do
+    if mods:match("%f[%w]%d*" .. p .. "%f[%W]") then
+      return mods
+    end
+  end
+  local vertical = mods:match("%f[%w]vert%a*%f[%W]") ~= nil
+  local after = vertical and vim.o.splitright or (not vertical and vim.o.splitbelow)
+  return vim.trim((after and "botright " or "topleft ") .. mods)
+end
+
 ---Open (or focus) the summary of `repo`.
 ---@param repo fugitive.Repo
 ---@param opts? {mods?: string}
@@ -639,15 +658,15 @@ function M.open(repo, opts)
     and not vim.bo[cur].modified
     and vim.api.nvim_buf_line_count(cur) <= 1
   if opts.mods and opts.mods:match("%S") then
-    cmd = opts.mods .. " split"
+    cmd = M.edge(opts.mods) .. " split"
   elseif reuse or style == "current" then
     cmd = "edit"
   elseif style == "vsplit" then
-    cmd = "vertical split"
+    cmd = M.edge("vertical") .. " split"
   elseif style == "tab" then
     cmd = "tab split"
   else
-    cmd = "split"
+    cmd = M.edge("") .. " split"
   end
   local before = existing > 0 and M._state[existing] and M._state[existing].tick or -1
   vim.cmd(cmd .. " " .. vim.fn.fnameescape(name))
