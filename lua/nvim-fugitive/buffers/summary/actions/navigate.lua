@@ -71,15 +71,9 @@ end
 
 local function section_ends(st)
   local ends = {}
-  for l, i in ipairs(st.info) do
-    local nxt = st.info[l + 1]
-    if
-      i.kind ~= "blank"
-      and i.kind ~= "header"
-      and i.kind ~= "discarded"
-      and (not nxt or nxt.kind == "blank")
-    then
-      table.insert(ends, l)
+  for _, i in ipairs(st.info) do
+    if i.kind == "section" then
+      table.insert(ends, i.last)
     end
   end
   return ends

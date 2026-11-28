@@ -3,6 +3,7 @@
 local diff_mod = require("nvim-fugitive.git.diff")
 local notify = require("nvim-fugitive.ui.notify")
 local fold = require("nvim-fugitive.buffers.summary.fold")
+local summary_items = require("nvim-fugitive.buffers.summary.items")
 local util = require("nvim-fugitive.buffers.summary.actions.util")
 local summary = util.summary
 local state = util.state
@@ -33,6 +34,45 @@ local function section_entries(st, section)
   })[section] or {}
 end
 
+---The selection one item stands for, by its kind. `line` is the line the
+---cursor is on (the record's `info`, for moving the cursor afterwards).
+local selection_of = {
+  section = function(st, it, line)
+    local rec = { type = "section", section = it.section, info = line }
+    rec.entries = section_entries(st, it.section)
+    return { rec }
+  end,
+  file = function(_, it, line)
+    return { { type = "file", section = it.section, entry = it.entry, info = line } }
+  end,
+  -- a directory: each of its files, shown or folded
+  dir = function(_, it)
+    return vim.tbl_map(function(e)
+      return { type = "file", section = it.section, entry = e, info = it }
+    end, it.entries)
+  end,
+  hunk = function(_, it, line)
+    local rec =
+      { type = "patch", section = it.section, entry = it.entry, file = it.file, info = line }
+    rec.hunks = { { hunk = it.file.hunks[it.hunk_index] } }
+    return { rec }
+  end,
+  commit = function(_, it, line)
+    return { { type = "commit", section = it.section, info = line } }
+  end,
+  stash = function(_, it, line)
+    return { { type = "stash", section = it.section, info = line } }
+  end,
+  header = function(_, _, line)
+    return { { type = "header", info = line } }
+  end,
+  discarded = function(_, _, line)
+    return { { type = "discarded", info = line } }
+  end,
+}
+selection_of.rebase = selection_of.commit
+selection_of.diffline = selection_of.hunk
+
 ---Items addressed by lines l1..l2 (normal mode: l1 == l2).
 ---@param buf integer
 ---@param l1 integer
@@ -45,47 +85,17 @@ function M.selection(buf, l1, l2)
   end
   local items = {}
   if l1 == l2 then
-    local i = st.info[l1]
-    if not i then
+    local line = st.info[l1]
+    local it = line and line.item
+    if not it then
       return {}
     end
-    if i.kind == "section" then
-      return {
-        {
-          type = "section",
-          section = i.section,
-          entries = section_entries(st, i.section),
-          info = i,
-        },
-      }
-    elseif i.kind == "file" or i.kind == "diffmeta" then
-      return { { type = "file", section = i.section, entry = i.entry, info = i } }
-    elseif i.kind == "dir" then
-      -- a directory (tree view): each of its files, shown or folded
-      return vim.tbl_map(function(e)
-        return { type = "file", section = i.section, entry = e, info = i }
-      end, i.entries)
-    elseif i.kind == "hunk" or i.kind == "diffline" then
-      return {
-        {
-          type = "patch",
-          section = i.section,
-          entry = i.entry,
-          file = i.file,
-          hunks = { { hunk = i.file.hunks[i.hunk_index] } },
-          info = i,
-        },
-      }
-    elseif i.kind == "commit" or i.kind == "rebase" then
-      return { { type = "commit", section = i.section, info = i } }
-    elseif i.kind == "stash" then
-      return { { type = "stash", section = i.section, info = i } }
-    elseif i.kind == "header" then
-      return { { type = "header", info = i } }
-    elseif i.kind == "discarded" then
-      return { { type = "discarded", info = i } }
+    -- a diff line with no hunk heading of its own still stages as a patch
+    if line.kind == "diffline" and it.kind ~= "hunk" then
+      it = line
     end
-    return {}
+    local one = selection_of[it.kind]
+    return one and one(st, it, line) or {}
   end
   -- a range: whole files if any file line is included, else selected lines
   local files, seen = {}, {}
@@ -475,17 +485,12 @@ end
 -- ---------------------------------------------------------------------------
 -- Inline diffs and folds
 
-local diff_kinds = { diffmeta = true, hunk = true, diffline = true }
-
----The foldable line a line belongs to: itself (a directory, file, commit or
----stash), or, on an inline diff, the file (commit, stash) the diff is of.
+---The foldable item a line belongs to: itself (a directory, file, commit
+---or stash), or, on an inline diff, the file (commit, stash) the diff is of.
 ---@param i fugitive.LineInfo?
 ---@return fugitive.LineInfo?
 local function node_of(i)
-  if i and diff_kinds[i.kind] then
-    return i.parent
-  end
-  return i and i.fold and i or nil
+  return summary_items.foldable(i and i.item)
 end
 
 ---Whether a foldable line shows what is under it.

@@ -499,35 +499,23 @@ end
 function M.foldexpr(lnum)
   local st = M._state[vim.api.nvim_get_current_buf()]
   local i = st and st.info[lnum]
-  if not i then
+  local it = i and i.item
+  if not it or it.kind == "header" or it.kind == "discarded" then
     return 0
   end
-  if i.kind == "section" then
+  if it.kind == "section" then
     return ">1"
-  elseif i.kind == "blank" or i.kind == "header" or i.kind == "discarded" then
-    return 0
   end
-  local level = 1 + (i.depth or 0)
-  if i.kind == "dir" then
-    return i.collapsed and level or (">" .. (level + 1))
-  elseif
-    i.kind == "file"
-    or i.kind == "stash"
-    or (i.kind == "commit" and i.section ~= "Rebasing")
-  then
-    local nxt = st.info[lnum + 1]
-    if nxt and (nxt.kind == "hunk" or nxt.kind == "diffmeta" or nxt.kind == "diffline") then
-      return ">" .. (level + 1)
-    end
-    -- the files of an expanded untracked directory nest under it
-    if nxt and nxt.kind == "file" and (nxt.depth or 0) > (i.depth or 0) then
-      return ">" .. (level + 1)
-    end
-    return level
-  elseif i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta" then
-    return level + 1
+  -- a hunk doesn't fold on its own: its lines are its file's (commit's)
+  if it.kind == "hunk" and it.parent then
+    it = it.parent --[[@as fugitive.LineInfo]]
   end
-  return 1
+  local items = require("nvim-fugitive.buffers.summary.items")
+  local depth = items.depth(it)
+  if lnum ~= it.first then
+    return depth
+  end
+  return it.last > it.first and (">" .. depth) or (depth - 1)
 end
 
 function M.setup_buffer(buf, repo)
