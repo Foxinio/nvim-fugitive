@@ -27,6 +27,7 @@ function M.run(repo, args, opts)
   local editor_id = sysopts.env.FUGITIVE_EDITOR_ID
   local entry = require("nvim-fugitive.ui.output").start(cmd, sysopts.cwd)
   entry.stdout = "(interactive terminal session)"
+  local logged = require("nvim-fugitive.log").start(cmd, sysopts.cwd)
   local job = vim.fn.jobstart(cmd, {
     term = true,
     cwd = sysopts.cwd,
@@ -34,6 +35,7 @@ function M.run(repo, args, opts)
     clear_env = sysopts.clear_env,
     on_exit = function(_, code)
       vim.schedule(function()
+        require("nvim-fugitive.log").finish(logged, code)
         entry.code = code
         entry.running = false
         if editor_id then

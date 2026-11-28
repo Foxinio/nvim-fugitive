@@ -37,3 +37,35 @@ describe("README", function()
     assert.truthy(n >= 7, "expected the recipes and the options block, found " .. n)
   end)
 end)
+
+describe("help links", function()
+  local function read(path)
+    local f = assert(io.open(path))
+    local s = f:read("*a")
+    f:close()
+    return s
+  end
+  local doc = read("doc/fugitive.txt")
+  local tags = {}
+  for t in doc:gmatch("%*([^%*%s]+)%*") do
+    tags[t] = true
+  end
+
+  it("point at tags the manual defines", function()
+    for ref in doc:gmatch("|([^|%s]+)|") do
+      if ref:match("^fugitive") or ref:match("^:G") or ref:match("^:Fugitive") then
+        assert.truthy(tags[ref], "|" .. ref .. "| is not a tag")
+      end
+    end
+    local files = vim.fn.globpath("lua", "**/*.lua", false, true)
+    table.insert(files, "README.md")
+    for _, f in ipairs(files) do
+      for ref in read(f):gmatch(":h[elp]* (fugitive%-[%w%-]+)") do
+        assert.truthy(tags[ref], f .. ": :help " .. ref .. " is not a tag")
+      end
+    end
+    for _, buftype in ipairs({ "summary", "blame", "object" }) do
+      assert.truthy(tags["fugitive-" .. buftype .. "-maps"], buftype .. " help")
+    end
+  end)
+end)

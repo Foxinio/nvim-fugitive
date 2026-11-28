@@ -237,12 +237,14 @@ end
 ---@return fugitive.Job
 function M.run(args, opts, cb)
   local cmd, sysopts, editor_id = M.build(args, opts)
+  local logged = require("nvim-fugitive.log").start(cmd, sysopts.cwd)
   ---@type fugitive.Job
   ---@diagnostic disable-next-line: missing-fields
   local job = { cmd = cmd, done = false, editor_id = editor_id } ---@type fugitive.Job
   local ok, handle = pcall(runner, cmd, sysopts, function(res)
     local r = normalize(res, cmd)
     vim.schedule(function()
+      require("nvim-fugitive.log").finish(logged, r.code)
       job.done = true
       job.result = r
       if editor_id then
@@ -255,6 +257,7 @@ function M.run(args, opts, cb)
   end)
   if not ok then
     local r = { code = -1, signal = 0, stdout = "", stderr = tostring(handle), cmd = cmd }
+    require("nvim-fugitive.log").finish(logged, -1)
     job.done = true
     job.result = r
     if cb then
@@ -305,11 +308,16 @@ end
 ---@return fugitive.ExecResult
 function M.sync(args, opts)
   local cmd, sysopts = M.build(args, opts)
+  local log = require("nvim-fugitive.log")
+  local logged = log.start(cmd, sysopts.cwd)
   local ok, handle = pcall(runner, cmd, sysopts, nil)
   if not ok then
+    log.finish(logged, -1)
     return { code = -1, signal = 0, stdout = "", stderr = tostring(handle), cmd = cmd }
   end
-  return normalize(handle:wait(), cmd)
+  local r = normalize(handle:wait(), cmd)
+  log.finish(logged, r.code)
+  return r
 end
 
 ---Synchronous helper: stdout split into lines (trailing newline dropped), or

@@ -102,6 +102,7 @@ function M.run(repo, args, opts)
   local exec = require("nvim-fugitive.git.exec")
   local cmd, sysopts, editor_id = exec.build(args, { repo = repo, editor = true, mods = opts.mods })
   local entry = output.start(cmd, sysopts.cwd)
+  local logged = require("nvim-fugitive.log").start(cmd, sysopts.cwd)
   local task = overseer.new_task({
     name = label(args),
     cmd = cmd,
@@ -132,6 +133,7 @@ function M.run(repo, args, opts)
         cmd = cmd,
       }
       output.finish(entry, res)
+      require("nvim-fugitive.log").finish(logged, res.code)
       if status == "CANCELED" then
         notify.warn(label(args) .. ": cancelled")
       elseif ok then

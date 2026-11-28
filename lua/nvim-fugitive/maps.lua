@@ -22,7 +22,10 @@ function M.apply(buf, buftype, actions)
         local modes = type(action) == "function" and { n = action } or action --[[@as table]]
         for mode, fn in pairs(modes) do
           if mode == "n" or mode == "x" then
-            vim.keymap.set(mode, lhs, fn, {
+            vim.keymap.set(mode, lhs, function()
+              -- git commands it starts are the user's (:FugitiveLog)
+              require("nvim-fugitive.log").user(fn)
+            end, {
               buffer = buf,
               nowait = true,
               silent = true,

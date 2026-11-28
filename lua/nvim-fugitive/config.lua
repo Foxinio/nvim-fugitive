@@ -12,7 +12,8 @@ local M = {}
 ---@field maps table<string, table<string, string|false>> per-buffer-type `lhs -> action` tables
 ---@field routes table<string, fugitive.Route> per-subcommand route overrides
 ---@field notify {max_lines: integer, significant: string[]}
----@field output {ring_size: integer}
+---@field output {ring_size: integer, errors: integer}
+---@field log {size: integer, level: "user"|"all"}
 ---@field float {width: number, height: number, border: string|string[], style: string, title: boolean, title_pos: string, zindex: integer, winblend: integer}
 ---@field editor {window: "split"|"vsplit"|"tab"|"current"}
 ---@field discard {journal_size: integer}
@@ -250,7 +251,12 @@ M.defaults = {
       "restore-discard",
     },
   },
-  output = { ring_size = 20 },
+  -- whole output of the latest ring_size commands (0: 1); the stderr of the
+  -- latest `errors` commands that wrote any
+  output = { ring_size = 1, errors = 20 },
+  -- :FugitiveLog: the latest `size` git commands; "user": only those your
+  -- keys and commands started, "all": the background ones too
+  log = { size = 100, level = "user" },
   float = {
     -- fractions of the editor (<= 1) or absolute cells (> 1)
     width = 0.9,
@@ -510,6 +516,7 @@ local function validate(opts)
     routes = "table",
     notify = "table",
     output = "table",
+    log = "table",
     float = "table",
     editor = "table",
     discard = "table",
@@ -610,6 +617,17 @@ local function validate(opts)
     end
   end
   vim.validate("opts.summary.hints", summary.hints, "boolean", true)
+  for _, key in ipairs({ "ring_size", "errors" }) do
+    local n = opts.output and opts.output[key]
+    if n ~= nil and (type(n) ~= "number" or n < 0 or n % 1 ~= 0) then
+      error(string.format("fugitive: output.%s must be a whole number >= 0", key))
+    end
+  end
+  local log = opts.log or {}
+  if log.size ~= nil and (type(log.size) ~= "number" or log.size < 1) then
+    error("fugitive: log.size must be a number >= 1")
+  end
+  one_of("log.level", log.level, { "user", "all" })
   local recheck = opts.watch and opts.watch.recheck
   if recheck ~= nil and (type(recheck) ~= "number" or recheck < 0) then
     error(

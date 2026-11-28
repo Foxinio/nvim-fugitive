@@ -9,8 +9,22 @@ if vim.fn.has("nvim-0.11") == 0 then
   return
 end
 
+-- the help tags, when the plugin manager did not build them (a plain
+-- packpath install): without them :help fugitive-… finds nothing
+do
+  local doc = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h") .. "/doc"
+  local txt, tags = vim.uv.fs_stat(doc .. "/fugitive.txt"), vim.uv.fs_stat(doc .. "/tags")
+  if txt and (not tags or tags.mtime.sec < txt.mtime.sec) then
+    pcall(vim.cmd.helptags, vim.fn.fnameescape(doc))
+  end
+end
+
+---A user command; the git commands it starts count as the user's
+---(:FugitiveLog).
 local function cmd(name, fn, opts)
-  vim.api.nvim_create_user_command(name, fn, opts)
+  vim.api.nvim_create_user_command(name, function(c)
+    return require("nvim-fugitive.log").user(fn, c)
+  end, opts)
 end
 
 local function complete(kind)
@@ -50,6 +64,18 @@ end, {
 cmd("FugitiveOutput", function(c)
   require("nvim-fugitive.ui.output").show(tonumber(c.args), c.mods)
 end, { nargs = "?", desc = "Show the full output of a recent git command" })
+
+cmd("FugitiveLog", function(c)
+  local level = (c.bang or c.args == "all") and "all" or (c.args == "user" and "user") or nil
+  require("nvim-fugitive.log").show(level, c.mods)
+end, {
+  nargs = "?",
+  bang = true,
+  complete = function()
+    return { "all", "user" }
+  end,
+  desc = "Show the git commands fugitive ran",
+})
 
 cmd("FugitiveRestore", function(c)
   require("nvim-fugitive.discard").pick(c.args ~= "" and c.args or nil)
