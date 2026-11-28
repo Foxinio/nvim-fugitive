@@ -129,3 +129,78 @@ describe("summary render links", function()
     assert.equals(dline, one.parent)
   end)
 end)
+
+describe("summary items", function()
+  local items = require("nvim-fugitive.buffers.summary.items")
+  local function entry(path, status)
+    return { path = path, status = status or "M", xy = " M", sub = "N...", submodule = false }
+  end
+  local function rendered()
+    local s = {
+      headers = { { key = "Head", value = "main" } },
+      status = {
+        untracked = {},
+        unstaged = { entry("a/x"), entry("a/y") },
+        staged = { entry("b") },
+        unmerged = {},
+      },
+      diffs = { Unstaged = {}, Staged = {}, Untracked = {}, Unmerged = {} },
+      logs = {},
+      stashes = {},
+    }
+    s.diffs.Unstaged["a/x"] = {
+      header = { "diff --git a/a/x b/a/x" },
+      hunks = {
+        { header = "@@ -1 +1 @@", lines = { "-1", "+2" } },
+        { header = "@@ -5 +5 @@", lines = { "-5", "+6" } },
+      },
+    }
+    local open = fold.new()
+    fold.set(open, fold.node("file", "Unstaged", "a/x"), true)
+    local lines, info = render.render(s, open, { tree = true, compact = true, paths = "full" })
+    return { info = info }, lines
+  end
+  local function line_of(lines, text)
+    for l, t in ipairs(lines) do
+      if t == text then
+        return l
+      end
+    end
+    error("no line " .. text)
+  end
+
+  it("gives every line its item, and every item its lines", function()
+    local st, lines = rendered()
+    local head = items.at(st, 1)
+    assert.equals("header", head.kind)
+    local sec = items.at(st, line_of(lines, "Unstaged (2)"))
+    assert.equals("section", sec.kind)
+    local dir = items.at(st, line_of(lines, "▾ a/"))
+    assert.equals(dir, items.at(st, dir.first))
+    local x = items.at(st, line_of(lines, "  a/x"))
+    local hunk2 = items.at(st, line_of(lines, "@@ -5 +5 @@"))
+    assert.equals("hunk", hunk2.kind)
+    assert.equals(hunk2, items.at(st, line_of(lines, "+6")))
+    assert.equals(x, hunk2.parent)
+    assert.equals(x, items.foldable(hunk2))
+    -- the file covers its diff, the dir its files, the section all of it
+    assert.equals(line_of(lines, "+6"), x.last)
+    assert.equals(line_of(lines, "  a/y"), dir.last)
+    assert.equals(dir.last, sec.last)
+    assert.equals(sec, x.section_item)
+    assert.same(
+      { 1, 2, 3, 4 },
+      { items.depth(sec), items.depth(dir), items.depth(x), items.depth(hunk2) }
+    )
+    assert.is_nil(items.at(st, line_of(lines, "Unstaged (2)") - 1)) -- the blank line
+  end)
+
+  it("lists the distinct items of a range, across sections", function()
+    local st, lines = rendered()
+    local got = items.in_range(st, line_of(lines, "-1"), line_of(lines, "  b"))
+    local kinds = vim.tbl_map(function(i)
+      return i.kind
+    end, got)
+    assert.same({ "hunk", "hunk", "file", "section", "file" }, kinds)
+  end)
+end)

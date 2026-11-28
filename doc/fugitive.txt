@@ -544,6 +544,7 @@ Navigation maps ~
               below the summary when there is none), so the summary stays.
               On a diff line, open the matching version at that line. On a
               submodule, open the submodule's own summary.
+  <2-LeftMouse>  The same as <CR>.
   o  gO  O    Open in a split below, a vertical split or a tab.
   p           Open in the preview window.
   f           Open in the big float (|fugitive-float|); it closes with :q
@@ -584,9 +585,12 @@ Commit maps ~
   cn   commit --edit --squash= (command line)
   crc  revert the commit under the cursor
   crn  revert --no-commit
-  c<Space> cr<Space> cm<Space> cz<Space> r<Space>
+  c<Space> cv<Space> cr<Space> cm<Space> cz<Space> r<Space>
        put the matching :Git command on the command line (co<Space> and
        cb<Space> too, with the upstream preset)
+  c<CR> cv<CR> cr<CR> cm<CR> cz<CR> r<CR>
+       run the matching :Git command as it is (co<CR> and cb<CR> too,
+       with the upstream preset)
 
 Submodule maps ~
 Submodule entries note their state after the line ("new commits, modified

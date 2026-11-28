@@ -293,3 +293,41 @@ describe("config prefix conflicts", function()
     assert.truthy(seen and seen:match('"co" hides "co<CR>"'))
   end)
 end)
+
+describe("summary action registry", function()
+  local config = require("nvim-fugitive.config")
+  local registry = require("nvim-fugitive.buffers.summary.actions.registry")
+
+  it("has every action a summary key names, in both presets", function()
+    for _, preset in ipairs({ "default", "upstream" }) do
+      for lhs, action in pairs(config.presets[preset].summary) do
+        if type(action) == "string" and not action:match("^cfile_") then
+          assert.truthy(registry.get(action), string.format("%s: %s -> %s", preset, lhs, action))
+        end
+      end
+    end
+  end)
+
+  it("describes every action, and does something for each", function()
+    local seen = {}
+    for _, e in ipairs(registry.list) do
+      assert.is_nil(seen[e.name], "twice: " .. e.name)
+      seen[e.name] = true
+      assert.truthy(type(e.desc) == "string" and e.desc ~= "", "no desc: " .. e.name)
+      assert.truthy(e.run or e.on, "does nothing: " .. e.name)
+    end
+  end)
+
+  it("has every default key in the help file", function()
+    local f = assert(io.open("doc/fugitive.txt"))
+    local doc = f:read("*a")
+    f:close()
+    for _, preset in ipairs({ "default", "upstream" }) do
+      for lhs, action in pairs(config.presets[preset].summary) do
+        if type(action) == "string" then
+          assert.truthy(doc:find(lhs, 1, true), string.format("%s is not in doc/fugitive.txt", lhs))
+        end
+      end
+    end
+  end)
+end)

@@ -200,24 +200,6 @@ function M.status_group(i)
   return M.status_groups[i.entry.status]
 end
 
----The hints of the general keys after each section heading: { action,
----word, count? }; the per-section keys follow them (actions/sections.lua).
-local hints = {
-  Untracked = { { "stage", "stage" }, { "ignore", "ignore" }, { "discard", "delete" } },
-  Unstaged = { { "stage", "stage" }, { "diff_vertical", "diff" }, { "discard", "discard" } },
-  Staged = { { "unstage", "unstage" }, { "commit", "commit" }, { "commit_amend", "amend" } },
-  Unmerged = { { "diff_vertical", "3-way diff" }, { "stage", "resolved" } },
-  Rebasing = {
-    { "rebase_continue", "continue" },
-    { "rebase_skip", "skip" },
-    { "rebase_abort", "abort" },
-  },
-  Bisecting = { { "bisect_good", "good" }, { "bisect_bad", "bad" }, { "bisect_reset", "reset" } },
-  Unpushed = { { "rebase_interactive", "rebase" } },
-  Unpulled = { { "rebase_upstream", "rebase" } },
-}
-hints.Sequencing = hints.Rebasing
-
 ---The hint text of each section, "(s: stage) (X: discard) …", with the keys
 ---`maps.summary` binds to the actions (the shortest when several do);
 ---actions without a key are left out.
@@ -237,41 +219,41 @@ function M.hint_keys()
       end
     end
   end
-  local sections = require("nvim-fugitive.buffers.summary.actions.sections")
-  local names = {}
-  for name in pairs(hints) do
-    names[name] = true
-  end
-  for _, decl in ipairs(sections.actions) do
-    for name in pairs(decl.sections) do
-      names[name] = true
+  -- section -> { position, text } from every action's hints
+  local by_section = {}
+  local function add(section, pos, action, word, count)
+    if key_of[action] then
+      by_section[section] = by_section[section] or {}
+      local text = string.format("(%s%s: %s)", count or "", key_of[action], word)
+      table.insert(by_section[section], { pos = pos, text = text })
     end
   end
-  for section in pairs(names) do
-    local parts = {}
-    local function add(action, word, count)
-      if key_of[action] then
-        table.insert(parts, string.format("(%s%s: %s)", count or "", key_of[action], word))
-      end
+  local registry = require("nvim-fugitive.buffers.summary.actions.registry")
+  for k, e in ipairs(registry.list) do
+    for section, h in pairs(e.hint or {}) do
+      add(section, h[2], e.name, h[1])
     end
-    for _, h in ipairs(hints[section] or {}) do
-      add(h[1], h[2], h[3])
-    end
-    -- the per-section keys bound here; with the upstream preset, the
-    -- action vim-fugitive has for it
-    for _, decl in ipairs(sections.actions) do
-      local e = decl.sections[section]
-      if e and e.hint ~= false then
-        if key_of[decl.name] then
-          add(decl.name, e.word)
-        elseif e.fallback then
-          add(e.fallback[1], e.word, e.fallback.count)
+    -- per-section actions follow the general ones, in declaration order
+    for section, s in pairs(e.on or {}) do
+      if s.hint ~= false then
+        if key_of[e.name] then
+          add(section, 100 + k, e.name, s.word)
+        elseif s.fallback then
+          add(section, 100 + k, s.fallback[1], s.word, s.fallback.count)
         end
       end
     end
-    if #parts > 0 then
-      out[section] = table.concat(parts, " ")
-    end
+  end
+  for section, parts in pairs(by_section) do
+    table.sort(parts, function(x, y)
+      return x.pos < y.pos
+    end)
+    out[section] = table.concat(
+      vim.tbl_map(function(p)
+        return p.text
+      end, parts),
+      " "
+    )
   end
   return out
 end
@@ -499,35 +481,23 @@ end
 function M.foldexpr(lnum)
   local st = M._state[vim.api.nvim_get_current_buf()]
   local i = st and st.info[lnum]
-  if not i then
+  local it = i and i.item
+  if not it or it.kind == "header" or it.kind == "discarded" then
     return 0
   end
-  if i.kind == "section" then
+  if it.kind == "section" then
     return ">1"
-  elseif i.kind == "blank" or i.kind == "header" or i.kind == "discarded" then
-    return 0
   end
-  local level = 1 + (i.depth or 0)
-  if i.kind == "dir" then
-    return i.collapsed and level or (">" .. (level + 1))
-  elseif
-    i.kind == "file"
-    or i.kind == "stash"
-    or (i.kind == "commit" and i.section ~= "Rebasing")
-  then
-    local nxt = st.info[lnum + 1]
-    if nxt and (nxt.kind == "hunk" or nxt.kind == "diffmeta" or nxt.kind == "diffline") then
-      return ">" .. (level + 1)
-    end
-    -- the files of an expanded untracked directory nest under it
-    if nxt and nxt.kind == "file" and (nxt.depth or 0) > (i.depth or 0) then
-      return ">" .. (level + 1)
-    end
-    return level
-  elseif i.kind == "hunk" or i.kind == "diffline" or i.kind == "diffmeta" then
-    return level + 1
+  -- a hunk doesn't fold on its own: its lines are its file's (commit's)
+  if it.kind == "hunk" and it.parent then
+    it = it.parent --[[@as fugitive.LineInfo]]
   end
-  return 1
+  local items = require("nvim-fugitive.buffers.summary.items")
+  local depth = items.depth(it)
+  if lnum ~= it.first then
+    return depth
+  end
+  return it.last > it.first and (">" .. depth) or (depth - 1)
 end
 
 function M.setup_buffer(buf, repo)
@@ -708,10 +678,21 @@ function M.show_help(buftype)
   local keys = require("nvim-fugitive.maps").keys_for(buftype)
   local names = vim.tbl_keys(keys)
   table.sort(names)
+  local desc = {}
+  if buftype == "summary" then
+    local registry = require("nvim-fugitive.buffers.summary.actions.registry")
+    for _, e in ipairs(registry.list) do
+      desc[e.name] = e.desc
+    end
+    for name, d in pairs(registry.cfile_desc) do
+      desc[name] = d
+    end
+  end
   local lines =
     { "nvim-fugitive " .. buftype .. " maps (see :help fugitive-" .. buftype .. "-maps)", "" }
   for _, n in ipairs(names) do
-    table.insert(lines, string.format("  %-28s %s", table.concat(keys[n], " "), n:gsub("_", " ")))
+    local what = desc[n] or n:gsub("_", " ")
+    table.insert(lines, string.format("  %-16s %s", table.concat(keys[n], " "), what))
   end
   require("nvim-fugitive.ui.float").show(
     lines,
